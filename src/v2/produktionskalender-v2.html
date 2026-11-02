@@ -321,6 +321,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 .line.bad input.l-no,.line input.bad{border-color:var(--red)}
 .add-line{align-self:flex-start}
 .form-err{margin:0;color:var(--red);font-size:.88rem;font-weight:700}
+.rate-src{min-width:9.5rem;font-size:.72rem;line-height:1.3;margin-top:3px}
+.import-list{margin:0;padding-left:18px;max-height:40vh;overflow-y:auto;font-size:.88rem;font-variant-numeric:tabular-nums}
 .who{color:var(--muted);font-size:.85rem}
 @media (max-width:560px){
   .field-row{grid-template-columns:1fr}
@@ -425,6 +427,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <span class="rb-sync">
       <span class="rb-pill">Rackbeat: ikke forbundet</span>
       <button class="btn small ghost" id="btnSync" type="button">Hent data</button>
+      <button class="btn small ghost" id="btnImport" type="button">Importér salgstempo</button>
+      <input id="importFile" type="file" accept=".json,application/json" aria-label="Vælg fil med salgstempo" hidden>
       <span class="muted small" id="syncLog" aria-live="polite">Eksempeldata</span>
     </span>
     <span id="resetWrap"><button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button></span>
@@ -521,6 +525,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
 <dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
 
+<dialog id="dlgImport"><div class="dlg" id="importBody"></div></dialog>
+
 <script>
 (() => {
   // ---------- dato-hjælpere (UTC, så sommertid ikke forskyder dage) ----------
@@ -608,9 +614,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     };
   }
 
-  const KEY = 'kystnaer-produktionskalender-v2-onepager-h';
+  const KEY = 'kystnaer-produktionskalender-v2-onepager-i';
+  const OLD_KEY = 'kystnaer-produktionskalender-v2-onepager-h';   // Nøglen før salgstempo; felterne er kun tilføjet, så data kan genbruges
   let S;
-  try { S = JSON.parse(localStorage.getItem(KEY)); } catch(e) { S = null; }
+  try { S = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(OLD_KEY)); } catch(e) { S = null; }
   if (!S || !Array.isArray(S.products)) S = sampleData();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
 
@@ -829,8 +836,17 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('agenda').innerHTML = agenda || `<p class="hint">Intet planlagt i denne måned.</p>`;
   }
 
+  // Kilden til salgstempoet: "Estimat", eller beregnet ud fra ordrehistorik og importeret fra scripts/beregn_salgstempo.py
+  const FLAG_TEXT = {kort_historik:'kort historik', ufuldstaendig_saeson:'ufuldstændig sæson', muligt_udsolgt:'muligt udsolgt'};
+  function rateSource(p){
+    const s = p.salgstempo;
+    if (!s) return `<div class="muted small rate-src">Estimat</div>`;
+    const flags = s.flag.map(f => FLAG_TEXT[f] || f);
+    return `<div class="muted small rate-src">Beregnet (${esc(s.vindueUger)} uger, ${esc(fmt(s.dato))})<br>Sikkerhed: ${esc(s.sikkerhed)}${flags.length ? `<br>${esc(flags.join(', '))}` : ''}</div>`;
+  }
+
   function renderProducts(){
-    const list = [...activeProducts(), ...S.products.filter(p => p.archived)];
+    const list =[...activeProducts(), ...S.products.filter(p => p.archived)];
     const rows = list.map(p => {
       if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="10" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
       const x = analyze(p);
@@ -841,7 +857,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></td>
         <td class="n">${Math.max(0,x.cur)}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
-        <td class="n"><input type="number" min="0" step="1" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${p.rate}" id="rate-${p.id}"></td>
+        <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${p.rate}" id="rate-${p.id}">${rateSource(p)}</td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Lager i Rackbeat for ${esc(p.name)}" data-pf="count" data-id="${p.id}" value="${p.count}" id="count-${p.id}"><div class="muted small">${esc(fmt(p.countDate))}</div></td>
@@ -852,7 +868,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td>${pendingProd === p.id ? `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button><button class="btn small" type="button" data-cancel-prod>Fortryd</button></div>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`}</td>
       </tr>`;
     }).join('');
-    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">På lager nu</th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">Estimat</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Når ny batch er klar</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">På lager nu</th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">${list.some(p => p.salgstempo) ? 'Se kilde' : 'Estimat'}</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Når ny batch er klar</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
   }
 
   // Kasserede stk. kan rettes, indtil batchen er pakket og sendt videre til Rackbeat
@@ -1431,6 +1447,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (i.dataset.pf === 'count'){ p.count = v; p.countDate = TODAY; toast(`Ny optælling for ${p.name} gemt`); }
     else if (i.dataset.pf === 'cure') p.cure = Math.max(1, v);
     else if (i.dataset.pf === 'batch') p.batch = Math.max(1, v);
+    else if (i.dataset.pf === 'rate'){ p.rate = Math.max(0, parseFloat(i.value) || 0); delete p.salgstempo; }   // Rettet i hånden er ikke længere beregnet
     else p[i.dataset.pf] = v;
     save(); renderAll();
   });
@@ -1471,6 +1488,71 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const t = new Intl.DateTimeFormat('da-DK',{hour:'2-digit',minute:'2-digit'}).format(new Date());
     document.getElementById('syncLog').textContent = `Forsøgt kl. ${t}: ingen forbindelse, eksempeldata bruges`;
     toast('Ingen forbindelse til Rackbeat endnu');
+  });
+
+  // ---------- import af salgstempo (JSON fra scripts/beregn_salgstempo.py) ----------
+  // Foreløbig bruges kun rate i beregningerne. maanedlig og seneste8 gemmes til senere.
+  function readSalgstempo(data){
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+    const out = {updates:[], missing:[], invalid:[]};
+    for (const [sku, x] of Object.entries(data)){
+      const ok = x && typeof x.rate === 'number' && isFinite(x.rate) && x.rate >= 0
+        && /^\d{4}-\d{2}-\d{2}$/.test(x.beregnet) && !isNaN(Date.parse(x.beregnet))
+        && Number.isInteger(x.vindue_uger) && x.vindue_uger > 0 && typeof x.sikkerhed === 'string';
+      if (!ok){ out.invalid.push(sku); continue; }
+      const p = S.products.find(q => q.sku === sku);
+      if (p) out.updates.push({p, x}); else out.missing.push(sku);
+    }
+    return out;
+  }
+  const importBody = document.getElementById('importBody');
+  const dlgI = document.getElementById('dlgImport');
+  const skuLine = (label, list) => list.length ? `<p class="hint">${label}: ${esc(list.join(', '))}</p>` : '';
+  const closeBtn = `<div class="dlg-actions"><button class="btn primary" type="button" id="importClose">Luk</button></div>`;
+  const rateNo = n => n.toLocaleString('da-DK', {maximumFractionDigits:2});
+  function showImportError(msg){
+    importBody.innerHTML = `<h2>Importér salgstempo</h2><p class="form-err" role="alert">${esc(msg)}</p><p class="hint">Intet er ændret.</p>${closeBtn}`;
+    document.getElementById('importClose').onclick = () => dlgI.close();
+    dlgI.showModal();
+  }
+  function showImportConfirm(r){
+    const rows = r.updates.map(({p, x}) => `<li>${esc(p.name)}: ${rateNo(p.rate)} → ${rateNo(x.rate)}</li>`).join('');
+    const notFound = skuLine('Ikke fundet i kalenderen', r.missing) + skuLine('Ugyldige i filen', r.invalid);
+    if (!r.updates.length){ showImportError('Filen indeholder ingen produkter, der matcher kalenderen.' + (r.missing.length || r.invalid.length ? ' SKU\'er: ' + r.missing.concat(r.invalid).join(', ') : '')); return; }
+    importBody.innerHTML = `<h2>Importér salgstempo?</h2>
+      <p class="hint">Salg pr. uge ændres for ${r.updates.length} ${r.updates.length === 1 ? 'produkt' : 'produkter'}, og det ændrer forventet lager og startdatoer.</p>
+      <ul class="import-list">${rows}</ul>${notFound}
+      <div class="dlg-actions"><button class="btn" type="button" id="importNo">Annullér</button><button class="btn primary" type="button" id="importYes">Importér</button></div>`;
+    document.getElementById('importNo').onclick = () => dlgI.close();
+    document.getElementById('importYes').onclick = () => {
+      r.updates.forEach(({p, x}) => {
+        p.rate = x.rate;
+        p.salgstempo = {kilde:'beregnet', dato:x.beregnet, vindueUger:x.vindue_uger, sikkerhed:x.sikkerhed,
+          flag: Array.isArray(x.flag) ? x.flag.map(String) : [], maanedlig: Array.isArray(x.maanedlig) ? x.maanedlig : null,
+          seneste8: typeof x.seneste8 === 'number' ? x.seneste8 : null};
+      });
+      save(); renderAll();
+      importBody.innerHTML = `<h2>Salgstempo importeret</h2>
+        <p>${r.updates.length} ${r.updates.length === 1 ? 'produkt' : 'produkter'} opdateret.</p>
+        ${skuLine('Ikke fundet i kalenderen', r.missing) || '<p class="hint">Alle SKU\'er i filen blev fundet.</p>'}${skuLine('Ugyldige i filen', r.invalid)}${closeBtn}`;
+      document.getElementById('importClose').onclick = () => dlgI.close();
+    };
+    dlgI.showModal();
+  }
+  const importFile = document.getElementById('importFile');
+  document.getElementById('btnImport').addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', () => {
+    const f = importFile.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      importFile.value = '';   // Så samme fil kan vælges igen
+      let data; try { data = JSON.parse(rd.result); } catch(e) { showImportError('Filen er ikke gyldig JSON.'); return; }
+      const r = readSalgstempo(data);
+      if (!r){ showImportError('Filen har ikke det forventede format.'); return; }
+      showImportConfirm(r);
+    };
+    rd.onerror = () => { importFile.value = ''; showImportError('Filen kunne ikke læses.'); };
+    rd.readAsText(f);
   });
 
   renderAll();

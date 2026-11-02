@@ -4,3 +4,9 @@ node_modules/
 tests/out/
 .env
 .Rhistory
+__pycache__/
+.pytest_cache/
+output/
+# Rigtige salgstal må ikke i git. Kun de opdigtede eksempeldata er undtaget.
+data/*
+!data/eksempel_ordrehistorik.csv
