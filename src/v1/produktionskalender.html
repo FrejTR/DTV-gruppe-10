@@ -1,0 +1,1103 @@
+<title>Kystnær Produktionskalender</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Karla:wght@400;500;700&family=Lora:wght@400;500&display=swap">
+<style>
+/* Layout efter Kystnærs webshop: sandfarvet top-bånd, hvid flade, Lora-overskrifter, Karla-tekst, sorte pilleknapper, firkantede paneler. Trafiklys kun til batchstatus. */
+:root{
+  --bg:#ffffff; --surface:#ffffff; --sunk:#f2f2f2; --sand:#ddd5c8; --sand-light:#e7e1d8; --sand-dark:#d3c9b8;
+  --ink:#212121; --muted:rgba(33,33,33,.68); --line:#e4ded4;
+  --accent:#c69388; --accent-strong:#a8736a; --earth:#a38d69;
+  --btn:#000000; --btn-ink:#ffffff;
+  --red:#b5382a; --amber:#b07d0c; --green:#4a9f53; --grey:#8b8b8b;
+  --font-display:"Lora", Georgia, "Times New Roman", serif;
+  --font-body:"Karla", "Helvetica Neue", Arial, sans-serif;
+  --pill:30px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1916; --surface:#221f1b; --sunk:#2a2621; --sand:#3a332a; --sand-light:#2f2a23; --sand-dark:#4a4236;
+  --ink:#ece6dc; --muted:rgba(236,230,220,.68); --line:#3a352e;
+  --accent:#d9a89d; --accent-strong:#e6bdb3; --earth:#c9b28d;
+  --btn:#ece6dc; --btn-ink:#1b1916;
+  --red:#ec7f6c; --amber:#e1b24f; --green:#79c383; --grey:#8f8a83; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#1b1916; --surface:#221f1b; --sunk:#2a2621; --sand:#3a332a; --sand-light:#2f2a23; --sand-dark:#4a4236;
+  --ink:#ece6dc; --muted:rgba(236,230,220,.68); --line:#3a352e;
+  --accent:#d9a89d; --accent-strong:#e6bdb3; --earth:#c9b28d;
+  --btn:#ece6dc; --btn-ink:#1b1916;
+  --red:#ec7f6c; --amber:#e1b24f; --green:#79c383; --grey:#8f8a83; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55}
+.band{background:var(--sand);text-align:center;font-family:var(--font-display);font-size:.95rem;letter-spacing:1px;padding-block:9px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.masthead{text-align:center;padding-block:18px 6px;border-bottom:1px solid var(--line)}
+.wordmark{font-family:var(--font-display);font-size:1.6rem;letter-spacing:1px}
+.wordmark small{display:block;font-family:var(--font-body);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:22px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance;letter-spacing:1px;font-weight:400}
+h1{font-size:1.75rem}
+h2{font-size:1.25rem}
+h3{font-size:1.02rem}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.num{font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* top */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.brand .eyebrow{font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--ink);background:var(--surface);border-radius:var(--pill);padding:9px 20px;font-size:.88rem;letter-spacing:1px;min-height:42px}
+.btn:hover{background:var(--sunk)}
+.btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.btn.primary:hover{opacity:.85;background:var(--btn)}
+.btn.small{padding:5px 14px;min-height:34px;font-size:.8rem}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn[disabled]{opacity:.45;cursor:default}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;color:var(--muted);margin-top:6px}
+.stats b{color:var(--ink)}
+.sample-note{font-size:.8rem;color:var(--muted);background:var(--sand-light);border-radius:15px;padding:4px 12px}
+
+/* alerts */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--amber);padding:12px 16px}
+.alert.akut{border-left-color:var(--red);background:color-mix(in srgb,var(--red) 6%,var(--surface))}
+.alert.plan{background:color-mix(in srgb,var(--amber) 7%,var(--surface))}
+.alert .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:15px;white-space:nowrap}
+.alert.akut .tag{background:var(--red);color:var(--surface)}
+.alert.plan .tag{background:var(--amber);color:var(--surface)}
+.alert p{margin:2px 0 0;font-size:.9rem;color:var(--muted)}
+.alert .body{min-width:0}
+.alerts-more{align-self:flex-start}
+.ok-line{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--green);padding:12px 16px;color:var(--muted)}
+@media (max-width:560px){.alert{grid-template-columns:1fr}.alert .tag{justify-self:start}}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;justify-content:flex-start;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tabs > .tab:first-child{margin-left:auto}
+.tabs > .tab:last-child{margin-right:auto}
+.tab{border:0;background:none;padding:10px 16px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;letter-spacing:.5px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:700}
+.panel{background:var(--surface);display:flex;flex-direction:column;gap:14px}
+
+/* status chips */
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:2px 10px;white-space:nowrap}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.st-red{color:var(--red);background:color-mix(in srgb,var(--red) 12%,transparent)}
+.st-amber{color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.st-green{color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent)}
+.st-plan{color:var(--earth);background:transparent;border:1.5px dashed var(--earth)}
+.st-dead{color:var(--grey);background:color-mix(in srgb,var(--grey) 14%,transparent);text-decoration:line-through}
+.risk{font-size:.78rem;font-weight:700;padding:2px 10px;border-radius:15px;border:1px solid var(--line);white-space:nowrap}
+.risk.akut{border-color:var(--red);color:var(--red)}
+.risk.plan{border-color:var(--amber);color:var(--amber)}
+.risk.ok{color:var(--muted)}
+
+/* calendar */
+.cal-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cal-nav{display:flex;gap:6px;align-items:center}
+.cal-nav h2{min-width:10rem;text-align:center;text-transform:capitalize}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.grid-wrap{overflow-x:auto}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line);min-width:680px}
+.dow{font-size:.74rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);padding:7px 8px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--sand)}
+.day{min-height:112px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:5px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.day.other{background:var(--sunk)}
+.day.other .dnum{opacity:.45}
+.day .dnum{font-size:.8rem;font-weight:700;color:var(--muted)}
+.day.today{background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.day.today .dnum{background:var(--btn);color:var(--btn-ink);border-radius:15px;padding:0 8px;align-self:flex-start}
+.ev{display:block;width:100%;text-align:left;border:0;border-radius:4px;font-size:.74rem;line-height:1.25;padding:3px 6px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev.b-red{background:color-mix(in srgb,var(--red) 14%,var(--surface));color:var(--red)}
+.ev.b-amber{background:color-mix(in srgb,var(--amber) 16%,var(--surface));color:var(--amber)}
+.ev.b-green{background:color-mix(in srgb,var(--green) 15%,var(--surface));color:var(--green)}
+.ev.b-dead{background:var(--sunk);color:var(--grey);text-decoration:line-through}
+.ev.b-plan{background:transparent;color:var(--earth);border:1.5px dashed var(--earth)}
+.ev.res{background:var(--sand-light);color:var(--ink);font-weight:400}
+.ev.dl{background:transparent;color:var(--amber);border:1px dashed var(--amber);font-weight:700}
+.ev-more{font-size:.72rem;color:var(--muted);padding-left:4px}
+.agenda{display:none;flex-direction:column;gap:12px}
+.agenda .aday{display:flex;flex-direction:column;gap:4px}
+.agenda .aday h3{font-size:.95rem}
+.agenda .ev{white-space:normal;font-size:.85rem;padding:6px 8px}
+@media (max-width:700px){.grid-wrap{display:none}.agenda{display:flex}}
+
+/* ugeoversigt */
+.wk-wrap{overflow-x:auto}
+.wk{min-width:640px;--namew:170px}
+.wk-row,.wk-prod{display:grid;grid-template-columns:var(--namew) repeat(var(--days),minmax(0,1fr));grid-auto-rows:minmax(24px,auto);row-gap:4px}
+.wk-row.head{background:var(--sand)}
+.wk-h{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-left:1px solid var(--line);min-width:0}
+.wk-h small{display:block;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);white-space:nowrap}
+.wk-h.now{background:var(--sand-dark)}
+.wk-days{background:var(--sand-light)}
+.wk-day{padding:4px 6px;font-size:.72rem;color:var(--muted);border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wk-day.now{color:var(--ink);font-weight:700}
+.wk-count .seg{min-width:15rem}
+.wk-corner{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.wk-prod{padding-block:8px;border-bottom:1px solid var(--line)}
+.wk-name{grid-column:1;padding-right:8px;min-width:0}
+.wk-name strong{display:block;font-weight:700;line-height:1.25}
+.wk-name small{color:var(--muted)}
+.wk-status{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-top:6px}
+.wk-status .chip{font-size:.7rem;padding:1px 8px}
+.wk-proc{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.wk-risk{font-size:.74rem;font-weight:700}
+.wk-risk.akut{color:var(--red)}
+.wk-risk.plan{color:var(--amber)}
+.st-none{color:var(--muted);background:var(--sunk)}
+.wk-sep{border-left:1px solid var(--line);margin-block:-8px}
+.wk-sep.now{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.bar{border:0;margin:0;padding:0 6px;font-size:.72rem;font-weight:700;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:22px;align-self:center;z-index:1;border-radius:0}
+.bar.first{border-top-left-radius:11px;border-bottom-left-radius:11px}
+.bar.last{border-top-right-radius:11px;border-bottom-right-radius:11px}
+.bar.s-red{background:color-mix(in srgb,var(--red) 24%,var(--surface));color:var(--red)}
+.bar.s-amber{background:color-mix(in srgb,var(--amber) 28%,var(--surface));color:var(--amber)}
+.bar.s-green{background:color-mix(in srgb,var(--green) 26%,var(--surface));color:var(--green)}
+.bar.s-plan{background:transparent;color:var(--earth);border:1.5px dashed var(--earth)}
+.bar.s-dead{background:var(--sunk);color:var(--grey);text-decoration:line-through}
+.wk-empty{font-size:.78rem;color:var(--muted);align-self:center;padding-left:6px;z-index:1}
+.wk-stock{font-size:.76rem;color:var(--muted);padding-left:6px;align-self:center;z-index:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.wk-stock.low{color:var(--red);font-weight:700}
+.wk-res{font-size:.72rem;align-self:center;z-index:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid var(--ink);padding-left:4px;background:none;border-top:0;border-right:0;border-bottom:0;text-align:left}
+@media (max-width:700px){.wk{--namew:120px}}
+
+.wk-count{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.wk-count-label{font-size:.85rem;color:var(--muted)}
+.wk-count .seg{min-width:11rem}
+.wk-count .seg label{padding:6px 10px}
+/* tabeller på smalle skærme og touch */
+#prodTbl,#batchTbl,#resTbl{min-width:760px}
+#prodTbl td,#prodTbl th,#batchTbl td,#batchTbl th,#resTbl td,#resTbl th{white-space:nowrap}
+#prodTbl td:first-child,#batchTbl td:nth-child(2){white-space:normal;min-width:9.5rem}
+#prodTbl th:first-child,#prodTbl td:first-child{position:sticky;left:0;z-index:1;background:var(--surface)}
+#prodTbl th:first-child{background:var(--sand-light)}
+.row-actions{flex-wrap:nowrap}
+@media (max-width:1180px){
+  .masthead{padding-block:12px 4px}
+  .wordmark{font-size:1.35rem}
+  .wrap{padding-block:16px 40px;gap:16px}
+  .wk{--namew:150px}
+}
+@media (pointer:coarse){
+  .btn.small{min-height:40px;padding:6px 14px}
+  .ev{padding:6px 7px;font-size:.78rem}
+  .bar{height:28px}
+  .wk-res{min-height:28px}
+  td input{min-height:40px;font-size:1rem}
+  .field input,.field select{min-height:46px;font-size:1rem}
+  .seg label{padding:10px 8px}
+  .wk-count .seg label{padding:8px 12px}
+  .tab{padding:12px 16px}
+}
+/* rackbeat */
+.src{display:inline-block;margin-left:6px;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;border:1px solid currentColor;border-radius:15px;padding:0 6px;vertical-align:1px;color:var(--earth)}
+.src.est{color:var(--muted)}
+.rb-pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:3px 12px;background:var(--sand-light);white-space:nowrap}
+.rb-pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--grey)}
+.rb-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start}
+.rb-head > div{min-width:0}
+.rb-sync{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.rb-list{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;font-size:.92rem;max-width:72ch}
+.sku{display:block;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* tables */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th{font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-align:left;font-weight:700;padding:9px 8px;background:var(--sand-light);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.dead td{color:var(--grey)}
+td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums}
+.row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.hint{font-size:.88rem;color:var(--muted);margin:0;max-width:72ch}
+
+/* dialogs */
+dialog{border:0;border-radius:12px;padding:0;background:var(--surface);color:var(--ink);width:min(460px, calc(100vw - 32px));max-height:calc(100dvh - 32px);box-shadow:0 10px 40px rgba(0,0,0,.18)}
+dialog::backdrop{background:rgba(33,28,22,.45)}
+.dlg{padding:22px;display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:.82rem;font-weight:700;color:var(--muted)}
+.field input,.field select{padding:9px 16px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);min-height:42px}
+.seg{display:flex;border:1px solid var(--ink);border-radius:var(--pill);overflow:hidden}
+.seg label{flex:1;text-align:center;padding:8px;cursor:pointer;font-size:.88rem;letter-spacing:.5px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--btn);color:var(--btn-ink)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.preview{font-size:.88rem;background:var(--sand-light);border-radius:8px;padding:8px 12px}
+.preview.warn{color:var(--amber)}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.92rem}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom, 0px));background:var(--btn);color:var(--btn-ink);padding:9px 20px;border-radius:var(--pill);font-size:.9rem;z-index:50}
+@media (prefers-reduced-motion: no-preference){.toast{animation:up .2s ease-out}@keyframes up{from{opacity:0;transform:translate(-50%,6px)}}}
+.footer{font-size:.8rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:14px}
+
+/* ---------- flere produkter pr. registrering ---------- */
+#dlgBatch,#dlgRes{width:min(680px, calc(100vw - 32px))}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-row .field{min-width:0}
+.field-row .field input[hidden]{display:none}
+#bWhoNew{margin-top:6px}
+.lines{display:flex;flex-direction:column;gap:8px}
+.lines-head,.line{display:grid;gap:8px;align-items:center}
+.lines-b,.line-b{grid-template-columns:minmax(0,1fr) 5rem 6.5rem 5rem 2.5rem}
+.lines-r,.line-r{grid-template-columns:minmax(0,1fr) 6rem 2.5rem}
+.lines-head{font-size:.74rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:-4px}
+.line select,.line input{width:100%;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);min-height:42px}
+.line input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
+.line .l-ready{grid-column:1 / -1;font-size:.8rem;color:var(--muted);padding-left:12px;margin-top:-4px}
+.line-del{width:2.5rem;height:2.5rem;border:1px solid var(--line);border-radius:50%;background:var(--surface);font-size:1.1rem;line-height:1;color:var(--muted)}
+.line-del:hover{color:var(--red);border-color:var(--red)}
+.line-del[disabled]{opacity:.3;cursor:default}
+.line.bad input.l-no,.line input.bad{border-color:var(--red)}
+.add-line{align-self:flex-start}
+.form-err{margin:0;color:var(--red);font-size:.88rem;font-weight:700}
+.who{color:var(--muted);font-size:.85rem}
+@media (max-width:560px){
+  .field-row{grid-template-columns:1fr}
+  .lines-head{display:none}
+  .line-b{grid-template-columns:repeat(3,minmax(0,1fr)) 2.5rem}
+  .line-b .l-prod{grid-column:1 / 4;grid-row:1}
+  .line-b .line-del{grid-column:4;grid-row:1}
+  .line-b .l-qty,.line-b .l-no,.line-b .l-cure{grid-row:2}
+}
+</style>
+
+<div class="band">Intern produktionsplanlægning</div>
+<div class="masthead"><div class="wordmark">Kystnær<small>Håndlavet ved Haderslev Fjord</small></div></div>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="eyebrow">Produktion</div>
+      <h1>Produktionskalender</h1>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnNewBatch" type="button">+ Registrér batch</button>
+      <button class="btn" id="btnNewRes" type="button">+ Bestilling eller event</button>
+    </div>
+  </header>
+
+  <section class="alerts" id="alerts" aria-label="Advarsler"></section>
+
+  <nav class="tabs" role="tablist" aria-label="Visninger">
+    <button class="tab" role="tab" id="tab-uger" aria-selected="true" data-tab="uger" type="button">Ugeoversigt</button>
+    <button class="tab" role="tab" id="tab-kalender" aria-selected="false" data-tab="kalender" type="button">Kalender</button>
+    <button class="tab" role="tab" id="tab-produkter" aria-selected="false" data-tab="produkter" type="button">Produkter og minimum</button>
+    <button class="tab" role="tab" id="tab-batches" aria-selected="false" data-tab="batches" type="button">Batches</button>
+    <button class="tab" role="tab" id="tab-bestillinger" aria-selected="false" data-tab="bestillinger" type="button">Bestillinger og events</button>
+    <button class="tab" role="tab" id="tab-rackbeat" aria-selected="false" data-tab="rackbeat" type="button">Rackbeat</button>
+  </nav>
+
+  <section class="panel" id="p-uger" role="tabpanel" aria-labelledby="tab-uger">
+    <div class="cal-head">
+      <div class="cal-nav">
+        <button class="btn small" id="prevW" type="button" aria-label="Forrige periode">‹</button>
+        <h2 id="weekLabel"></h2>
+        <button class="btn small" id="nextW" type="button" aria-label="Næste periode">›</button>
+        <button class="btn small ghost" id="todayW" type="button">Denne uge</button>
+      </div>
+      <div class="wk-count">
+        <span class="wk-count-label" id="wkCountLabel">Antal uger</span>
+        <div class="seg" role="radiogroup" aria-labelledby="wkCountLabel">
+          <label><input type="radio" name="wkcount" id="wkc1" value="1"> 1</label>
+          <label><input type="radio" name="wkcount" id="wkc2" value="2"> 2</label>
+          <label><input type="radio" name="wkcount" id="wkc3" value="3"> 3</label>
+          <label><input type="radio" name="wkcount" id="wkc4" value="4" checked> 4</label>
+          <label><input type="radio" name="wkcount" id="wkc5" value="5"> 5</label>
+          <label><input type="radio" name="wkcount" id="wkc6" value="6"> 6</label>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="chip st-red">Hærder</span>
+        <span class="chip st-amber">Næsten klar (1–4 dage)</span>
+        <span class="chip st-green">Klar</span>
+        <span class="chip st-plan">Planlagt</span>
+      </div>
+    </div>
+    <p class="hint">Hver bjælke er en batch. Tallet er forventet lager ved ugens slut, og rødt betyder under minimum. Planlægning kræver mindst 3 uger.</p>
+    <div class="wk-wrap"><div class="wk" id="wk"></div></div>
+  </section>
+
+  <section class="panel" id="p-kalender" role="tabpanel" aria-labelledby="tab-kalender" hidden>
+    <div class="cal-head">
+      <div class="cal-nav">
+        <button class="btn small" id="prevM" type="button" aria-label="Forrige måned">‹</button>
+        <h2 id="monthLabel"></h2>
+        <button class="btn small" id="nextM" type="button" aria-label="Næste måned">›</button>
+        <button class="btn small ghost" id="todayM" type="button">I dag</button>
+      </div>
+      <div class="legend">
+        <span class="chip st-red">Hærder</span>
+        <span class="chip st-amber">Næsten klar (1–4 dage)</span>
+        <span class="chip st-green">Klar</span>
+        <span class="chip st-plan">Planlagt</span>
+      </div>
+    </div>
+    <p class="hint">Batches står på den dag, de er klar til salg. Planlagte batches står på startdagen. Stiplede markeringer viser, hvornår en batch senest skal startes.</p>
+    <div class="grid-wrap"><div class="cal" id="cal"></div></div>
+    <div class="agenda" id="agenda"></div>
+  </section>
+
+  <section class="panel" id="p-produkter" role="tabpanel" aria-labelledby="tab-produkter" hidden>
+    <p class="hint">Felter mærket Rackbeat hentes fra Rackbeat i den færdige løsning. Salg pr. uge er et estimat, som senere erstattes af salgshistorikken i Rackbeat. "På lager nu" beregnes ud fra lageret i Rackbeat, batches der bliver klar, bestillinger og salgstempoet. I eksempeldata kan alle tal rettes direkte i tabellen.</p>
+    <div class="tbl-wrap"><table id="prodTbl"></table></div>
+  </section>
+
+  <section class="panel" id="p-batches" role="tabpanel" aria-labelledby="tab-batches" hidden>
+    <p class="hint">En fejlet batch markeres som kasseret. Den tæller ikke længere med i lageret, men historikken bevares. Hærdetiden kan rettes for den enkelte batch, og klar-datoen flytter sig med.</p>
+    <div class="tbl-wrap"><table id="batchTbl"></table></div>
+  </section>
+
+  <section class="panel" id="p-bestillinger" role="tabpanel" aria-labelledby="tab-bestillinger" hidden>
+    <p class="hint">Forudbestillinger og events reserverer varer på en bestemt dato, så produktionen kan følge med.</p>
+    <div class="tbl-wrap"><table id="resTbl"></table></div>
+  </section>
+
+  <section class="panel" id="p-rackbeat" role="tabpanel" aria-labelledby="tab-rackbeat" hidden>
+    <div class="rb-head">
+      <div>
+        <h2>Forbindelse til Rackbeat</h2>
+        <p class="hint">Kystnær bruger Rackbeat til lager og salg. I den færdige løsning henter produktionskalenderen produkter, lager, minimum, salg og batches fra Rackbeat via Rackbeats API. Kalenderen lægger planlægningen ovenpå, så intet skal registreres to steder. I iteration 1 bruges eksempeldata.</p>
+      </div>
+      <span class="rb-pill">Ikke forbundet · eksempeldata</span>
+    </div>
+    <div class="rb-sync">
+      <button class="btn" id="btnSync" type="button">Hent data fra Rackbeat</button>
+      <span class="muted small" id="syncLog" aria-live="polite">Endnu ikke hentet. Eksempeldata er indlæst.</span>
+    </div>
+    <h3>Hvad kommer hvorfra</h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Data</th><th>Kilde i den færdige løsning</th><th>Bruges til</th><th>Iteration 1</th></tr></thead>
+      <tbody>
+        <tr><td>Produkter og varenumre</td><td>Rackbeat</td><td>Rækker i ugeoversigt og tabeller</td><td>Eksempeldata</td></tr>
+        <tr><td>Lagerbeholdning</td><td>Rackbeat</td><td>Udgangspunkt for forventet lager</td><td>Eksempeldata, kan rettes manuelt</td></tr>
+        <tr><td>Minimumslager</td><td>Rackbeat</td><td>Akut advarsel og planlægningsadvarsel</td><td>Eksempeldata, kan rettes manuelt</td></tr>
+        <tr><td>Salg fra webshop og forhandlere</td><td>Ordrer i Rackbeat (fx fra Shopify)</td><td>Salgstempo pr. produkt ud fra salgshistorik</td><td>Erstattet af et estimat pr. uge</td></tr>
+        <tr><td>Batches</td><td>Rackbeat (batchstyring)</td><td>Bjælker i ugeoversigten og kassering</td><td>Registreres i kalenderen</td></tr>
+        <tr><td>Hærdetid og klar-dato</td><td>Produktionskalenderen</td><td>Rød, gul og grøn status og "start senest"</td><td>Findes kun i kalenderen</td></tr>
+        <tr><td>Forudbestillinger og events</td><td>Produktionskalenderen, evt. ordrer i Rackbeat</td><td>Reservationer i prognosen</td><td>Registreres i kalenderen</td></tr>
+        <tr><td>Plads på hærdereolerne</td><td>Produktionskalenderen</td><td>Advarsel om fulde reoler ved registrering</td><td>Antaget: 8 batches</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Hændelser fra Rackbeat</h3>
+    <ul class="rb-list">
+      <li>Lageret ændrer sig: kalenderen genberegner det forventede lager.</li>
+      <li>En vare når sit minimum: den akutte advarsel vises med det samme.</li>
+      <li>En batch oprettes eller ændres: bjælken i ugeoversigten opdateres.</li>
+    </ul>
+    <p class="hint">Rackbeat kan sende besked om disse hændelser (webhooks). Adgangsnøglen til Rackbeat må ikke ligge i selve siden, så den færdige løsning kræver en lille server, der henter data og giver kalenderen besked.</p>
+  </section>
+
+  <footer class="footer">
+    <span class="sample-note">Prototype, iteration 1. Alle tal er tænkte eksempeldata. Integration med Rackbeat er planlagt.</span>
+    <span id="resetWrap"><button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button></span>
+  </footer>
+</div>
+
+<dialog id="dlgBatch"><form class="dlg" id="formBatch" method="dialog" novalidate>
+  <h2>Registrér batch</h2>
+  <div class="seg" role="radiogroup" aria-label="Type">
+    <label><input type="radio" name="bkind" id="bkindMade" value="aktiv" checked> Lavet</label>
+    <label><input type="radio" name="bkind" id="bkindPlan" value="planlagt"> Planlagt</label>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="bDate" id="bDateLabel">Lavet den</label><input id="bDate" type="date" required></div>
+    <div class="field"><label for="bWho" id="bWhoLabel">Lavet af</label>
+      <select id="bWho"></select>
+      <input id="bWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" hidden>
+    </div>
+  </div>
+  <div class="lines-head lines-b" aria-hidden="true"><span>Produkt</span><span>Antal</span><span>Batchnr.</span><span>Hærdetid</span><span></span></div>
+  <div class="lines" id="bLines"></div>
+  <button class="btn small ghost add-line" type="button" id="bAdd">+ Tilføj produkt</button>
+  <div class="preview" id="bPreview"></div>
+  <p class="form-err" id="bErr" role="alert" hidden></p>
+  <p class="hint small">I den færdige løsning oprettes batchene også i Rackbeat, så lageret kun registreres ét sted.</p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn primary" type="submit" id="bSubmit">Gem batch</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgRes"><form class="dlg" id="formRes" method="dialog" novalidate>
+  <h2>Bestilling eller event</h2>
+  <div class="seg" role="radiogroup" aria-label="Type">
+    <label><input type="radio" name="rkind" id="rkindOrd" value="ordre" checked> Forudbestilling</label>
+    <label><input type="radio" name="rkind" id="rkindEv" value="event"> Event</label>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="rWho">Kunde eller event</label><input id="rWho" type="text" placeholder="Fx Dansani eller Julemarked" required></div>
+    <div class="field"><label for="rDate">Skal bruges den</label><input id="rDate" type="date" required></div>
+  </div>
+  <div class="lines-head lines-r" aria-hidden="true"><span>Produkt</span><span>Antal</span><span></span></div>
+  <div class="lines" id="rLines"></div>
+  <button class="btn small ghost add-line" type="button" id="rAdd">+ Tilføj produkt</button>
+  <p class="form-err" id="rErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn primary" type="submit">Gem</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
+
+<script>
+(() => {
+  // ---------- dato-hjælpere (UTC, så sommertid ikke forskyder dage) ----------
+  const DAY = 864e5;
+  const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(Date.UTC(y, m-1, d)); };
+  const iso = d => d.toISOString().slice(0,10);
+  const add = (s,n) => iso(new Date(parse(s).getTime() + n*DAY));
+  const diff = (a,b) => Math.round((parse(b) - parse(a)) / DAY); // b - a i dage
+  const now = new Date();
+  const TODAY = iso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+  const fD = new Intl.DateTimeFormat('da-DK', {day:'numeric', month:'short', timeZone:'UTC'});
+  const fDW = new Intl.DateTimeFormat('da-DK', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
+  const fM = new Intl.DateTimeFormat('da-DK', {month:'long', year:'numeric', timeZone:'UTC'});
+  const fmt = s => fD.format(parse(s));
+  const fmtW = s => fDW.format(parse(s));
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ---------- eksempeldata (tænkte tal, relativt til i dag) ----------
+  const T = TODAY;
+  function sampleData(){
+    const cd = add(T,-2);
+    const P = (id,name,min,rate,count,batch,sku) => ({id,name,min,rate,cure:21,count,countDate:cd,batch,sku});
+    return {
+      rackCap: 8,
+      people: ['Lena','Mette','Anna'],
+      nextNo: 39,
+      products: [
+        P('hyben-saebe','Hyben sæbe bar',50,18,70,65,'KN-1001'),
+        P('havtorn-saebe','Havtorn sæbe bar',50,20,120,65,'KN-1002'),
+        P('tang-saebe','Tang sæbe bar',40,12,96,60,'KN-1003'),
+        P('hyben-shampoo','Hyben shampoo bar',40,14,42,55,'KN-2001'),
+        P('havtorn-shampoo','Havtorn shampoo bar',40,16,104,60,'KN-2002'),
+        P('rosmarin-shampoo','Rosmarin shampoo bar',40,15,74,55,'KN-2003'),
+        P('tang-shampoo','Tang shampoo bar',30,9,48,55,'KN-2004'),
+        P('kul-shampoo','Aktivt kul shampoo bar',30,8,61,50,'KN-2005'),
+        P('neutral-shampoo','Neutral shampoo bar',30,7,72,50,'KN-2006'),
+      ],
+      batches: [
+        {no:31,by:'Mette',pid:'havtorn-saebe',qty:65,made:add(T,-24),cure:21,status:'aktiv'},
+        {no:32,by:'Lena',pid:'tang-shampoo',qty:55,made:add(T,-19),cure:21,status:'aktiv'},
+        {no:33,by:'Anna',pid:'hyben-saebe',qty:65,made:add(T,-16),cure:21,status:'aktiv'},
+        {no:34,by:'Mette',pid:'kul-shampoo',qty:50,made:add(T,-12),cure:21,status:'aktiv'},
+        {no:35,by:'Lena',pid:'havtorn-shampoo',qty:60,made:add(T,-9),cure:21,status:'kasseret'},
+        {no:36,by:'Anna',pid:'havtorn-shampoo',qty:60,made:add(T,-6),cure:21,status:'aktiv'},
+        {no:37,by:'Lena',pid:'neutral-shampoo',qty:50,made:add(T,-3),cure:21,status:'aktiv'},
+        {no:38,by:'Mette',pid:'tang-saebe',qty:60,made:add(T,4),cure:21,status:'planlagt'},
+      ],
+      res: [
+        {id:'r1',kind:'ordre',who:'Dansani',pid:'hyben-saebe',qty:40,date:add(T,16)},
+        {id:'r2',kind:'ordre',who:'Forhandler i Sverige',pid:'tang-shampoo',qty:25,date:add(T,20)},
+        {id:'r3',kind:'event',who:'Julemarked',pid:'havtorn-saebe',qty:30,date:add(T,33)},
+        {id:'r4',kind:'event',who:'Julemarked',pid:'rosmarin-shampoo',qty:15,date:add(T,33)},
+      ],
+    };
+  }
+
+  const KEY = 'kystnaer-produktionskalender-v2';
+  let S;
+  try { S = JSON.parse(localStorage.getItem(KEY)); } catch(e) { S = null; }
+  if (!S || !Array.isArray(S.products)) S = sampleData();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
+
+  const prod = id => S.products.find(p => p.id === id);
+  const bn = b => (b.label != null && String(b.label).trim() !== '') ? String(b.label) : String(b.no);
+  if (!Array.isArray(S.people) || !S.people.length) S.people = ['Lena','Mette','Anna'];
+  const ready = b => add(b.made, b.cure);
+  const counts = b => b.status === 'aktiv' || b.status === 'planlagt';
+
+  // ---------- kerneberegning ----------
+  // Forventet lager på dato d = optalt lager + batches klar efter optælling og senest d
+  //                              − estimeret salg siden optælling − reservationer efter optælling og senest d
+  function proj(p, d, opts = {}){
+    let v = p.count;
+    for (const b of S.batches){
+      if (b.pid !== p.id || !counts(b)) continue;
+      if (opts.excludePlanned && b.status === 'planlagt') continue;
+      const r = ready(b);
+      if (r > p.countDate && r <= d) v += b.qty;
+    }
+    v -= p.rate / 7 * Math.max(0, diff(p.countDate, d));
+    for (const r of S.res) if (r.pid === p.id && r.date > p.countDate && r.date <= d) v -= r.qty;
+    return Math.floor(v);
+  }
+
+  function analyze(p){
+    const cur = proj(p, TODAY, {excludePlanned:true});
+    const out = {p, cur, status:'ok', breach:null, latest:null};
+    if (cur < p.min) { out.status = 'akut'; out.firstReady = add(TODAY, p.cure); return out; }
+    const horizon = p.cure + 28;
+    for (let i = 1; i <= horizon; i++){
+      const d = add(TODAY, i);
+      if (proj(p, d) < p.min){ out.breach = d; out.latest = add(d, -p.cure); break; }
+    }
+    if (out.latest && diff(TODAY, out.latest) <= 7) out.status = 'plan';
+    return out;
+  }
+
+  function curingOn(d){
+    return S.batches.filter(b => counts(b) && b.made <= d && ready(b) > d).length;
+  }
+
+  function batchState(b){
+    if (b.status === 'kasseret') return {cls:'dead', label:'Kasseret'};
+    if (b.status === 'planlagt') return {cls:'plan', label:'Planlagt'};
+    const left = diff(TODAY, ready(b));
+    if (left <= 0) return {cls:'green', label:'Klar'};
+    if (left <= 4) return {cls:'amber', label:'Næsten klar'};
+    return {cls:'red', label:'Hærder'};
+  }
+
+  // ---------- UI-tilstand ----------
+  let month = TODAY.slice(0,7);
+  let showAllAlerts = false;
+  let pendingRow = null; // {type,id}
+
+  function toast(msg){
+    const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.setAttribute('role','status');
+    document.body.appendChild(t); setTimeout(() => t.remove(), 2400);
+  }
+
+  // ---------- render ----------
+  function renderStats(){
+    const inUse = curingOn(TODAY);
+    const a = S.products.map(analyze);
+    const nA = a.filter(x => x.status==='akut').length, nP = a.filter(x => x.status==='plan').length;
+    document.getElementById('stats').innerHTML =
+      `<span>${esc(fmtW(TODAY))}</span>`+
+      `<span>Hærdereoler: <b class="num">${inUse} af ${S.rackCap}</b> pladser i brug</span>`+
+      `<span>Under minimum: <b class="num">${nA}</b></span>`+
+      `<span>Skal startes snart: <b class="num">${nP}</b></span>`+
+      `<span class="rb-pill">Rackbeat: ikke forbundet · eksempeldata</span>`;
+  }
+
+  function renderAlerts(){
+    const el = document.getElementById('alerts');
+    const list = S.products.map(analyze).filter(x => x.status !== 'ok')
+      .sort((a,b) => (a.status==='akut'?0:1)-(b.status==='akut'?0:1) || (a.latest||'').localeCompare(b.latest||''));
+    if (!list.length){ el.innerHTML = `<div class="ok-line">Ingen advarsler. Alle produkter forventes at ligge over minimum de næste uger.</div>`; return; }
+    const shown = showAllAlerts ? list : list.slice(0,3);
+    el.innerHTML = shown.map(x => {
+      const p = x.p;
+      if (x.status === 'akut') return `<div class="alert akut" role="alert">
+        <span class="tag">Akut</span>
+        <div class="body"><strong>${esc(p.name)} er under minimum</strong>
+        <p>Ca. <span class="num">${Math.max(0,x.cur)}</span> stk. på lager, minimum er <span class="num">${p.min}</span>. En batch startet i dag er tidligst klar ${esc(fmt(x.firstReady))}.</p></div>
+        <button class="btn small" type="button" data-plan="${p.id}">Registrér batch</button></div>`;
+      const late = x.latest < TODAY;
+      const txt = late
+        ? `Lageret forventes under minimum (${p.min}) omkring ${esc(fmt(x.breach))}. Det er før en ny batch kan nå at hærde, så start hurtigst muligt.`
+        : `Lageret forventes under minimum (${p.min}) omkring ${esc(fmt(x.breach))}. Med ${p.cure} dages hærdning skal batchen startes senest ${esc(fmt(x.latest))}.`;
+      const head = late ? `Start ${esc(p.name)} i dag` : (x.latest === TODAY ? `Start ${esc(p.name)} i dag` : `Start ${esc(p.name)} senest ${esc(fmt(x.latest))}`);
+      return `<div class="alert plan">
+        <span class="tag">Planlæg</span>
+        <div class="body"><strong>${head}</strong><p>${txt}</p></div>
+        <button class="btn small" type="button" data-plan="${p.id}" data-latest="${x.latest < TODAY ? TODAY : x.latest}">Planlæg batch</button></div>`;
+    }).join('') + (list.length > 3 ? `<button class="btn small ghost alerts-more" type="button" id="moreAlerts">${showAllAlerts ? 'Vis færre' : `Vis ${list.length-3} flere advarsler`}</button>` : '');
+  }
+
+  function dayItems(d, deadlines){
+    const items = [];
+    for (const b of S.batches){
+      const p = prod(b.pid); if (!p) continue;
+      const st = batchState(b);
+      if (b.status === 'planlagt' && b.made === d) items.push({o:1, html:`<button type="button" class="ev b-plan" data-batch="${b.no}" title="Planlagt start: #${esc(bn(b))} ${esc(p.name)}, ${b.qty} stk.">Start #${esc(bn(b))} ${esc(p.name)} · ${b.qty}</button>`});
+      if (b.status !== 'planlagt' && ready(b) === d) items.push({o:0, html:`<button type="button" class="ev b-${st.cls}" data-batch="${b.no}" title="#${esc(bn(b))} ${esc(p.name)}, ${b.qty} stk. ${st.label}">#${esc(bn(b))} ${esc(p.name)} · ${b.qty}</button>`});
+    }
+    for (const r of S.res) if (r.date === d){
+      const p = prod(r.pid); if (!p) continue;
+      items.push({o:2, html:`<button type="button" class="ev res" data-res="${r.id}" title="${esc(r.who)}: ${r.qty} ${esc(p.name)}">${r.kind==='event'?'Event':'Ordre'}: ${esc(r.who)} · ${r.qty} ${esc(p.name)}</button>`});
+    }
+    for (const x of deadlines) if ((x.latest < TODAY ? TODAY : x.latest) === d){
+      items.push({o:3, html:`<button type="button" class="ev dl" data-plan="${x.p.id}" data-latest="${d}" title="Start senest: ${esc(x.p.name)}">Start senest: ${esc(x.p.name)}</button>`});
+    }
+    return items.sort((a,b) => a.o-b.o).map(i => i.html);
+  }
+
+  function renderCalendar(){
+    const [y,m] = month.split('-').map(Number);
+    const first = `${month}-01`;
+    document.getElementById('monthLabel').textContent = fM.format(parse(first));
+    const dow = (parse(first).getUTCDay() + 6) % 7; // mandag = 0
+    const start = add(first, -dow);
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const cells = Math.ceil((dow + daysInMonth) / 7) * 7;
+    const deadlines = S.products.map(analyze).filter(x => x.status === 'plan');
+    let html = ['Man','Tir','Ons','Tor','Fre','Lør','Søn'].map(d => `<div class="dow">${d}</div>`).join('');
+    let agenda = '';
+    for (let i = 0; i < cells; i++){
+      const d = add(start, i);
+      const inM = d.slice(0,7) === month;
+      const items = dayItems(d, deadlines);
+      const vis = items.slice(0,4), more = items.length - vis.length;
+      html += `<div class="day${inM?'':' other'}${d===TODAY?' today':''}"><span class="dnum">${parse(d).getUTCDate()}</span>${vis.join('')}${more>0?`<span class="ev-more">+${more} mere</span>`:''}</div>`;
+      if (inM && items.length) agenda += `<div class="aday"><h3>${esc(fmtW(d))}${d===TODAY?' · i dag':''}</h3>${items.join('')}</div>`;
+    }
+    document.getElementById('cal').innerHTML = html;
+    document.getElementById('agenda').innerHTML = agenda || `<p class="hint">Intet planlagt i denne måned.</p>`;
+  }
+
+  function renderProducts(){
+    const rows = S.products.map(p => {
+      const x = analyze(p);
+      const in3 = proj(p, add(TODAY, p.cure));
+      const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
+      const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
+      return `<tr>
+        <td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td>
+        <td class="n">${Math.max(0,x.cur)}</td>
+        <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
+        <td class="n"><input type="number" min="0" step="1" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${p.rate}" id="rate-${p.id}"></td>
+        <td class="n"><input type="number" min="1" step="1" aria-label="Hærdetid i dage for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
+        <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
+        <td class="n"><input type="number" min="0" step="1" aria-label="Lager i Rackbeat for ${esc(p.name)}" data-pf="count" data-id="${p.id}" value="${p.count}" id="count-${p.id}"><div class="muted small">${esc(fmt(p.countDate))}</div></td>
+        <td class="n">${in3}</td>
+        <td>${risk}</td>
+        <td class="num">${esc(latest)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">På lager nu</th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">Estimat</span></th><th class="n">Hærdetid (dage)</th><th class="n">Typisk batch</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Om 3 uger</th><th>Status</th><th>Start senest</th></tr></thead><tbody>${rows}</tbody>`;
+  }
+
+  function renderBatches(){
+    const list = [...S.batches].sort((a,b) => b.no - a.no);
+    const rows = list.map(b => {
+      const p = prod(b.pid); const st = batchState(b);
+      const confirming = pendingRow && pendingRow.type==='batch' && pendingRow.id===b.no;
+      let actions = '';
+      if (confirming) actions = `<span class="small">Kassér #${esc(bn(b))}?</span><button class="btn small danger" type="button" data-discard="${b.no}">Ja, kassér</button><button class="btn small" type="button" data-cancel>Fortryd</button>`;
+      else if (b.status === 'aktiv') actions = `<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`;
+      else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér som lavet i dag</button><button class="btn small ghost" type="button" data-delplan="${b.no}">Slet</button>`;
+      else actions = `<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
+      return `<tr class="${b.status==='kasseret'?'dead':''}">
+        <td class="num"><strong>#${esc(bn(b))}</strong></td><td>${esc(p?p.name:b.pid)}</td><td>${esc(b.by || '–')}</td><td class="n">${b.qty}</td>
+        <td class="num">${esc(fmt(b.made))}${b.status==='planlagt'?' <span class="muted small">(start)</span>':''}</td>
+        <td class="n">${b.status==='kasseret' ? b.cure : `<input type="number" min="1" step="1" aria-label="Hærdetid i dage for batch ${b.no}" data-bcure="${b.no}" id="bcure-${b.no}" value="${b.cure}">`}</td>
+        <td class="num">${esc(fmt(ready(b)))}</td>
+        <td><span class="chip st-${st.cls}">${st.label}</span></td>
+        <td><div class="row-actions">${actions}</div></td></tr>`;
+    }).join('');
+    document.getElementById('batchTbl').innerHTML = `<thead><tr><th>Batch</th><th>Produkt</th><th>Ansvarlig</th><th class="n">Antal</th><th>Lavet</th><th class="n">Hærdetid (dage)</th><th>Klar</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+  }
+
+  function renderRes(){
+    const list = [...S.res].sort((a,b) => a.date.localeCompare(b.date));
+    const rows = list.map(r => {
+      const p = prod(r.pid);
+      const confirming = pendingRow && pendingRow.type==='res' && pendingRow.id===r.id;
+      const actions = confirming
+        ? `<span class="small">Slet?</span><button class="btn small danger" type="button" data-delres="${r.id}">Ja, slet</button><button class="btn small" type="button" data-cancel>Fortryd</button>`
+        : `<button class="btn small ghost" type="button" data-ask-delres="${r.id}">Slet</button>`;
+      return `<tr${r.date < TODAY ? ' class="dead"' : ''}><td class="num">${esc(fmt(r.date))}</td><td>${r.kind==='event'?'Event':'Forudbestilling'}</td><td>${esc(r.who)}</td><td>${esc(p?p.name:r.pid)}</td><td class="n">${r.qty}</td><td><div class="row-actions">${actions}</div></td></tr>`;
+    }).join('');
+    document.getElementById('resTbl').innerHTML = list.length
+      ? `<thead><tr><th>Dato</th><th>Type</th><th>Kunde/event</th><th>Produkt</th><th class="n">Antal</th><th></th></tr></thead><tbody>${rows}</tbody>`
+      : `<tbody><tr><td class="muted">Ingen bestillinger eller events endnu. Brug "+ Bestilling eller event" øverst.</td></tr></tbody>`;
+  }
+
+  // ---------- ugeoversigt ----------
+  const monday = s => add(s, -((parse(s).getUTCDay() + 6) % 7));
+  function isoWeek(s){
+    const d = parse(s), day = (d.getUTCDay() + 6) % 7;
+    const th = new Date(d.getTime() + (3 - day) * DAY);
+    const j1 = Date.UTC(th.getUTCFullYear(), 0, 1);
+    return 1 + Math.floor((th - j1) / DAY / 7);
+  }
+  let NW = 4; // antal uger, der vises frem (3–6)
+  try { const v = parseInt(localStorage.getItem('kystnaer-uger'), 10); if (v >= 1 && v <= 6) NW = v; } catch(e) {}
+  let weekStart = monday(TODAY);
+
+  function dayStatus(b, d){
+    const r = ready(b);
+    if (d < b.made) return null;
+    if (b.status === 'kasseret') return d < r ? 'dead' : null;
+    if (b.status === 'planlagt') return d < r ? 'plan' : null;
+    const left = diff(d, r);
+    if (left >= 5) return 'red';
+    if (left > 0) return 'amber';
+    return d === r ? 'green' : null;
+  }
+
+  // Hvor i processen er produktet: næste batch, der bliver klar, ellers næste planlagte
+  function processStatus(p){
+    const active = S.batches.filter(b => b.pid === p.id && b.status === 'aktiv' && ready(b) >= TODAY)
+      .sort((a,b) => ready(a).localeCompare(ready(b)));
+    const planned = S.batches.filter(b => b.pid === p.id && b.status === 'planlagt')
+      .sort((a,b) => a.made.localeCompare(b.made));
+    let chip;
+    if (active.length){
+      const b = active[0], st = batchState(b), left = diff(TODAY, ready(b));
+      const when = left === 0 ? 'klar i dag' : `klar ${fmt(ready(b))} (${left} ${left === 1 ? 'dag' : 'dage'})`;
+      const more = active.length > 1 ? ` · +${active.length - 1} batch` : '';
+      chip = `<span class="chip st-${st.cls}" title="Batch #${esc(bn(b))}, ${b.qty} stk.">${left === 0 ? 'Klar' : st.label} · #${esc(bn(b))}</span><span class="wk-proc">${esc(when)}${more}</span>`;
+    } else if (planned.length){
+      const b = planned[0];
+      chip = `<span class="chip st-plan">Planlagt · #${esc(bn(b))}</span><span class="wk-proc">start ${esc(fmt(b.made))}</span>`;
+    } else {
+      chip = `<span class="chip st-none">Ingen batch i gang</span>`;
+    }
+    const x = analyze(p);
+    const risk = x.status === 'akut' ? `<span class="wk-risk akut">Under minimum nu</span>`
+      : x.status === 'plan' ? `<span class="wk-risk plan">Start senest ${esc(x.latest < TODAY ? 'i dag' : fmt(x.latest))}</span>` : '';
+    return `<div class="wk-status">${chip}${risk}</div>`;
+  }
+
+  function renderWeeks(){
+    const D = NW * 7, end = add(weekStart, D - 1);
+    const curW = monday(TODAY);
+    document.getElementById('weekLabel').textContent = NW === 1 ? `Uge ${isoWeek(weekStart)}` : `Uge ${isoWeek(weekStart)}–${isoWeek(end)}`;
+    let html = `<div class="wk-row head"><div class="wk-corner">Produkt</div>`;
+    for (let w = 0; w < NW; w++){
+      const ws = add(weekStart, w*7);
+      html += `<div class="wk-h${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7">Uge ${isoWeek(ws)}<small>${esc(fmt(ws))}–${esc(fmt(add(ws,6)))}</small></div>`;
+    }
+    html += `</div>`;
+    if (NW <= 2){
+      html += `<div class="wk-row wk-days"><div></div>`;
+      for (let i = 0; i < D; i++){
+        const d = add(weekStart, i);
+        html += `<div class="wk-day${d===TODAY?' now':''}" style="grid-column:${2+i}">${esc(fmtW(d))}</div>`;
+      }
+      html += `</div>`;
+    }
+    for (const p of S.products){
+      const bs = S.batches.filter(b => b.pid === p.id && b.made <= end && ready(b) >= weekStart)
+        .sort((a,b) => a.made.localeCompare(b.made));
+      const rs = S.res.filter(r => r.pid === p.id && r.date >= weekStart && r.date <= end);
+      const lanes = Math.max(1, bs.length) + 1 + (rs.length ? 1 : 0);
+      let inner = `<div class="wk-name" style="grid-row:1 / span ${lanes}"><strong>${esc(p.name)}</strong><small>Minimum ${p.min}</small>${processStatus(p)}</div>`;
+      for (let w = 0; w < NW; w++){
+        const ws = add(weekStart, w*7);
+        inner += `<div class="wk-sep${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7;grid-row:1 / span ${lanes}"></div>`;
+      }
+      if (!bs.length) inner += `<div class="wk-empty" style="grid-column:2 / span ${D};grid-row:1">Ingen batches i perioden</div>`;
+      bs.forEach((b, li) => {
+        const segs = []; let cur = null;
+        for (let i = 0; i < D; i++){
+          const st = dayStatus(b, add(weekStart, i));
+          if (cur && cur.st === st) { cur.to = i; continue; }
+          if (st) { cur = {st, from:i, to:i}; segs.push(cur); } else cur = null;
+        }
+        const st0 = batchState(b);
+        segs.forEach((g, gi) => {
+          const cls = ['bar','s-'+g.st];
+          const startsHere = add(weekStart, g.from) === b.made || (gi === 0 && g.from === 0 && b.made < weekStart);
+          if (gi === 0 && add(weekStart, g.from) === b.made) cls.push('first');
+          if (gi === segs.length - 1 && g.to < D - 1) cls.push('last');
+          const label = gi === 0 ? `#${esc(bn(b))} · ${b.qty} stk.` : '';
+          inner += `<button type="button" class="${cls.join(' ')}" data-batch="${b.no}" style="grid-column:${2+g.from} / ${3+g.to};grid-row:${li+1}" title="#${esc(bn(b))} ${esc(p.name)}, ${b.qty} stk. · ${b.status==='planlagt'?'planlagt':'lavet'} ${esc(fmt(b.made))}${b.by ? ' af ' + esc(b.by) : ''}, klar ${esc(fmt(ready(b)))} · ${st0.label}">${label}</button>`;
+        });
+      });
+      let row = Math.max(1, bs.length) + 1;
+      if (rs.length){
+        for (const r of rs){
+          const i = diff(weekStart, r.date);
+          inner += `<button type="button" class="wk-res" data-res="${r.id}" style="grid-column:${2+i} / span ${Math.min(7, D-i)};grid-row:${row}" title="${esc(r.who)}: ${r.qty} stk. ${esc(fmt(r.date))}">${esc(r.who)} −${r.qty}</button>`;
+        }
+        row++;
+      }
+      for (let w = 0; w < NW; w++){
+        const we = add(weekStart, w*7 + 6);
+        if (we < TODAY) continue;
+        const v = proj(p, we);
+        inner += `<div class="wk-stock${v < p.min ? ' low' : ''}" style="grid-column:${2+w*7} / span 7;grid-row:${row}" title="Forventet lager ${esc(fmt(we))}">≈ ${Math.max(0,v)} stk.</div>`;
+      }
+      html += `<div class="wk-prod">${inner}</div>`;
+    }
+    const wk = document.getElementById('wk');
+    wk.style.setProperty('--days', D);
+    wk.innerHTML = html;
+  }
+
+  function renderAll(){ renderStats(); renderWeeks(); renderAlerts(); renderCalendar(); renderProducts(); renderBatches(); renderRes(); }
+
+  // ---------- dialoger ----------
+  const dlgB = document.getElementById('dlgBatch'), dlgR = document.getElementById('dlgRes'), dlgD = document.getElementById('dlgDetail');
+  const optHtml = () => S.products.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+  // Batchdialog: flere produkter på én gang. Hver linje bliver sin egen batch.
+  let lineSeq = 0;
+  const prodOpts = sel => S.products.map(p => `<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name)}</option>`).join('');
+  function suggestNo(offset){
+    const nums = S.batches.map(b => parseInt(bn(b), 10)).filter(n => !isNaN(n));
+    return String((nums.length ? Math.max(...nums) : 0) + 1 + offset);
+  }
+  function nextFreeNo(){
+    const taken = new Set([...S.batches.map(bn), ...[...document.querySelectorAll('#bLines .l-no')].map(i => i.value.trim())]);
+    let k = 0, c; do { c = suggestNo(k++); } while (taken.has(c)); return c;
+  }
+  function batchLine(pid){
+    const p = prod(pid) || S.products[0], k = ++lineSeq;
+    const el = document.createElement('div');
+    el.className = 'line line-b';
+    el.innerHTML = `<select class="l-prod" id="bl-prod-${k}" aria-label="Produkt">${prodOpts(p.id)}</select>
+      <input class="l-qty" id="bl-qty-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Antal stk." value="${p.batch}">
+      <input class="l-no" id="bl-no-${k}" type="text" inputmode="text" autocomplete="off" aria-label="Batchnummer" value="${esc(nextFreeNo())}">
+      <input class="l-cure" id="bl-cure-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Hærdetid i dage" value="${p.cure}">
+      <button type="button" class="line-del" aria-label="Fjern produkt">×</button>
+      <span class="l-ready"></span>`;
+    el.querySelector('.l-prod').addEventListener('change', ev => {
+      const np = prod(ev.target.value); if (!np) return;
+      el.querySelector('.l-qty').value = np.batch; el.querySelector('.l-cure').value = np.cure; updateBatchPreview();
+    });
+    el.querySelector('.line-del').addEventListener('click', () => { el.remove(); updateBatchPreview(); });
+    el.addEventListener('input', updateBatchPreview);
+    return el;
+  }
+  function fillWho(sel, labelEl, kind){
+    const prev = sel.value;
+    sel.innerHTML = S.people.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') + `<option value="__new">+ Nyt navn…</option>`;
+    let last = null; try { last = localStorage.getItem('kystnaer-hvem'); } catch(e) {}
+    sel.value = S.people.includes(prev) ? prev : (S.people.includes(last) ? last : S.people[0]);
+    if (labelEl) labelEl.textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
+  }
+  const bWho = document.getElementById('bWho'), bWhoNew = document.getElementById('bWhoNew');
+  bWho.addEventListener('change', () => { bWhoNew.hidden = bWho.value !== '__new'; if (!bWhoNew.hidden) bWhoNew.focus(); });
+
+  function openBatch(pid, planDate){
+    const lines = document.getElementById('bLines'); lines.innerHTML = '';
+    lines.appendChild(batchLine(pid));
+    const plan = !!planDate && planDate > TODAY;
+    document.getElementById(plan ? 'bkindPlan' : 'bkindMade').checked = true;
+    document.getElementById('bDate').value = plan ? planDate : TODAY;
+    bWhoNew.hidden = true; bWhoNew.value = '';
+    fillWho(bWho, document.getElementById('bWhoLabel'), plan ? 'planlagt' : 'aktiv');
+    document.getElementById('bErr').hidden = true;
+    updateBatchPreview();
+    dlgB.showModal();
+  }
+  document.getElementById('bAdd').addEventListener('click', () => {
+    const used = [...document.querySelectorAll('#bLines .l-prod')].map(x => x.value);
+    const nextP = S.products.find(p => !used.includes(p.id)) || S.products[0];
+    const el = batchLine(nextP.id); document.getElementById('bLines').appendChild(el);
+    el.querySelector('.l-prod').focus(); updateBatchPreview();
+  });
+
+  function readBatchLines(){
+    return [...document.querySelectorAll('#bLines .line')].map(el => ({
+      el, p: prod(el.querySelector('.l-prod').value),
+      qty: parseInt(el.querySelector('.l-qty').value, 10),
+      label: el.querySelector('.l-no').value.trim(),
+      cure: Math.max(1, parseInt(el.querySelector('.l-cure').value, 10) || 0)
+    }));
+  }
+  function updateBatchPreview(){
+    const kind = document.querySelector('input[name="bkind"]:checked').value;
+    document.getElementById('bDateLabel').textContent = kind === 'planlagt' ? 'Planlagt start' : 'Lavet den';
+    document.getElementById('bWhoLabel').textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
+    document.getElementById('bSubmit').textContent = kind === 'planlagt' ? 'Gem planlagt' : 'Gem batch';
+    const d = document.getElementById('bDate').value;
+    const ls = readBatchLines();
+    ls.forEach(l => { l.el.querySelector('.l-ready').textContent = (d && l.p) ? `Klar ${fmtW(add(d, l.cure))}` : ''; });
+    const one = ls.length <= 1;
+    document.querySelectorAll('#bLines .line-del').forEach(b => b.disabled = one);
+    const pv = document.getElementById('bPreview');
+    if (!d || !ls.length){ pv.textContent = ''; return; }
+    const free = S.rackCap - curingOn(d);
+    const full = ls.length > free;
+    pv.className = 'preview' + (full ? ' warn' : '');
+    pv.textContent = `${ls.length} ${ls.length === 1 ? 'batch' : 'batches'}. ` + (full ? `Bemærk: Der er kun ${Math.max(0, free)} ledige pladser på hærdereolerne den dag (${S.rackCap} i alt).` : `${Math.max(0, free)} ledige pladser på hærdereolerne den dag.`);
+  }
+  document.getElementById('bDate').addEventListener('input', updateBatchPreview);
+  document.querySelectorAll('input[name="bkind"]').forEach(r => r.addEventListener('change', updateBatchPreview));
+
+  function pickWho(){
+    if (bWho.value !== '__new') return bWho.value;
+    const n = bWhoNew.value.trim();
+    if (!n) return null;
+    if (!S.people.includes(n)) S.people.push(n);
+    return n;
+  }
+
+  document.getElementById('formBatch').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = document.getElementById('bErr');
+    const d = document.getElementById('bDate').value;
+    const ls = readBatchLines();
+    document.querySelectorAll('#bLines .bad').forEach(x => x.classList.remove('bad'));
+    const fail = (msg, el) => { err.textContent = msg; err.hidden = false; if (el){ el.classList.add('bad'); el.focus(); } };
+    if (!d) return fail('Vælg en dato.', document.getElementById('bDate'));
+    if (!ls.length) return fail('Tilføj mindst ét produkt.');
+    const who = pickWho();
+    if (!who) return fail('Skriv navnet på den, der har lavet eller planlagt batchen.', bWhoNew);
+    const existing = new Set(S.batches.map(bn)), seen = new Set();
+    for (const l of ls){
+      if (!l.p) return fail('Vælg et produkt.', l.el.querySelector('.l-prod'));
+      if (!l.qty || l.qty < 1) return fail('Antal skal være mindst 1.', l.el.querySelector('.l-qty'));
+      if (!l.label) return fail('Skriv et batchnummer.', l.el.querySelector('.l-no'));
+      if (existing.has(l.label) || seen.has(l.label)) return fail(`Batchnummer ${l.label} er allerede brugt. Vælg et andet.`, l.el.querySelector('.l-no'));
+      seen.add(l.label);
+    }
+    const status = document.querySelector('input[name="bkind"]:checked').value;
+    for (const l of ls){
+      S.batches.push({no: S.nextNo++, label: l.label, by: who, pid: l.p.id, qty: l.qty, made: d, cure: l.cure, status});
+    }
+    try { localStorage.setItem('kystnaer-hvem', who); } catch(e2) {}
+    save(); dlgB.close(); renderAll();
+    const what = ls.length === 1 ? `Batch #${ls[0].label}` : `${ls.length} batches`;
+    toast(status === 'planlagt' ? `${what} planlagt` : `${what} registreret`);
+  });
+
+  // Bestilling/event: flere produkter på én gang. Hver linje bliver sin egen reservation.
+  function resLine(pid){
+    const k = ++lineSeq, el = document.createElement('div');
+    el.className = 'line line-r';
+    el.innerHTML = `<select class="l-prod" id="rl-prod-${k}" aria-label="Produkt">${prodOpts(pid)}</select>
+      <input class="l-qty" id="rl-qty-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Antal stk." placeholder="Antal">
+      <button type="button" class="line-del" aria-label="Fjern produkt">×</button>`;
+    el.querySelector('.line-del').addEventListener('click', () => { el.remove(); syncResDel(); });
+    return el;
+  }
+  function syncResDel(){
+    const dels = document.querySelectorAll('#rLines .line-del');
+    dels.forEach(b => b.disabled = dels.length <= 1);
+  }
+  function openRes(){
+    const lines = document.getElementById('rLines'); lines.innerHTML = '';
+    lines.appendChild(resLine(S.products[0].id)); syncResDel();
+    document.getElementById('rWho').value = '';
+    document.getElementById('rDate').value = add(TODAY, 14);
+    document.getElementById('rkindOrd').checked = true;
+    document.getElementById('rErr').hidden = true;
+    dlgR.showModal();
+  }
+  document.getElementById('rAdd').addEventListener('click', () => {
+    const used = [...document.querySelectorAll('#rLines .l-prod')].map(x => x.value);
+    const nextP = S.products.find(p => !used.includes(p.id)) || S.products[0];
+    const el = resLine(nextP.id); document.getElementById('rLines').appendChild(el); syncResDel();
+    el.querySelector('.l-qty').focus();
+  });
+  document.getElementById('formRes').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = document.getElementById('rErr');
+    document.querySelectorAll('#rLines .bad, #rWho.bad').forEach(x => x.classList.remove('bad'));
+    const fail = (msg, el) => { err.textContent = msg; err.hidden = false; if (el){ el.classList.add('bad'); el.focus(); } };
+    const who = document.getElementById('rWho').value.trim();
+    const d = document.getElementById('rDate').value;
+    if (!who) return fail('Skriv kunde eller event.', document.getElementById('rWho'));
+    if (!d) return fail('Vælg en dato.', document.getElementById('rDate'));
+    const ls = [...document.querySelectorAll('#rLines .line')].map(el => ({el, pid: el.querySelector('.l-prod').value, qty: parseInt(el.querySelector('.l-qty').value, 10)}));
+    for (const l of ls) if (!l.qty || l.qty < 1) return fail('Skriv et antal på mindst 1 for hvert produkt.', l.el.querySelector('.l-qty'));
+    const kind = document.querySelector('input[name="rkind"]:checked').value;
+    const group = 'g' + Date.now();
+    ls.forEach((l, i) => S.res.push({id: group + '-' + i, group, kind, who, pid: l.pid, qty: l.qty, date: d}));
+    save(); dlgR.close(); renderAll(); toast(ls.length === 1 ? 'Gemt i kalenderen' : `${ls.length} produkter gemt i kalenderen`);
+  });
+
+  function openDetail(no){
+    const b = S.batches.find(x => x.no === no); if (!b) return;
+    const p = prod(b.pid); const st = batchState(b);
+    const left = diff(TODAY, ready(b));
+    let actions = '';
+    if (b.status === 'aktiv') actions = `<button class="btn danger" type="button" id="dDiscard">Marker som fejlet</button>`;
+    if (b.status === 'planlagt') actions = `<button class="btn primary" type="button" id="dMade">Registrér som lavet i dag</button>`;
+    if (b.status === 'kasseret') actions = `<button class="btn" type="button" id="dRestore">Gendan</button>`;
+    document.getElementById('detailBody').innerHTML = `
+      <h2>Batch #${esc(bn(b))}</h2>
+      <span class="chip st-${st.cls}" style="align-self:flex-start">${st.label}</span>
+      <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:b.pid)}</dd><dt>Antal</dt><dd class="num">${b.qty} stk.</dd>
+      <dt>${b.status==='planlagt'?'Planlagt af':'Lavet af'}</dt><dd>${esc(b.by || '–')}</dd>
+      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Hærdetid</dt><dd class="num">${b.cure} dage</dd><dt>Klar</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd></dl>
+      <div class="dlg-actions">${actions}<button class="btn" type="button" id="dClose">Luk</button></div>`;
+    document.getElementById('dClose').onclick = () => dlgD.close();
+    const dis = document.getElementById('dDiscard');
+    if (dis) dis.onclick = () => {
+      if (dis.dataset.armed){ b.status = 'kasseret'; save(); dlgD.close(); renderAll(); toast(`Batch #${esc(bn(b))} kasseret`); return; }
+      dis.dataset.armed = '1'; dis.textContent = `Bekræft: kassér ${b.qty} stk.`;
+    };
+    const mk = document.getElementById('dMade'); if (mk) mk.onclick = () => { b.status='aktiv'; b.made=TODAY; save(); dlgD.close(); renderAll(); toast(`Batch #${esc(bn(b))} registreret som lavet`); };
+    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; save(); dlgD.close(); renderAll(); toast(`Batch #${esc(bn(b))} gendannet`); };
+    dlgD.showModal();
+  }
+
+  function openResDetail(id){
+    const r = S.res.find(x => x.id === id); if (!r) return; const p = prod(r.pid);
+    document.getElementById('detailBody').innerHTML = `<h2>${r.kind==='event'?'Event':'Forudbestilling'}: ${esc(r.who)}</h2>
+      <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:r.pid)}</dd><dt>Antal</dt><dd class="num">${r.qty} stk.</dd><dt>Dato</dt><dd>${esc(fmtW(r.date))}</dd></dl>
+      <div class="dlg-actions"><button class="btn" type="button" id="dClose">Luk</button></div>`;
+    document.getElementById('dClose').onclick = () => dlgD.close();
+    dlgD.showModal();
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    const ds = t.dataset;
+    if (ds.tab){
+      document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+      ['uger','kalender','produkter','batches','bestillinger','rackbeat'].forEach(n => document.getElementById('p-'+n).hidden = n !== ds.tab);
+      return;
+    }
+    if (ds.plan){ openBatch(ds.plan, ds.latest); return; }
+    if (ds.batch){ openDetail(Number(ds.batch)); return; }
+    if (ds.res){ openResDetail(ds.res); return; }
+    if (ds.askDiscard){ pendingRow = {type:'batch', id:Number(ds.askDiscard)}; renderBatches(); return; }
+    if (ds.discard){ const b = S.batches.find(x => x.no === Number(ds.discard)); if (b){ b.status='kasseret'; pendingRow=null; save(); renderAll(); toast(`Batch #${esc(bn(b))} kasseret`);} return; }
+    if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; save(); renderAll(); toast(`Batch #${esc(bn(b))} gendannet`);} return; }
+    if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b){ b.status='aktiv'; b.made=TODAY; save(); renderAll(); toast(`Batch #${esc(bn(b))} registreret som lavet`);} return; }
+    if (ds.delplan){ S.batches = S.batches.filter(x => x.no !== Number(ds.delplan)); save(); renderAll(); toast('Planlagt batch slettet'); return; }
+    if (ds.askDelres){ pendingRow = {type:'res', id:ds.askDelres}; renderRes(); return; }
+    if (ds.delres){ S.res = S.res.filter(x => x.id !== ds.delres); pendingRow=null; save(); renderAll(); toast('Slettet'); return; }
+    if ('cancel' in ds){ pendingRow = null; renderBatches(); renderRes(); return; }
+  });
+
+  document.getElementById('prodTbl').addEventListener('change', e => {
+    const i = e.target; if (!i.dataset.pf) return;
+    const p = prod(i.dataset.id); const v = Math.max(0, parseInt(i.value, 10) || 0);
+    if (i.dataset.pf === 'count'){ p.count = v; p.countDate = TODAY; toast(`Ny optælling for ${p.name} gemt`); }
+    else if (i.dataset.pf === 'cure') p.cure = Math.max(1, v);
+    else if (i.dataset.pf === 'batch') p.batch = Math.max(1, v);
+    else p[i.dataset.pf] = v;
+    save(); renderAll();
+  });
+
+  document.getElementById('batchTbl').addEventListener('change', e => {
+    const i = e.target; if (!i.dataset.bcure) return;
+    const b = S.batches.find(x => x.no === Number(i.dataset.bcure)); if (!b) return;
+    b.cure = Math.max(1, parseInt(i.value, 10) || 1);
+    save(); renderAll(); toast(`Batch #${esc(bn(b))} er nu klar ${fmt(ready(b))}`);
+  });
+
+  document.getElementById('btnNewBatch').addEventListener('click', () => openBatch(S.products[0].id));
+  document.getElementById('btnNewRes').addEventListener('click', openRes);
+  document.getElementById('prevM').addEventListener('click', () => { month = add(month+'-01', -1).slice(0,7); renderCalendar(); });
+  document.getElementById('nextM').addEventListener('click', () => { const [y,m] = month.split('-').map(Number); month = iso(new Date(Date.UTC(y, m, 1))).slice(0,7); renderCalendar(); });
+  document.getElementById('prevW').addEventListener('click', () => { weekStart = add(weekStart, -7*NW); renderWeeks(); });
+  document.getElementById('nextW').addEventListener('click', () => { weekStart = add(weekStart, 7*NW); renderWeeks(); });
+  document.getElementById('todayW').addEventListener('click', () => { weekStart = monday(TODAY); renderWeeks(); });
+  document.getElementById('wkc'+NW).checked = true;
+  document.querySelectorAll('input[name="wkcount"]').forEach(r => r.addEventListener('change', () => {
+    NW = Math.min(6, Math.max(1, parseInt(r.value, 10) || 4));
+    try { localStorage.setItem('kystnaer-uger', String(NW)); } catch(e) {}
+    renderWeeks();
+  }));
+  document.getElementById('todayM').addEventListener('click', () => { month = TODAY.slice(0,7); renderCalendar(); });
+  document.getElementById('alerts').addEventListener('click', e => { if (e.target.id === 'moreAlerts'){ showAllAlerts = !showAllAlerts; renderAlerts(); } });
+
+  const resetWrap = document.getElementById('resetWrap');
+  resetWrap.addEventListener('click', e => {
+    if (e.target.id === 'btnReset'){ resetWrap.innerHTML = `<span class="small">Alle ændringer slettes.</span> <button class="btn small danger" id="btnResetYes" type="button">Nulstil</button> <button class="btn small" id="btnResetNo" type="button">Fortryd</button>`; }
+    else if (e.target.id === 'btnResetYes'){ S = sampleData(); save(); renderAll(); resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; toast('Eksempeldata nulstillet'); }
+    else if (e.target.id === 'btnResetNo'){ resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; }
+  });
+
+  document.getElementById('btnSync').addEventListener('click', () => {
+    const t = new Intl.DateTimeFormat('da-DK',{hour:'2-digit',minute:'2-digit'}).format(new Date());
+    document.getElementById('syncLog').textContent = `Forsøgt kl. ${t}: Der er ingen forbindelse til Rackbeat endnu, så eksempeldata bruges.`;
+    toast('Ingen forbindelse til Rackbeat endnu');
+  });
+
+  renderAll();
+})();
+</script>

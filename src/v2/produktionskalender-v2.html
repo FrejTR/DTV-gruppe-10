@@ -1,0 +1,1478 @@
+<title>Kystnær Produktionskalender v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Karla:wght@400;500;700&family=Lora:wght@400;500;700&display=swap">
+<style>
+/* Version 2: one-pager. Samme funktioner som version 1, uden faner og pynt. Ugeoversigten er siden; resten ligger i sammenklappede sektioner. Layout efter Kystnærs webshop: sandfarvet top-bånd, hvid flade, Lora-overskrifter, Karla-tekst, sorte pilleknapper, firkantede paneler. Trafiklys kun til batchstatus. */
+:root{
+  --bg:#ffffff; --surface:#ffffff; --sunk:#f2f2f2; --sand:#ddd5c8; --sand-light:#e7e1d8; --sand-dark:#d3c9b8;
+  --ink:#212121; --muted:rgba(33,33,33,.68); --line:#e4ded4;
+  --accent:#c69388; --accent-strong:#a8736a; --earth:#a38d69;
+  --btn:#000000; --btn-ink:#ffffff;
+  --red:#b5382a; --amber:#b07d0c; --green:#4a9f53; --grey:#8b8b8b;
+  --packed:#7fb987; --packed-ink:#173d1d;
+  --font-display:"Lora", Georgia, "Times New Roman", serif;
+  --font-body:"Karla", "Helvetica Neue", Arial, sans-serif;
+  --pill:30px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1916; --surface:#221f1b; --sunk:#2a2621; --sand:#3a332a; --sand-light:#2f2a23; --sand-dark:#4a4236;
+  --ink:#ece6dc; --muted:rgba(236,230,220,.68); --line:#3a352e;
+  --accent:#d9a89d; --accent-strong:#e6bdb3; --earth:#c9b28d;
+  --btn:#ece6dc; --btn-ink:#1b1916;
+  --red:#ec7f6c; --amber:#e1b24f; --green:#79c383; --grey:#8f8a83; --packed:#3f7a48; --packed-ink:#e6f4e8; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#1b1916; --surface:#221f1b; --sunk:#2a2621; --sand:#3a332a; --sand-light:#2f2a23; --sand-dark:#4a4236;
+  --ink:#ece6dc; --muted:rgba(236,230,220,.68); --line:#3a352e;
+  --accent:#d9a89d; --accent-strong:#e6bdb3; --earth:#c9b28d;
+  --btn:#ece6dc; --btn-ink:#1b1916;
+  --red:#ec7f6c; --amber:#e1b24f; --green:#79c383; --grey:#8f8a83; --packed:#3f7a48; --packed-ink:#e6f4e8; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55}
+.band{background:var(--sand);text-align:center;font-family:var(--font-display);font-size:.95rem;letter-spacing:1px;padding-block:9px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.masthead{text-align:center;padding-block:18px 6px;border-bottom:1px solid var(--line)}
+.wordmark{font-family:var(--font-display);font-size:1.6rem;letter-spacing:1px}
+.wordmark small{display:block;font-family:var(--font-body);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:22px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance;letter-spacing:1px;font-weight:700}
+h1{font-size:1.75rem}
+h2{font-size:1.25rem}
+h3{font-size:1.02rem}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.num{font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* top */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.brand .eyebrow{font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--ink);background:var(--surface);border-radius:var(--pill);padding:9px 20px;font-size:.88rem;letter-spacing:1px;min-height:42px}
+.btn:hover{background:var(--sunk)}
+.btn.primary{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+.btn.primary:hover{opacity:.85;background:var(--btn)}
+.btn.small{padding:5px 14px;min-height:34px;font-size:.8rem}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn[disabled]{opacity:.45;cursor:default}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;color:var(--muted);margin-top:6px}
+.stats b{color:var(--ink)}
+.stats .stat-date{color:var(--ink);font-weight:700}
+.v2-brand{display:flex;align-items:center;gap:14px;min-width:0}
+.logo{height:56px;width:auto;flex:none;display:block}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .logo{filter:invert(1)} }
+:root[data-theme="dark"] .logo{filter:invert(1)}
+@media (max-width:560px){.logo{height:44px}}
+.stats .stat-red,.stats .stat-red b{color:var(--red);font-weight:700}
+.stats .stat-amber,.stats .stat-amber b{color:var(--amber);font-weight:700}
+.sample-note{font-size:.8rem;color:var(--muted);background:var(--sand-light);border-radius:15px;padding:4px 12px}
+
+/* alerts */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--amber);padding:12px 16px}
+.alert.akut{border-left-color:var(--red);background:color-mix(in srgb,var(--red) 6%,var(--surface))}
+.alert.plan{background:color-mix(in srgb,var(--amber) 7%,var(--surface))}
+.alert .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:15px;white-space:nowrap}
+.alert.akut .tag{background:var(--red);color:var(--surface)}
+.alert.plan .tag{background:var(--amber);color:var(--surface)}
+.alert p{margin:2px 0 0;font-size:.9rem;color:var(--muted)}
+.alert .body{min-width:0}
+.alerts-more{align-self:flex-start}
+.ok-line{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--green);padding:12px 16px;color:var(--muted)}
+@media (max-width:560px){.alert{grid-template-columns:1fr}.alert .tag{justify-self:start}}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;justify-content:flex-start;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tabs > .tab:first-child{margin-left:auto}
+.tabs > .tab:last-child{margin-right:auto}
+.tab{border:0;background:none;padding:10px 16px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;letter-spacing:.5px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:700}
+.panel{background:var(--surface);display:flex;flex-direction:column;gap:14px}
+
+/* status chips */
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:2px 10px;white-space:nowrap}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.st-red{color:var(--red);background:color-mix(in srgb,var(--red) 12%,transparent)}
+.st-amber{color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+.st-green{color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent)}
+.st-packed{color:var(--packed-ink);background:var(--packed)}
+.st-plan{color:var(--earth);background:transparent;border:1.5px dashed var(--earth)}
+.st-dead{color:var(--grey);background:color-mix(in srgb,var(--grey) 14%,transparent);text-decoration:line-through}
+.risk{font-size:.78rem;font-weight:700;padding:2px 10px;border-radius:15px;border:1px solid var(--line);white-space:nowrap}
+.risk.akut{border-color:var(--red);color:var(--red)}
+.risk.plan{border-color:var(--amber);color:var(--amber)}
+.risk.ok{color:var(--muted)}
+
+/* calendar */
+.cal-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cal-nav{display:flex;gap:6px;align-items:center}
+.cal-nav h2{min-width:10rem;text-align:center;text-transform:capitalize}
+.legend{display:flex;flex-wrap:wrap;gap:8px}
+.grid-wrap{overflow-x:auto}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--line);border-left:1px solid var(--line);min-width:680px}
+.dow{font-size:.74rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);padding:7px 8px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--sand)}
+.day{min-height:112px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:5px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.day.other{background:var(--sunk)}
+.day.other .dnum{opacity:.45}
+.day .dnum{font-size:.8rem;font-weight:700;color:var(--muted)}
+.day.today{background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.day.today .dnum{background:var(--btn);color:var(--btn-ink);border-radius:15px;padding:0 8px;align-self:flex-start}
+.ev{display:block;width:100%;text-align:left;border:0;border-radius:4px;font-size:.74rem;line-height:1.25;padding:3px 6px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev.b-red{background:color-mix(in srgb,var(--red) 14%,var(--surface));color:var(--red)}
+.ev.b-amber{background:color-mix(in srgb,var(--amber) 16%,var(--surface));color:var(--amber)}
+.ev.b-green{background:color-mix(in srgb,var(--green) 12%,var(--surface));color:var(--green)}
+.ev.b-packed{background:var(--packed);color:var(--packed-ink)}
+.ev.b-dead{background:var(--sunk);color:var(--grey);text-decoration:line-through}
+.ev.b-plan{background:transparent;color:var(--earth);border:1.5px dashed var(--earth)}
+.ev.res{background:var(--sand-light);color:var(--ink);font-weight:400}
+.ev.dl{background:transparent;color:var(--amber);border:1px dashed var(--amber);font-weight:700}
+.ev-more{font-size:.72rem;color:var(--muted);padding-left:4px}
+.agenda{display:none;flex-direction:column;gap:12px}
+.agenda .aday{display:flex;flex-direction:column;gap:4px}
+.agenda .aday h3{font-size:.95rem}
+.agenda .ev{white-space:normal;font-size:.85rem;padding:6px 8px}
+@media (max-width:700px){.grid-wrap{display:none}.agenda{display:flex}}
+
+/* ugeoversigt */
+.wk-wrap{overflow-x:auto}
+.wk{min-width:640px;--namew:170px}
+.wk-row,.wk-prod{display:grid;grid-template-columns:var(--namew) repeat(var(--days),minmax(0,1fr));grid-auto-rows:minmax(24px,auto);row-gap:4px}
+.wk-row.head{background:var(--sand)}
+.wk-h{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-left:1px solid var(--line);min-width:0}
+.wk-h small{display:block;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);white-space:nowrap}
+.wk-h.now{background:var(--sand-dark)}
+.wk-days{background:var(--sand-light)}
+.wk-day{padding:4px 6px;font-size:.72rem;color:var(--muted);border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wk-day.now{color:var(--ink);font-weight:700}
+.wk-count .seg{min-width:15rem}
+.wk-corner{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.wk-prod{padding-block:8px;border-bottom:1px solid var(--line)}
+.wk-name{grid-column:1;padding-right:8px;min-width:0}
+.wk-name strong{display:block;font-weight:700;line-height:1.25}
+.wk-name small{color:var(--muted)}
+.wk-status{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-top:6px}
+.wk-status .chip{font-size:.7rem;padding:1px 8px}
+.wk-proc{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.wk-risk{font-size:.74rem;font-weight:700}
+.wk-risk.akut{color:var(--red)}
+.wk-risk.plan{color:var(--amber)}
+.st-none{color:var(--muted);background:var(--sunk)}
+.st-trim{color:var(--ink);background:transparent;border:1.5px solid var(--ink)}
+.st-trim::before{display:none}
+.wk-sep{border-left:1px solid var(--line);margin-block:-8px}
+.wk-sep.now{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.bar{border:0;margin:0;padding:0 6px;font-size:.72rem;font-weight:700;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:22px;align-self:center;z-index:1;border-radius:0}
+.bar.first{border-top-left-radius:11px;border-bottom-left-radius:11px}
+.bar.last{border-top-right-radius:11px;border-bottom-right-radius:11px}
+.bar.s-red{background:color-mix(in srgb,var(--red) 24%,var(--surface));color:var(--red)}
+.bar.s-amber{background:color-mix(in srgb,var(--amber) 28%,var(--surface));color:var(--amber)}
+.bar.s-green{background:color-mix(in srgb,var(--green) 18%,var(--surface));color:var(--green)}
+.bar.s-packed{background:var(--packed);color:var(--packed-ink)}
+.bar.s-plan{background:transparent;color:var(--earth);border:1.5px dashed var(--earth)}
+.bar.s-dead{background:var(--sunk);color:var(--grey);text-decoration:line-through}
+.wk-empty{font-size:.78rem;color:var(--muted);align-self:center;padding-left:6px;z-index:1}
+.wk-stock{font-size:.76rem;color:var(--muted);padding-left:6px;align-self:center;z-index:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.wk-stock.low{color:var(--red);font-weight:700}
+.wk-res{font-size:.72rem;align-self:center;z-index:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid var(--ink);padding-left:4px;background:none;border-top:0;border-right:0;border-bottom:0;text-align:left}
+@media (max-width:700px){.wk{--namew:120px}}
+
+.wk-count{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.wk-count-label{font-size:.85rem;color:var(--muted)}
+.wk-count .seg{min-width:11rem}
+.wk-count .seg label{padding:6px 10px}
+/* tabeller på smalle skærme og touch */
+#resTbl{min-width:760px}
+#prodTbl{min-width:1100px}
+#batchTbl{min-width:900px}
+#prodTbl td,#prodTbl th,#batchTbl td,#batchTbl th,#resTbl td,#resTbl th{white-space:nowrap}
+#prodTbl td:first-child,#batchTbl td:nth-child(2){white-space:normal;min-width:9.5rem}
+#prodTbl th:first-child,#prodTbl td:first-child{position:sticky;left:0;z-index:1;background:var(--surface)}
+#prodTbl th:first-child{background:var(--sand-light)}
+.row-actions{flex-wrap:nowrap}
+@media (max-width:1180px){
+  .masthead{padding-block:12px 4px}
+  .wordmark{font-size:1.35rem}
+  .wrap{padding-block:16px 40px;gap:16px}
+  .wk{--namew:150px}
+}
+@media (pointer:coarse){
+  .btn.small{min-height:40px;padding:6px 14px}
+  .ev{padding:6px 7px;font-size:.78rem}
+  .bar{height:28px}
+  .wk-res{min-height:28px}
+  td input{min-height:40px;font-size:1rem}
+  .field input,.field select{min-height:46px;font-size:1rem}
+  .seg label{padding:10px 8px}
+  .wk-count .seg label{padding:8px 12px}
+  .tab{padding:12px 16px}
+}
+/* rackbeat */
+.src{display:inline-block;margin-left:6px;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;border:1px solid currentColor;border-radius:15px;padding:0 6px;vertical-align:1px;color:var(--earth)}
+.src.est{color:var(--muted)}
+.rb-pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:3px 12px;background:var(--sand-light);white-space:nowrap}
+.rb-pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--grey)}
+.rb-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start}
+.rb-head > div{min-width:0}
+.rb-sync{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.rb-list{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;font-size:.92rem;max-width:72ch}
+.sku{display:block;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* tables */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th{font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-align:left;font-weight:700;padding:9px 8px;background:var(--sand-light);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.dead td{color:var(--grey)}
+td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums}
+.row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.hint{font-size:.88rem;color:var(--muted);margin:0;max-width:72ch}
+
+/* dialogs */
+dialog{border:0;border-radius:12px;padding:0;background:var(--surface);color:var(--ink);width:min(460px, calc(100vw - 32px));max-height:calc(100dvh - 32px);box-shadow:0 10px 40px rgba(0,0,0,.18)}
+dialog::backdrop{background:rgba(33,28,22,.45)}
+.dlg{padding:22px;display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:.82rem;font-weight:700;color:var(--muted)}
+.field input,.field select{padding:9px 16px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);min-height:42px}
+.seg{display:flex;border:1px solid var(--ink);border-radius:var(--pill);overflow:hidden}
+.seg label{flex:1;text-align:center;padding:8px;cursor:pointer;font-size:.88rem;letter-spacing:.5px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--btn);color:var(--btn-ink)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.preview{font-size:.88rem;background:var(--sand-light);border-radius:8px;padding:8px 12px}
+.preview.warn{color:var(--amber)}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.92rem}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom, 0px));background:var(--btn);color:var(--btn-ink);padding:9px 20px;border-radius:var(--pill);font-size:.9rem;z-index:50}
+@media (prefers-reduced-motion: no-preference){.toast{animation:up .2s ease-out}@keyframes up{from{opacity:0;transform:translate(-50%,6px)}}}
+.footer{font-size:.8rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:14px}
+
+/* ---------- version 2: one-pager ---------- */
+.wrap.v2{max-width:1240px;padding-block:14px 32px;gap:14px}
+.v2-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.v2-title{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.v2-title h1{font-size:1.4rem}
+.v2-title .stats{margin-top:0}
+.v2 .alerts{gap:6px}
+.v2 .alert{padding:8px 12px;gap:10px}
+.v2 .alert p{display:none}
+.v2 .alert strong{font-weight:700;font-size:.95rem}
+.v2-main{display:flex;flex-direction:column;gap:10px}
+.v2-main .cal-nav h2{font-size:1.1rem;min-width:7.5rem}
+.sec{border-top:1px solid var(--line)}
+.sec > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 0;font-family:var(--font-display);font-size:1.1rem;font-weight:700;letter-spacing:1px;min-height:44px}
+.sec > summary::-webkit-details-marker{display:none}
+.sec > summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(-45deg);transition:transform .15s}
+.sec[open] > summary::before{transform:rotate(45deg)}
+.sec-body{display:flex;flex-direction:column;gap:12px;padding-bottom:16px}
+.v2 .footer{padding-top:10px}
+.v2 .rb-sync{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+@media (prefers-reduced-motion: reduce){.sec > summary::before{transition:none}}
+
+/* ---------- batch der skal laves i dag ---------- */
+.alert.lav{border-left-color:var(--ink);background:var(--surface)}
+.alert.lav .tag{background:var(--ink);color:var(--bg)}
+.v2 .alert .body .muted{font-size:.88rem}
+/* ---------- opgave: skær kanter ---------- */
+.tasks{display:flex;flex-direction:column;gap:6px}
+.tasks-h{font-size:1rem}
+.task{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--ink);background:var(--surface)}
+.task-tag{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:15px;background:var(--ink);color:var(--bg);white-space:nowrap}
+.task-body{min-width:0}
+@media (max-width:560px){.task{grid-template-columns:1fr}.task-tag{justify-self:start}}
+.trim{z-index:2;align-self:center;justify-self:center;width:22px;height:22px;border-radius:50%;padding:0;font-size:.8rem;line-height:1;display:grid;place-items:center;border:1.5px solid var(--ink);background:var(--surface);color:var(--ink)}
+.trim.t-due{background:var(--ink);color:var(--bg)}
+.trim.t-done{border-color:var(--green);color:var(--green)}
+.trim.t-upcoming{border-style:dashed;color:var(--muted);border-color:var(--muted)}
+.wk-task{font-size:.74rem;font-weight:700;color:var(--ink)}
+.trim-note{display:block;font-size:.76rem;color:var(--muted);margin-top:3px}
+.trim-note.due{color:var(--ink);font-weight:700}
+@media (pointer:coarse){.trim{width:28px;height:28px}}
+/* ---------- trin pr. produkt og filter ---------- */
+.pstep-list{display:flex;flex-direction:column;gap:4px}
+.pstep{display:flex;align-items:center;gap:6px;font-size:.82rem;white-space:nowrap}
+.pstep input{width:4rem;padding:4px 8px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums}
+.wk-select{padding:6px 12px;border:1px solid var(--ink);border-radius:var(--pill);background:var(--surface);min-height:38px}
+/* ---------- flere produkter pr. registrering ---------- */
+.d-rej{width:5.5rem;padding:5px 10px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;min-height:36px}
+#dlgBatch,#dlgRes{width:min(680px, calc(100vw - 32px))}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-row .field{min-width:0}
+.field-row .field input[hidden]{display:none}
+#bWhoNew{margin-top:6px}
+.lines{display:flex;flex-direction:column;gap:8px}
+.lines-head,.line{display:grid;gap:8px;align-items:center}
+.lines-b,.line-b{grid-template-columns:minmax(0,1fr) 5rem 6.5rem 5rem 2.5rem}
+.lines-r,.line-r{grid-template-columns:minmax(0,1fr) 6rem 2.5rem}
+.lines-head{font-size:.74rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:-4px}
+.line select,.line input{width:100%;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);min-height:42px}
+.line input[type="number"]{text-align:right;font-variant-numeric:tabular-nums}
+.line .l-ready{grid-column:1 / -1;font-size:.8rem;color:var(--muted);padding-left:12px;margin-top:-4px}
+.line-del{width:2.5rem;height:2.5rem;border:1px solid var(--line);border-radius:50%;background:var(--surface);font-size:1.1rem;line-height:1;color:var(--muted)}
+.line-del:hover{color:var(--red);border-color:var(--red)}
+.line-del[disabled]{opacity:.3;cursor:default}
+.line.bad input.l-no,.line input.bad{border-color:var(--red)}
+.add-line{align-self:flex-start}
+.form-err{margin:0;color:var(--red);font-size:.88rem;font-weight:700}
+.who{color:var(--muted);font-size:.85rem}
+@media (max-width:560px){
+  .field-row{grid-template-columns:1fr}
+  .lines-head{display:none}
+  .line-b{grid-template-columns:repeat(3,minmax(0,1fr)) 2.5rem}
+  .line-b .l-prod{grid-column:1 / 4;grid-row:1}
+  .line-b .line-del{grid-column:4;grid-row:1}
+  .line-b .l-qty,.line-b .l-no,.line-b .l-cure{grid-row:2}
+}
+</style>
+
+<div class="wrap v2">
+  <header class="v2-head">
+    <div class="v2-brand">
+      <img class="logo" src="data:image/png;base64,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" alt="Kystnær" width="47" height="56">
+    <div class="v2-title">
+      <h1>Produktionskalender</h1>
+      <div class="stats" id="stats"></div>
+    </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnNewBatch" type="button">+ Batch</button>
+      <button class="btn" id="btnNewRes" type="button">+ Bestilling/event</button>
+    </div>
+  </header>
+
+  <section class="alerts" id="alerts" aria-label="Advarsler"></section>
+
+  <section class="tasks" id="tasks" aria-label="Yderligere opgaver" hidden></section>
+
+  <section class="v2-main" id="p-uger" aria-labelledby="ugerTitle">
+    <div class="cal-head">
+      <div class="cal-nav">
+        <button class="btn small" id="prevW" type="button" aria-label="Forrige periode">‹</button>
+        <h2 id="weekLabel"></h2>
+        <button class="btn small" id="nextW" type="button" aria-label="Næste periode">›</button>
+        <button class="btn small ghost" id="todayW" type="button">I dag</button>
+      </div>
+      <div class="wk-count">
+        <label class="wk-count-label" for="wkType">Vis</label>
+        <select id="wkType" class="wk-select"></select>
+      </div>
+      <div class="wk-count">
+        <span class="wk-count-label" id="wkCountLabel">Uger</span>
+        <div class="seg" role="radiogroup" aria-labelledby="wkCountLabel">
+          <label><input type="radio" name="wkcount" id="wkc1" value="1"> 1</label>
+          <label><input type="radio" name="wkcount" id="wkc2" value="2"> 2</label>
+          <label><input type="radio" name="wkcount" id="wkc3" value="3"> 3</label>
+          <label><input type="radio" name="wkcount" id="wkc4" value="4" checked> 4</label>
+          <label><input type="radio" name="wkcount" id="wkc5" value="5"> 5</label>
+          <label><input type="radio" name="wkcount" id="wkc6" value="6"> 6</label>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="chip st-amber">Hærder</span>
+        <span class="chip st-green">Klar til pakning</span>
+        <span class="chip st-packed">Pakket</span>
+        <span class="chip st-trim">⇡ ✂&#xFE0E; Opgave</span>
+        <span class="chip st-red">Under minimum</span>
+        <span class="chip st-plan">Planlagt</span>
+      </div>
+    </div>
+    <span id="ugerTitle" hidden>Ugeoversigt</span>
+    <div class="wk-wrap"><div class="wk" id="wk"></div></div>
+  </section>
+
+  <details class="sec" id="sec-batches">
+    <summary>Batches</summary>
+    <div class="sec-body" id="p-batches"><div class="tbl-wrap"><table id="batchTbl"></table></div></div>
+  </details>
+
+  <details class="sec" id="sec-bestillinger">
+    <summary>Bestillinger og events</summary>
+    <div class="sec-body" id="p-bestillinger"><div class="tbl-wrap"><table id="resTbl"></table></div></div>
+  </details>
+
+  <details class="sec" id="sec-produkter">
+    <summary>Produkter og minimum</summary>
+    <div class="sec-body" id="p-produkter">
+      <div><button class="btn small" id="btnNewProd" type="button">+ Nyt produkt</button></div>
+      <div class="tbl-wrap"><table id="prodTbl"></table></div>
+    </div>
+  </details>
+
+  <details class="sec" id="sec-kalender">
+    <summary>Månedskalender</summary>
+    <div class="sec-body" id="p-kalender">
+      <div class="cal-head">
+        <div class="cal-nav">
+          <button class="btn small" id="prevM" type="button" aria-label="Forrige måned">‹</button>
+          <h2 id="monthLabel"></h2>
+          <button class="btn small" id="nextM" type="button" aria-label="Næste måned">›</button>
+          <button class="btn small ghost" id="todayM" type="button">I dag</button>
+        </div>
+      </div>
+      <div class="grid-wrap"><div class="cal" id="cal"></div></div>
+      <div class="agenda" id="agenda"></div>
+    </div>
+  </details>
+
+  <footer class="footer">
+    <span class="rb-sync">
+      <span class="rb-pill">Rackbeat: ikke forbundet</span>
+      <button class="btn small ghost" id="btnSync" type="button">Hent data</button>
+      <span class="muted small" id="syncLog" aria-live="polite">Eksempeldata</span>
+    </span>
+    <span id="resetWrap"><button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button></span>
+  </footer>
+</div>
+
+<dialog id="dlgBatch"><form class="dlg" id="formBatch" method="dialog" novalidate>
+  <h2>Registrér batch</h2>
+  <div class="seg" role="radiogroup" aria-label="Type">
+    <label><input type="radio" name="bkind" id="bkindMade" value="aktiv" checked> Lavet</label>
+    <label><input type="radio" name="bkind" id="bkindPlan" value="planlagt"> Planlagt</label>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="bDate" id="bDateLabel">Lavet den</label><input id="bDate" type="date" required></div>
+    <div class="field"><label for="bWho" id="bWhoLabel">Lavet af</label>
+      <select id="bWho"></select>
+      <input id="bWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" hidden>
+    </div>
+  </div>
+  <div class="lines-head lines-b" aria-hidden="true"><span>Produkt</span><span>Antal</span><span>Batchnr.</span><span>Dage før pakning</span><span></span></div>
+  <div class="lines" id="bLines"></div>
+  <button class="btn small ghost add-line" type="button" id="bAdd">+ Tilføj produkt</button>
+  <p class="form-err" id="bErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn primary" type="submit" id="bSubmit">Gem batch</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgRes"><form class="dlg" id="formRes" method="dialog" novalidate>
+  <h2>Bestilling eller event</h2>
+  <div class="seg" role="radiogroup" aria-label="Type">
+    <label><input type="radio" name="rkind" id="rkindOrd" value="ordre" checked> Forudbestilling</label>
+    <label><input type="radio" name="rkind" id="rkindEv" value="event"> Event</label>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="rWho">Kunde eller event</label><input id="rWho" type="text" placeholder="Fx Dansani eller Julemarked" required></div>
+    <div class="field"><label for="rDate">Skal bruges den</label><input id="rDate" type="date" required></div>
+  </div>
+  <div class="lines-head lines-r" aria-hidden="true"><span>Produkt</span><span>Antal</span><span></span></div>
+  <div class="lines" id="rLines"></div>
+  <button class="btn small ghost add-line" type="button" id="rAdd">+ Tilføj produkt</button>
+  <p class="form-err" id="rErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn primary" type="submit">Gem</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgProd"><form class="dlg" id="formProd" method="dialog" novalidate>
+  <h2>Nyt produkt</h2>
+  <div class="field-row">
+    <div class="field"><label for="npName">Navn</label><input id="npName" type="text" placeholder="Fx Lavendel sæbe bar" required></div>
+    <div class="field"><label for="npSku">Varenummer i Rackbeat</label><input id="npSku" type="text" placeholder="Fx KN-1004"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="npType">Produkttype</label>
+      <select id="npType"><option>Sæbebarer</option><option>Shampoobarer</option><option>Balsambarer</option><option>Hårkure</option><option>Andet</option></select>
+    </div>
+    <div class="field"><label for="npCure">Dage før pakning</label><input id="npCure" type="number" min="1" step="1" inputmode="numeric" value="22"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="npMin">Minimum (stk.)</label><input id="npMin" type="number" min="0" step="1" inputmode="numeric" value="30"></div>
+    <div class="field"><label for="npRate">Forventet salg pr. uge</label><input id="npRate" type="number" min="0" step="1" inputmode="numeric" value="10"></div>
+  </div>
+  <div class="field-row">
+    <div class="field"><label for="npBatch">Typisk batch (stk.)</label><input id="npBatch" type="number" min="1" step="1" inputmode="numeric" value="60"></div>
+    <div class="field"><label for="npCount">Lager i dag (stk.)</label><input id="npCount" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
+  </div>
+  <p class="preview" id="npSteps"></p>
+  <p class="form-err" id="npErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn primary" type="submit">Opret produkt</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgTrim"><form class="dlg" id="formTrim" method="dialog" novalidate>
+  <h2 id="tTitle">Trin udført</h2>
+  <p class="muted" id="tInfo"></p>
+  <div class="field" id="tResWrap" hidden><label for="tRes">Resultat</label>
+    <select id="tRes"><option value="made">Lavet til sæbespåner</option><option value="no">Kunne ikke bruges</option></select>
+  </div>
+  <div class="field"><label for="tWho">Udført af</label>
+    <select id="tWho"></select>
+    <input id="tWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" hidden>
+  </div>
+  <p class="form-err" id="tErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn primary" type="submit">Gem</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
+
+<script>
+(() => {
+  // ---------- dato-hjælpere (UTC, så sommertid ikke forskyder dage) ----------
+  const DAY = 864e5;
+  const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(Date.UTC(y, m-1, d)); };
+  const iso = d => d.toISOString().slice(0,10);
+  const add = (s,n) => iso(new Date(parse(s).getTime() + n*DAY));
+  const diff = (a,b) => Math.round((parse(b) - parse(a)) / DAY); // b - a i dage
+  const now = new Date();
+  const TODAY = iso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+  const fD = new Intl.DateTimeFormat('da-DK', {day:'numeric', month:'short', timeZone:'UTC'});
+  const fDW = new Intl.DateTimeFormat('da-DK', {weekday:'short', day:'numeric', month:'short', timeZone:'UTC'});
+  const fM = new Intl.DateTimeFormat('da-DK', {month:'long', year:'numeric', timeZone:'UTC'});
+  const fmt = s => fD.format(parse(s));
+  const fmtW = s => fDW.format(parse(s));
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ---------- produkttyper (fra Kystnærs produktionsskema) ----------
+  // Hver type har sin tid før pakning og sine trin undervejs. Nye produkter arver fra deres type.
+  const STEP_DEFS = {
+    demold: {key:'demold', name:'Tag ud af forme', doneText:'Taget ud af forme', icon:'⇡'},
+    trim:   {key:'trim',   name:'Skær kanter',     doneText:'Kanter skåret',     icon:'✂︎'},
+  };
+  const TYPES = {
+    'Sæbebarer':    {cure:22, dry:'Hærder', flakes:true, steps:[{key:'demold', day:1}, {key:'trim', day:8}]},
+    'Shampoobarer': {cure:7,  dry:'Hærder', steps:[]},
+    'Balsambarer':  {cure:1,  dry:'Hærder', steps:[]},
+    'Hårkure':      {cure:1,  dry:'Hærder', steps:[]},
+    'Andet':       {cure:7,  dry:'Hærder', steps:[]},
+  };
+  const typeOf = p => TYPES[p && p.type] || TYPES['Andet'];
+
+  // ---------- eksempeldata (tænkte lager- og salgstal, tider fra produktionsskemaet) ----------
+  const T = TODAY;
+  function sampleData(){
+    const cd = add(T,-2);
+    const P = (id,name,type,min,rate,count,batch,sku,cure) => ({id,name,type,min,rate,count,countDate:cd,batch,sku,
+      cure: cure || TYPES[type].cure, steps: TYPES[type].steps.map(x => ({...x}))});
+    const B = (no,by,pid,qty,made,status,extra) => ({no,by,pid,qty,made:add(T,made),status,...(extra||{})});
+    const products = [
+      P('havtorn-saebe','Havtorn sæbe bar','Sæbebarer',50,20,120,65,'KN-1001'),
+      P('hyben-saebe','Hyben sæbe bar','Sæbebarer',50,18,70,65,'KN-1002'),
+      P('tang-saebe','Tang sæbe bar','Sæbebarer',40,12,96,60,'KN-1003'),
+      P('rosmarin-saebe','Rosmarin sæbe bar','Sæbebarer',30,9,48,60,'KN-1004'),
+      P('neutral-saebe','Neutral sæbe bar','Sæbebarer',30,10,52,60,'KN-1005'),
+      P('lanolin-saebe','Lanolin sæbe bar','Sæbebarer',20,5,30,40,'KN-1006'),
+      P('havtorn-shampoo','Havtorn shampoo bar','Shampoobarer',40,16,104,60,'KN-2001',7),
+      P('hyben-shampoo','Hyben shampoo bar','Shampoobarer',40,14,42,55,'KN-2002',7),
+      P('kul-shampoo','Aktivt kul shampoo bar','Shampoobarer',30,8,61,50,'KN-2003',7),
+      P('tang-shampoo','Tang shampoo bar','Shampoobarer',30,9,48,55,'KN-2004',3),
+      P('rosmarin-shampoo','Rosmarin shampoo bar','Shampoobarer',40,15,74,55,'KN-2005',3),
+      P('neutral-shampoo','Neutral shampoo bar','Shampoobarer',30,7,72,50,'KN-2006',3),
+      P('havtorn-balsam','Havtorn balsam bar','Balsambarer',25,8,40,50,'KN-3001'),
+      P('hyben-balsam','Hyben balsam bar','Balsambarer',25,7,22,50,'KN-3002'),
+      P('tang-balsam','Tang balsam bar','Balsambarer',20,5,35,50,'KN-3003'),
+      P('rosmarin-balsam','Rosmarin balsam bar','Balsambarer',25,8,44,50,'KN-3004'),
+      P('neutral-balsam','Neutral balsam bar','Balsambarer',20,5,30,50,'KN-3005'),
+      P('harkur','Hårkur bar','Hårkure',20,6,26,40,'KN-4001'),
+    ];
+    const batches = [
+      B(31,'Mette','havtorn-saebe',65,-24,'aktiv',{packed:true,packedOn:add(T,-1),steps:{demold:{on:add(T,-23),by:'Mette'},trim:{on:add(T,-16),by:'Lena'}}}),
+      B(32,'Lena','tang-shampoo',55,-3,'aktiv',{rejected:2}),
+      B(33,'Anna','hyben-saebe',65,-16,'aktiv',{rejected:4,rejectedOn:T,steps:{demold:{on:add(T,-15),by:'Anna'},trim:{on:add(T,-8),by:'Mette'}}}),
+      B(34,'Mette','kul-shampoo',50,-4,'aktiv'),
+      B(35,'Lena','havtorn-shampoo',60,-5,'kasseret'),
+      B(36,'Anna','havtorn-shampoo',60,-2,'aktiv'),
+      B(37,'Lena','neutral-shampoo',50,-1,'aktiv'),
+      B(38,'Mette','tang-saebe',60,4,'planlagt'),
+      B(39,'Anna','tang-saebe',60,-8,'aktiv',{steps:{demold:{on:add(T,-7),by:'Anna'}}}),
+      B(40,'Lena','rosmarin-saebe',60,-1,'aktiv'),
+      B(41,'Mette','havtorn-balsam',50,-1,'aktiv'),
+      B(42,'Anna','hyben-balsam',50,0,'planlagt'),
+    ].map(b => ({...b, cure: products.find(p => p.id === b.pid).cure}));
+    return {
+      people: ['Lena','Mette','Anna'],
+      nextNo: 43,
+      products, batches,
+      res: [
+        {id:'r1',kind:'ordre',who:'Dansani',pid:'hyben-saebe',qty:40,date:add(T,16)},
+        {id:'r2',kind:'ordre',who:'Forhandler i Sverige',pid:'tang-shampoo',qty:25,date:add(T,9)},
+        {id:'r3',kind:'event',who:'Julemarked',pid:'havtorn-saebe',qty:30,date:add(T,33)},
+        {id:'r4',kind:'event',who:'Julemarked',pid:'rosmarin-shampoo',qty:15,date:add(T,33)},
+        {id:'r5',kind:'event',who:'Julemarked',pid:'havtorn-balsam',qty:20,date:add(T,33)},
+      ],
+    };
+  }
+
+  const KEY = 'kystnaer-produktionskalender-v2-onepager-h';
+  let S;
+  try { S = JSON.parse(localStorage.getItem(KEY)); } catch(e) { S = null; }
+  if (!S || !Array.isArray(S.products)) S = sampleData();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
+
+  const prod = id => S.products.find(p => p.id === id);
+  // Produkter er data: nye produkter kommer automatisk med i alle visninger og beregninger
+  const OLD_TYPES = {'Sæbe bar':'Sæbebarer','Shampoo bar':'Shampoobarer','Balsam bar':'Balsambarer','Hårkur':'Hårkure'};
+  S.products.forEach(p => { if (OLD_TYPES[p.type]) p.type = OLD_TYPES[p.type]; if (!p.type) p.type = 'Andet'; if (!Array.isArray(p.steps)) p.steps = typeOf(p).steps.map(x => ({...x})); });
+  const activeProducts = () => S.products.filter(p => !p.archived);
+
+  // ---------- trin undervejs (fx tag ud af forme, skær kanter) ----------
+  const stepsOf = p => (p && p.steps || []).filter(x => STEP_DEFS[x.key]).map(x => ({...STEP_DEFS[x.key], day: x.day}));
+  const stepDate = (b, st) => add(b.made, st.day);
+  const stepDone = (b, key) => b.steps && b.steps[key];
+  function stepState(b, st){                  // null | 'upcoming' | 'due' | 'done'
+    if (b.status === 'kasseret') return null;
+    if (stepDone(b, st.key)) return 'done';
+    if (b.status === 'planlagt') return 'upcoming';
+    if (b.packed) return null;
+    return stepDate(b, st) <= TODAY ? 'due' : 'upcoming';
+  }
+  const batchSteps = b => stepsOf(prod(b.pid)).map(st => ({st, state: stepState(b, st), date: stepDate(b, st)}));
+  // Planlagte batches bliver til opgaven "Lav batch" på startdagen (og bliver stående, til de er registreret)
+  const MAKE_DEF = {key:'make', name:'Lav batch', doneText:'Batch lavet', icon:'▸'};
+  // Kasserede sæbebarer laves så vidt muligt til sæbespåner
+  const FLAKE_DEF = {key:'flakes', name:'Lav sæbespåner', doneText:'Sæbespåner lavet', icon:'♻\uFE0E'};
+  const TASK_DEFS = {...STEP_DEFS, make: MAKE_DEF, flakes: FLAKE_DEF};
+  const rejectedCount = b => b.status === 'kasseret' ? b.qty : (b.status === 'aktiv' ? (b.rejected || 0) : 0);
+  const flakesHandled = b => (b.flakes && b.flakes.qty) || 0;
+  const flakesOpen = b => typeOf(prod(b.pid)).flakes ? Math.max(0, rejectedCount(b) - flakesHandled(b)) : 0;
+  const flakeTasks = () => S.batches.filter(b => flakesOpen(b) > 0).map(b => ({b, st: FLAKE_DEF, state:'due', date: b.rejectedOn || TODAY, qty: flakesOpen(b)}));
+  function setFlakes(b, who, used){
+    const prev = b.flakes || {qty:0, made:0};
+    const n = flakesOpen(b);
+    b.flakes = {on: TODAY, by: who || null, qty: prev.qty + n, made: (prev.made || 0) + (used ? n : 0)};
+    save(); renderAll();
+    toast(used ? `Sæbespåner lavet af ${n} stk. fra batch #${bn(b)}` : `Batch #${bn(b)}: ${n} stk. kunne ikke bruges til sæbespåner`);
+  }
+  function flakesNote(b){
+    const open = flakesOpen(b);
+    if (open > 0) return `<span class="trim-note due">${FLAKE_DEF.icon} Lav sæbespåner (${open} stk.)</span>`;
+    if (b.flakes && b.flakes.qty) return `<span class="trim-note">${b.flakes.made ? `Sæbespåner af ${b.flakes.made} stk.` : 'Ikke brugt til sæbespåner'} ${esc(fmt(b.flakes.on))}${b.flakes.by ? ' af ' + esc(b.flakes.by) : ''}</span>`;
+    return '';
+  }
+  const makeTasks = () => S.batches.filter(b => b.status === 'planlagt' && b.made <= TODAY).map(b => ({b, st: MAKE_DEF, state:'due', date: b.made}));
+  const dueTasks = () => S.batches.flatMap(b => batchSteps(b).filter(x => x.state === 'due').map(x => ({b, ...x}))).concat(flakeTasks())
+    .sort((a, c) => a.date.localeCompare(c.date));
+  function markMade(b, who){
+    b.status = 'aktiv'; b.made = TODAY; b.madeBy = who || null;
+    save(); renderAll();
+    toast(`Batch #${bn(b)} er lavet${who ? ' af ' + who : ''}. Pakkes ${fmt(ready(b))}`);
+  }
+  function setStep(b, key, on, who){
+    const st = STEP_DEFS[key];
+    if (on){ b.steps = b.steps || {}; b.steps[key] = {on: TODAY, by: who || null}; }
+    else if (b.steps){ delete b.steps[key]; }
+    save(); renderAll();
+    toast(on ? `${st.doneText}: batch #${bn(b)}${who ? ' af ' + who : ''}` : `Batch #${bn(b)}: ${st.name.toLowerCase()} fortrudt`);
+  }
+  const net = b => Math.max(0, b.qty - (b.rejected || 0));
+  const bn = b => (b.label != null && String(b.label).trim() !== '') ? String(b.label) : String(b.no);
+  if (!Array.isArray(S.people) || !S.people.length) S.people = ['Lena','Mette','Anna'];
+  const ready = b => add(b.made, b.cure);
+  const counts = b => b.status === 'aktiv' || b.status === 'planlagt';
+
+  // ---------- kerneberegning ----------
+  // Forventet lager på dato d = optalt lager + batches klar efter optælling og senest d
+  //                              − estimeret salg siden optælling − reservationer efter optælling og senest d
+  function proj(p, d, opts = {}){
+    let v = p.count;
+    for (const b of S.batches){
+      if (b.pid !== p.id || !counts(b)) continue;
+      if (opts.excludePlanned && b.status === 'planlagt') continue;
+      const r = ready(b);
+      if (r > p.countDate && r <= d) v += net(b);
+    }
+    v -= p.rate / 7 * Math.max(0, diff(p.countDate, d));
+    for (const r of S.res) if (r.pid === p.id && r.date > p.countDate && r.date <= d) v -= r.qty;
+    return Math.floor(v);
+  }
+
+  function analyze(p){
+    const cur = proj(p, TODAY, {excludePlanned:true});
+    const out = {p, cur, status:'ok', breach:null, latest:null};
+    if (cur < p.min) { out.status = 'akut'; out.firstReady = add(TODAY, p.cure); return out; }
+    const horizon = p.cure + 28;
+    for (let i = 1; i <= horizon; i++){
+      const d = add(TODAY, i);
+      if (proj(p, d) < p.min){ out.breach = d; out.latest = add(d, -p.cure); break; }
+    }
+    if (out.latest && diff(TODAY, out.latest) <= 7) out.status = 'plan';
+    return out;
+  }
+
+  function batchState(b){
+    if (b.status === 'kasseret') return {cls:'dead', label:'Kasseret'};
+    if (b.status === 'planlagt') return {cls:'plan', label:'Planlagt'};
+    if (b.packed) return {cls:'packed', label:'Pakket'};
+    const left = diff(TODAY, ready(b));
+    if (left <= 0) return {cls:'green', label:'Klar til pakning'};
+    const p = prod(b.pid);
+    if (stepsOf(p).some(x => x.key === 'demold') && !stepDone(b, 'demold')) return {cls:'amber', label:'I form'};
+    return {cls:'amber', label: typeOf(p).dry};
+  }
+
+  // ---------- UI-tilstand ----------
+  let month = TODAY.slice(0,7);
+  let showAllAlerts = false;
+  let pendingRow = null;
+  let pendingProd = null; // {type,id}
+
+  function toast(msg){
+    const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.setAttribute('role','status');
+    document.body.appendChild(t); setTimeout(() => t.remove(), 2400);
+  }
+
+  // ---------- render ----------
+  function renderStats(){
+    const a = activeProducts().map(analyze);
+    const nA = a.filter(x => x.status==='akut').length, nP = a.filter(x => x.status==='plan').length;
+    document.getElementById('stats').innerHTML =
+      `<span class="stat-date">${esc(fmtW(TODAY))}</span>`+
+      `<span class="stat-red">Under minimum: <b class="num">${nA}</b></span>`+
+      `<span class="stat-amber">Skal startes snart: <b class="num">${nP}</b></span>`;
+  }
+
+  // Listen øverst handler om batches: hvad mangler (akut/planlæg) og hvad skal laves i dag.
+  // Trin på batches, der allerede er i gang, står under "Yderligere opgaver".
+  function renderAlerts(){
+    const el = document.getElementById('alerts');
+    const makes = makeTasks();
+    const makeFor = pid => makes.filter(t => t.b.pid === pid);
+    const makeBtn = b => `<button class="btn small primary" type="button" data-made="${b.no}">Registrér batch</button>`;
+    const makeTxt = t => `#${esc(bn(t.b))} · ${t.b.qty} stk.${t.date < TODAY ? ` · skulle være lavet ${esc(fmt(t.date))}` : ' · planlagt i dag'}`;
+    const rows = [];
+    activeProducts().map(analyze).filter(x => x.status !== 'ok').forEach(x => {
+      const p = x.p, mk = makeFor(p.id);
+      if (mk.length){
+        rows.push({o: x.status === 'akut' ? 0 : 1, d: '', html: `<div class="alert ${x.status === 'akut' ? 'akut' : 'plan'}">
+          <span class="tag">${x.status === 'akut' ? 'Akut' : 'Planlæg'}</span>
+          <div class="body"><strong>Lav ${esc(p.name)} i dag</strong> <span class="muted">${makeTxt(mk[0])}${x.status === 'akut' ? ' · under minimum' : ''}</span></div>
+          ${makeBtn(mk[0].b)}</div>`});
+        return;
+      }
+      const coming = S.batches.filter(b => b.pid === p.id && b.status === 'aktiv' && !b.packed && ready(b) >= TODAY).sort((a,b) => ready(a).localeCompare(ready(b)))[0];
+      if (x.status === 'akut' && coming) rows.push({o:0, d:'', html: `<div class="alert akut">
+        <span class="tag">Akut</span>
+        <div class="body"><strong>${esc(p.name)} er under minimum</strong> <span class="muted">· batch #${esc(bn(coming))} er i gang og kan pakkes ${esc(fmt(ready(coming)))}</span></div>
+        <button class="btn small ghost" type="button" data-batch="${coming.no}">Se batch</button></div>`});
+      else if (x.status === 'akut') rows.push({o:0, d:'', html: `<div class="alert akut" role="alert">
+        <span class="tag">Akut</span>
+        <div class="body"><strong>${esc(p.name)} er under minimum</strong>
+        <p>Ca. <span class="num">${Math.max(0,x.cur)}</span> stk. på lager, minimum er <span class="num">${p.min}</span>. En batch startet i dag er tidligst klar ${esc(fmt(x.firstReady))}.</p></div>
+        <button class="btn small primary" type="button" data-plan="${p.id}">Registrér batch</button></div>`});
+      else {
+        const late = x.latest < TODAY;
+        const head = (late || x.latest === TODAY) ? `Start ${esc(p.name)} i dag` : `Start ${esc(p.name)} senest ${esc(fmt(x.latest))}`;
+        rows.push({o:2, d: x.latest || '', html: `<div class="alert plan">
+        <span class="tag">Planlæg</span>
+        <div class="body"><strong>${head}</strong></div>
+        <button class="btn small" type="button" data-plan="${p.id}" data-latest="${late ? TODAY : x.latest}" data-mode="plan">Planlæg batch</button></div>`});
+      }
+    });
+    // planlagte batches i dag for produkter uden advarsel
+    makes.filter(t => !rows.some(r => r.html.includes(`data-made="${t.b.no}"`))).forEach(t => {
+      const p = prod(t.b.pid);
+      rows.push({o:1, d:'', html: `<div class="alert lav">
+        <span class="tag">Lav i dag</span>
+        <div class="body"><strong>Lav ${esc(p ? p.name : t.b.pid)}</strong> <span class="muted">${makeTxt(t)}</span></div>
+        ${makeBtn(t.b)}</div>`});
+    });
+    if (!rows.length){ el.innerHTML = `<div class="ok-line">Intet at lave eller planlægge. Alle produkter forventes at ligge over minimum de næste uger.</div>`; return; }
+    rows.sort((a,b) => a.o - b.o || a.d.localeCompare(b.d));
+    const shown = showAllAlerts ? rows : rows.slice(0,3);
+    el.innerHTML = shown.map(r => r.html).join('') + (rows.length > 3 ? `<button class="btn small ghost alerts-more" type="button" id="moreAlerts">${showAllAlerts ? 'Vis færre' : `Vis ${rows.length-3} flere`}</button>` : '');
+  }
+
+
+  function dayItems(d, deadlines){
+    const items = [];
+    for (const b of S.batches){
+      const p = prod(b.pid); if (!p) continue;
+      const st = batchState(b);
+      if (b.status === 'planlagt' && b.made === d) items.push({o:1, html:`<button type="button" class="ev b-plan" data-batch="${b.no}" title="Planlagt start: #${esc(bn(b))} ${esc(p.name)}, ${b.qty} stk.">Start #${esc(bn(b))} ${esc(p.name)} · ${b.qty}</button>`});
+      if (b.status !== 'planlagt' && ready(b) === d) items.push({o:0, html:`<button type="button" class="ev b-${st.cls}" data-batch="${b.no}" title="#${esc(bn(b))} ${esc(p.name)}, ${net(b)} stk. ${st.label}">#${esc(bn(b))} ${esc(p.name)} · ${net(b)}</button>`});
+    }
+    for (const r of S.res) if (r.date === d){
+      const p = prod(r.pid); if (!p) continue;
+      items.push({o:2, html:`<button type="button" class="ev res" data-res="${r.id}" title="${esc(r.who)}: ${r.qty} ${esc(p.name)}">${r.kind==='event'?'Event':'Ordre'}: ${esc(r.who)} · ${r.qty} ${esc(p.name)}</button>`});
+    }
+    for (const x of deadlines) if ((x.latest < TODAY ? TODAY : x.latest) === d){
+      items.push({o:3, html:`<button type="button" class="ev dl" data-plan="${x.p.id}" data-latest="${d}" title="Start senest: ${esc(x.p.name)}">Start senest: ${esc(x.p.name)}</button>`});
+    }
+    return items.sort((a,b) => a.o-b.o).map(i => i.html);
+  }
+
+  function renderCalendar(){
+    const [y,m] = month.split('-').map(Number);
+    const first = `${month}-01`;
+    document.getElementById('monthLabel').textContent = fM.format(parse(first));
+    const dow = (parse(first).getUTCDay() + 6) % 7; // mandag = 0
+    const start = add(first, -dow);
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const cells = Math.ceil((dow + daysInMonth) / 7) * 7;
+    const deadlines = activeProducts().map(analyze).filter(x => x.status === 'plan');
+    let html = ['Man','Tir','Ons','Tor','Fre','Lør','Søn'].map(d => `<div class="dow">${d}</div>`).join('');
+    let agenda = '';
+    for (let i = 0; i < cells; i++){
+      const d = add(start, i);
+      const inM = d.slice(0,7) === month;
+      const items = dayItems(d, deadlines);
+      const vis = items.slice(0,4), more = items.length - vis.length;
+      html += `<div class="day${inM?'':' other'}${d===TODAY?' today':''}"><span class="dnum">${parse(d).getUTCDate()}</span>${vis.join('')}${more>0?`<span class="ev-more">+${more} mere</span>`:''}</div>`;
+      if (inM && items.length) agenda += `<div class="aday"><h3>${esc(fmtW(d))}${d===TODAY?' · i dag':''}</h3>${items.join('')}</div>`;
+    }
+    document.getElementById('cal').innerHTML = html;
+    document.getElementById('agenda').innerHTML = agenda || `<p class="hint">Intet planlagt i denne måned.</p>`;
+  }
+
+  function renderProducts(){
+    const list = [...activeProducts(), ...S.products.filter(p => p.archived)];
+    const rows = list.map(p => {
+      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="10" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
+      const x = analyze(p);
+      const in3 = proj(p, add(TODAY, p.cure));
+      const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
+      const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
+      return `<tr>
+        <td><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></td>
+        <td class="n">${Math.max(0,x.cur)}</td>
+        <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
+        <td class="n"><input type="number" min="0" step="1" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${p.rate}" id="rate-${p.id}"></td>
+        <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
+        <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
+        <td class="n"><input type="number" min="0" step="1" aria-label="Lager i Rackbeat for ${esc(p.name)}" data-pf="count" data-id="${p.id}" value="${p.count}" id="count-${p.id}"><div class="muted small">${esc(fmt(p.countDate))}</div></td>
+        <td class="n">${in3}</td>
+        <td>${risk}</td>
+        <td class="num">${esc(latest)}</td>
+        <td>${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep">${esc(st.name)} efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
+        <td>${pendingProd === p.id ? `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button><button class="btn small" type="button" data-cancel-prod>Fortryd</button></div>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">På lager nu</th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">Estimat</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Når ny batch er klar</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+  }
+
+  // Kasserede stk. kan rettes, indtil batchen er pakket og sendt videre til Rackbeat
+  const canEditRej = b => b.status === 'aktiv' && !b.packed;
+  function rejCell(b){
+    if (b.status === 'kasseret') return `<span class="muted">alle</span>`;
+    if (b.status === 'planlagt') return '–';
+    if (!canEditRej(b)) return `${b.rejected || 0}`;
+    return `<input type="number" min="0" max="${b.qty}" step="1" inputmode="numeric" aria-label="Kasserede stk. i batch ${esc(bn(b))}" data-brej="${b.no}" id="brej-${b.no}" value="${b.rejected || 0}">`;
+  }
+  function setRejected(b, raw){
+    const v = Math.min(b.qty, Math.max(0, parseInt(raw, 10) || 0));
+    b.rejected = v; if (v > 0) b.rejectedOn = TODAY; save(); renderAll();
+    toast(v ? `Batch #${bn(b)}: ${v} kasseret, ${net(b)} godkendt` : `Batch #${bn(b)}: ingen kasserede`);
+  }
+
+  function stepNotes(b){
+    return batchSteps(b).map(({st, state, date}) => {
+      if (state === 'due') return `<span class="trim-note due">${st.icon} ${esc(st.name)}</span>`;
+      if (state === 'done'){ const d0 = stepDone(b, st.key); return `<span class="trim-note">${esc(st.doneText)} ${esc(fmt(d0.on))}${d0.by ? ' af ' + esc(d0.by) : ''}</span>`; }
+      if (state === 'upcoming') return `<span class="trim-note">${esc(st.name)} ${esc(fmt(date))}</span>`;
+      return '';
+    }).join('');
+  }
+
+  function renderBatches(){
+    const list = [...S.batches].sort((a,b) => b.no - a.no);
+    const rows = list.map(b => {
+      const p = prod(b.pid); const st = batchState(b);
+      const confirming = pendingRow && pendingRow.type==='batch' && pendingRow.id===b.no;
+      let actions = '';
+      if (confirming) actions = `<span class="small">Kassér #${esc(bn(b))}?</span><button class="btn small danger" type="button" data-discard="${b.no}">Ja, kassér</button><button class="btn small" type="button" data-cancel>Fortryd</button>`;
+      else if (b.status === 'aktiv' && b.packed) actions = `<button class="btn small ghost" type="button" data-unpack="${b.no}">Fortryd pakket</button>`;
+      else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${ready(b) <= TODAY ? `<button class="btn small primary" type="button" data-pack="${b.no}">Marker som pakket</button>` : ''}<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`;
+      else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button><button class="btn small ghost" type="button" data-delplan="${b.no}">Slet</button>`;
+      else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
+      return `<tr class="${b.status==='kasseret'?'dead':''}">
+        <td class="num"><strong>#${esc(bn(b))}</strong></td><td>${esc(p?p.name:b.pid)}</td><td>${esc(b.by || '–')}</td><td class="n">${b.qty}</td><td class="n">${rejCell(b)}</td>
+        <td class="num">${esc(fmt(b.made))}${b.status==='planlagt'?' <span class="muted small">(start)</span>':''}</td>
+        <td class="n">${b.status==='kasseret' ? b.cure : `<input type="number" min="1" step="1" aria-label="Dage før pakning for batch ${b.no}" data-bcure="${b.no}" id="bcure-${b.no}" value="${b.cure}">`}</td>
+        <td class="num">${esc(fmt(ready(b)))}</td>
+        <td><span class="chip st-${st.cls}">${st.label}</span>${stepNotes(b)}${flakesNote(b)}</td>
+        <td><div class="row-actions">${actions}</div></td></tr>`;
+    }).join('');
+    document.getElementById('batchTbl').innerHTML = `<thead><tr><th>Batch</th><th>Produkt</th><th>Oprettet af</th><th class="n">Antal</th><th class="n">Kasserede</th><th>Lavet</th><th class="n">Dage før pakning</th><th>Pakkedato</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+  }
+
+  function renderRes(){
+    const list = [...S.res].sort((a,b) => a.date.localeCompare(b.date));
+    const rows = list.map(r => {
+      const p = prod(r.pid);
+      const confirming = pendingRow && pendingRow.type==='res' && pendingRow.id===r.id;
+      const actions = confirming
+        ? `<span class="small">Slet?</span><button class="btn small danger" type="button" data-delres="${r.id}">Ja, slet</button><button class="btn small" type="button" data-cancel>Fortryd</button>`
+        : `<button class="btn small ghost" type="button" data-ask-delres="${r.id}">Slet</button>`;
+      return `<tr${r.date < TODAY ? ' class="dead"' : ''}><td class="num">${esc(fmt(r.date))}</td><td>${r.kind==='event'?'Event':'Forudbestilling'}</td><td>${esc(r.who)}</td><td>${esc(p?p.name:r.pid)}</td><td class="n">${r.qty}</td><td><div class="row-actions">${actions}</div></td></tr>`;
+    }).join('');
+    document.getElementById('resTbl').innerHTML = list.length
+      ? `<thead><tr><th>Dato</th><th>Type</th><th>Kunde/event</th><th>Produkt</th><th class="n">Antal</th><th></th></tr></thead><tbody>${rows}</tbody>`
+      : `<tbody><tr><td class="muted">Ingen bestillinger eller events endnu. Brug "+ Bestilling eller event" øverst.</td></tr></tbody>`;
+  }
+
+  // ---------- ugeoversigt ----------
+  const monday = s => add(s, -((parse(s).getUTCDay() + 6) % 7));
+  function isoWeek(s){
+    const d = parse(s), day = (d.getUTCDay() + 6) % 7;
+    const th = new Date(d.getTime() + (3 - day) * DAY);
+    const j1 = Date.UTC(th.getUTCFullYear(), 0, 1);
+    return 1 + Math.floor((th - j1) / DAY / 7);
+  }
+  let NW = 4; // antal uger, der vises frem (3–6)
+  try { const v = parseInt(localStorage.getItem('kystnaer-uger'), 10); if (v >= 1 && v <= 6) NW = v; } catch(e) {}
+  let weekStart = monday(TODAY);
+
+  function dayStatus(b, d){
+    const r = ready(b);
+    if (d < b.made) return null;
+    if (b.status === 'kasseret') return d < r ? 'dead' : null;
+    if (b.status === 'planlagt') return d < r ? 'plan' : null;
+    if (d > r) return null;
+    if (b.packed) return 'packed';           // hele bjælken bliver mørkere grøn
+    return d < r ? 'amber' : 'green';        // gul mens den hærder, lys grøn den dag den kan pakkes
+  }
+
+  // Hvor i processen er produktet: næste batch, der bliver klar, ellers næste planlagte
+  function processStatus(p){
+    const active = S.batches.filter(b => b.pid === p.id && b.status === 'aktiv' && ready(b) >= TODAY)
+      .sort((a,b) => ready(a).localeCompare(ready(b)));
+    const planned = S.batches.filter(b => b.pid === p.id && b.status === 'planlagt')
+      .sort((a,b) => a.made.localeCompare(b.made));
+    let chip;
+    if (active.length){
+      const b = active[0], st = batchState(b), left = diff(TODAY, ready(b));
+      const when = b.packed ? `pakket ${fmt(b.packedOn || ready(b))}` : left <= 0 ? 'kan pakkes i dag' : `pakkes ${fmt(ready(b))} (${left} ${left === 1 ? 'dag' : 'dage'})`;
+      const more = active.length > 1 ? ` · +${active.length - 1} batch` : '';
+      chip = `<span class="chip st-${st.cls}" title="Batch #${esc(bn(b))}, ${net(b)} stk.">${st.label} · #${esc(bn(b))}</span><span class="wk-proc">${esc(when)}${more}</span>`;
+    } else if (planned.length){
+      const b = planned[0];
+      chip = `<span class="chip st-plan">Planlagt · #${esc(bn(b))}</span><span class="wk-proc">start ${esc(fmt(b.made))}</span>`;
+    } else {
+      chip = `<span class="chip st-none">Ingen batch i gang</span>`;
+    }
+    const x = analyze(p);
+    const risk = x.status === 'akut' ? `<span class="wk-risk akut">Under minimum nu</span>`
+      : x.status === 'plan' ? `<span class="wk-risk plan">Start senest ${esc(x.latest < TODAY ? 'i dag' : fmt(x.latest))}</span>` : '';
+    const due = dueTasks().filter(x => x.b.pid === p.id);
+    const task = due.map(x => `<span class="wk-task">${x.st.icon} ${esc(x.st.name)}: #${esc(bn(x.b))}</span>`).join('');
+    return `<div class="wk-status">${chip}${task}${risk}</div>`;
+  }
+
+  // Filter: produkttype eller kun produkter, der kræver handling
+  let typeFilter = 'alle';
+  try { typeFilter = localStorage.getItem('kystnaer-vis') || 'alle'; } catch(e) {}
+  function needsAction(p){ const x = analyze(p); return x.status !== 'ok' || dueTasks().some(t => t.b.pid === p.id) || makeTasks().some(t => t.b.pid === p.id); }
+  function weekProducts(){
+    const all = activeProducts();
+    if (typeFilter === 'handling') return all.filter(needsAction);
+    if (typeFilter !== 'alle') return all.filter(p => p.type === typeFilter);
+    return all;
+  }
+  function renderTypeFilter(){
+    const sel = document.getElementById('wkType');
+    const types = [...new Set(activeProducts().map(p => p.type))];
+    if (typeFilter !== 'alle' && typeFilter !== 'handling' && !types.includes(typeFilter)) typeFilter = 'alle';
+    sel.innerHTML = `<option value="alle">Alle produkter</option><option value="handling">Kræver handling</option>` +
+      types.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    sel.value = typeFilter;
+  }
+  document.getElementById('wkType').addEventListener('change', e => {
+    typeFilter = e.target.value; try { localStorage.setItem('kystnaer-vis', typeFilter); } catch(e2) {}
+    renderWeeks();
+  });
+
+  function renderWeeks(){
+    renderTypeFilter();
+    const D = NW * 7, end = add(weekStart, D - 1);
+    const curW = monday(TODAY);
+    document.getElementById('weekLabel').textContent = NW === 1 ? `Uge ${isoWeek(weekStart)}` : `Uge ${isoWeek(weekStart)}–${isoWeek(end)}`;
+    let html = `<div class="wk-row head"><div class="wk-corner">Produkt</div>`;
+    for (let w = 0; w < NW; w++){
+      const ws = add(weekStart, w*7);
+      html += `<div class="wk-h${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7">Uge ${isoWeek(ws)}<small>${esc(fmt(ws))}–${esc(fmt(add(ws,6)))}</small></div>`;
+    }
+    html += `</div>`;
+    if (NW <= 2){
+      html += `<div class="wk-row wk-days"><div></div>`;
+      for (let i = 0; i < D; i++){
+        const d = add(weekStart, i);
+        html += `<div class="wk-day${d===TODAY?' now':''}" style="grid-column:${2+i}">${esc(fmtW(d))}</div>`;
+      }
+      html += `</div>`;
+    }
+    for (const p of weekProducts()){
+      const bs = S.batches.filter(b => b.pid === p.id && b.made <= end && ready(b) >= weekStart)
+        .sort((a,b) => a.made.localeCompare(b.made));
+      const rs = S.res.filter(r => r.pid === p.id && r.date >= weekStart && r.date <= end);
+      const lanes = Math.max(1, bs.length) + 1 + (rs.length ? 1 : 0);
+      let inner = `<div class="wk-name" style="grid-row:1 / span ${lanes}"><strong>${esc(p.name)}</strong><small>Minimum ${p.min}</small>${processStatus(p)}</div>`;
+      for (let w = 0; w < NW; w++){
+        const ws = add(weekStart, w*7);
+        inner += `<div class="wk-sep${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7;grid-row:1 / span ${lanes}"></div>`;
+      }
+      if (!bs.length) inner += `<div class="wk-empty" style="grid-column:2 / span ${D};grid-row:1">Ingen batches i perioden</div>`;
+      bs.forEach((b, li) => {
+        const segs = []; let cur = null;
+        for (let i = 0; i < D; i++){
+          const st = dayStatus(b, add(weekStart, i));
+          if (cur && cur.st === st) { cur.to = i; continue; }
+          if (st) { cur = {st, from:i, to:i}; segs.push(cur); } else cur = null;
+        }
+        const st0 = batchState(b);
+        segs.forEach((g, gi) => {
+          const cls = ['bar','s-'+g.st];
+          const startsHere = add(weekStart, g.from) === b.made || (gi === 0 && g.from === 0 && b.made < weekStart);
+          if (gi === 0 && add(weekStart, g.from) === b.made) cls.push('first');
+          if (gi === segs.length - 1 && g.to < D - 1) cls.push('last');
+          const label = gi === 0 ? `#${esc(bn(b))} · ${net(b)} stk.` : '';
+          inner += `<button type="button" class="${cls.join(' ')}" data-batch="${b.no}" style="grid-column:${2+g.from} / ${3+g.to};grid-row:${li+1}" title="#${esc(bn(b))} ${esc(p.name)}, ${net(b)} stk.${b.rejected ? ` (${b.rejected} kasseret)` : ''} · ${b.status==='planlagt'?'planlagt':'lavet'} ${esc(fmt(b.made))}${b.by ? ' af ' + esc(b.by) : ''}, pakkes ${esc(fmt(ready(b)))} · ${st0.label}">${label}</button>`;
+        });
+        for (const {st, state, date} of batchSteps(b)){
+          if (!state) continue;
+          const ti = diff(weekStart, date);
+          if (ti < 0 || ti >= D) continue;
+          const d0 = stepDone(b, st.key);
+          const txt = state === 'done' ? `${st.doneText}${d0 && d0.by ? ' af ' + d0.by : ''}` : state === 'due' ? `${st.name} nu` : `${st.name} ${fmt(date)}`;
+          inner += `<button type="button" class="trim t-${state}" data-batch="${b.no}" style="grid-column:${2+ti};grid-row:${li+1}" title="${esc(txt)} · #${esc(bn(b))}" aria-label="${esc(txt)}, batch ${esc(bn(b))}">${state === 'done' ? '✓' : st.icon}</button>`;
+        }
+      });
+      let row = Math.max(1, bs.length) + 1;
+      if (rs.length){
+        for (const r of rs){
+          const i = diff(weekStart, r.date);
+          inner += `<button type="button" class="wk-res" data-res="${r.id}" style="grid-column:${2+i} / span ${Math.min(7, D-i)};grid-row:${row}" title="${esc(r.who)}: ${r.qty} stk. ${esc(fmt(r.date))}">${esc(r.who)} −${r.qty}</button>`;
+        }
+        row++;
+      }
+      for (let w = 0; w < NW; w++){
+        const we = add(weekStart, w*7 + 6);
+        if (we < TODAY) continue;
+        const v = proj(p, we);
+        inner += `<div class="wk-stock${v < p.min ? ' low' : ''}" style="grid-column:${2+w*7} / span 7;grid-row:${row}" title="Forventet lager ${esc(fmt(we))}">≈ ${Math.max(0,v)} stk.</div>`;
+      }
+      html += `<div class="wk-prod">${inner}</div>`;
+    }
+    if (!weekProducts().length) html += `<p class="hint" style="padding:12px 0">Ingen produkter kræver handling lige nu.</p>`;
+    const wk = document.getElementById('wk');
+    wk.style.setProperty('--days', D);
+    wk.innerHTML = html;
+  }
+
+  function renderTasks(){
+    const el = document.getElementById('tasks');
+    const list = dueTasks();
+    el.hidden = !list.length;
+    if (!list.length){ el.innerHTML = ''; return; }
+    el.innerHTML = `<h2 class="tasks-h">Yderligere opgaver</h2>` + list.map(({b, st, date, qty}) => {
+      const p = prod(b.pid), late = diff(date, TODAY);
+      return `<div class="task">
+        <span class="task-tag">${st.icon} ${esc(st.name)}</span>
+        <div class="task-body"><strong>#${esc(bn(b))} ${esc(p.name)}</strong> <span class="muted">· ${st.key === 'flakes' ? `${qty} kasserede stk.` : `${b.qty} stk.`}${late > 0 ? ` · skulle være gjort ${esc(fmt(date))}` : ' · i dag'}</span></div>
+        <button class="btn small" type="button" data-step="${b.no}|${st.key}">${esc(st.doneText)}</button>
+      </div>`;
+    }).join('');
+  }
+
+  function renderAll(){ renderStats(); renderTasks(); renderWeeks(); renderAlerts(); renderCalendar(); renderProducts(); renderBatches(); renderRes(); }
+
+  // ---------- dialoger ----------
+  const dlgB = document.getElementById('dlgBatch'), dlgR = document.getElementById('dlgRes'), dlgD = document.getElementById('dlgDetail');
+  const optHtml = () => activeProducts().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+  // Batchdialog: flere produkter på én gang. Hver linje bliver sin egen batch.
+  let lineSeq = 0;
+  const prodOpts = sel => activeProducts().map(p => `<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name)}</option>`).join('');
+  function suggestNo(offset){
+    const nums = S.batches.map(b => parseInt(bn(b), 10)).filter(n => !isNaN(n));
+    return String((nums.length ? Math.max(...nums) : 0) + 1 + offset);
+  }
+  function nextFreeNo(){
+    const taken = new Set([...S.batches.map(bn), ...[...document.querySelectorAll('#bLines .l-no')].map(i => i.value.trim())]);
+    let k = 0, c; do { c = suggestNo(k++); } while (taken.has(c)); return c;
+  }
+  function batchLine(pid){
+    const p = prod(pid) || activeProducts()[0], k = ++lineSeq;
+    const el = document.createElement('div');
+    el.className = 'line line-b';
+    el.innerHTML = `<select class="l-prod" id="bl-prod-${k}" aria-label="Produkt">${prodOpts(p.id)}</select>
+      <input class="l-qty" id="bl-qty-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Antal stk." value="${p.batch}">
+      <input class="l-no" id="bl-no-${k}" type="text" inputmode="text" autocomplete="off" aria-label="Batchnummer" value="${esc(nextFreeNo())}">
+      <input class="l-cure" id="bl-cure-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Dage før pakning" value="${p.cure}">
+      <button type="button" class="line-del" aria-label="Fjern produkt">×</button>
+      <span class="l-ready"></span>`;
+    el.querySelector('.l-prod').addEventListener('change', ev => {
+      const np = prod(ev.target.value); if (!np) return;
+      el.querySelector('.l-qty').value = np.batch; el.querySelector('.l-cure').value = np.cure; updateBatchPreview();
+    });
+    el.querySelector('.line-del').addEventListener('click', () => { el.remove(); updateBatchPreview(); });
+    el.addEventListener('input', updateBatchPreview);
+    return el;
+  }
+  function fillWho(sel, labelEl, kind){
+    const prev = sel.value;
+    sel.innerHTML = S.people.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') + `<option value="__new">+ Nyt navn…</option>`;
+    let last = null; try { last = localStorage.getItem('kystnaer-hvem'); } catch(e) {}
+    sel.value = S.people.includes(prev) ? prev : (S.people.includes(last) ? last : S.people[0]);
+    if (labelEl) labelEl.textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
+  }
+  const bWho = document.getElementById('bWho'), bWhoNew = document.getElementById('bWhoNew');
+  bWho.addEventListener('change', () => { bWhoNew.hidden = bWho.value !== '__new'; if (!bWhoNew.hidden) bWhoNew.focus(); });
+
+  let convertFrom = null;   // planlagt batch, der registreres som lavet
+  function openBatch(pid, planDate, forcePlan){
+    convertFrom = null;
+    const lines = document.getElementById('bLines'); lines.innerHTML = '';
+    lines.appendChild(batchLine(pid));
+    const plan = forcePlan || (!!planDate && planDate > TODAY);
+    document.getElementById(plan ? 'bkindPlan' : 'bkindMade').checked = true;
+    document.getElementById('bDate').value = plan ? (planDate && planDate >= TODAY ? planDate : TODAY) : TODAY;
+    bWhoNew.hidden = true; bWhoNew.value = '';
+    fillWho(bWho, document.getElementById('bWhoLabel'), plan ? 'planlagt' : 'aktiv');
+    document.getElementById('bErr').hidden = true;
+    updateBatchPreview();
+    dlgB.showModal();
+  }
+  // Åbn registreringen for en planlagt batch: samme vindue, udfyldt med batchens oplysninger
+  function openBatchFromPlanned(b){
+    openBatch(b.pid);
+    convertFrom = b.no;
+    const el = document.querySelector('#bLines .line');
+    el.querySelector('.l-qty').value = b.qty;
+    el.querySelector('.l-no').value = bn(b);
+    el.querySelector('.l-cure').value = b.cure;
+    document.getElementById('bkindMade').checked = true;
+    document.getElementById('bDate').value = TODAY;
+    updateBatchPreview();
+  }
+  function openRegister(pid, planDate){
+    const planned = S.batches.filter(b => b.pid === pid && b.status === 'planlagt').sort((a,c) => a.made.localeCompare(c.made))[0];
+    if (planned && planned.made <= TODAY) openBatchFromPlanned(planned); else openBatch(pid, planDate);
+  }
+  document.getElementById('bAdd').addEventListener('click', () => {
+    const used = [...document.querySelectorAll('#bLines .l-prod')].map(x => x.value);
+    const nextP = activeProducts().find(p => !used.includes(p.id)) || activeProducts()[0];
+    const el = batchLine(nextP.id); document.getElementById('bLines').appendChild(el);
+    el.querySelector('.l-prod').focus(); updateBatchPreview();
+  });
+
+  function readBatchLines(){
+    return [...document.querySelectorAll('#bLines .line')].map(el => ({
+      el, p: prod(el.querySelector('.l-prod').value),
+      qty: parseInt(el.querySelector('.l-qty').value, 10),
+      label: el.querySelector('.l-no').value.trim(),
+      cure: Math.max(1, parseInt(el.querySelector('.l-cure').value, 10) || 0)
+    }));
+  }
+  function updateBatchPreview(){
+    const kind = document.querySelector('input[name="bkind"]:checked').value;
+    document.getElementById('bDateLabel').textContent = kind === 'planlagt' ? 'Planlagt start' : 'Lavet den';
+    document.getElementById('bWhoLabel').textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
+    document.getElementById('bSubmit').textContent = kind === 'planlagt' ? 'Gem planlagt' : 'Gem batch';
+    const d = document.getElementById('bDate').value;
+    const ls = readBatchLines();
+    ls.forEach(l => { l.el.querySelector('.l-ready').textContent = (d && l.p) ? `Klar ${fmtW(add(d, l.cure))}` : ''; });
+    const one = ls.length <= 1;
+    document.querySelectorAll('#bLines .line-del').forEach(b => b.disabled = one);
+  }
+  document.getElementById('bDate').addEventListener('input', updateBatchPreview);
+  document.querySelectorAll('input[name="bkind"]').forEach(r => r.addEventListener('change', updateBatchPreview));
+
+  function pickWhoFrom(sel, input){
+    if (sel.value !== '__new') return sel.value;
+    const n = input.value.trim();
+    if (!n) return null;
+    if (!S.people.includes(n)) S.people.push(n);
+    return n;
+  }
+  const pickWho = () => pickWhoFrom(bWho, bWhoNew);
+
+  // Dialog: nyt produkt
+  const dlgP = document.getElementById('dlgProd');
+  const npType = document.getElementById('npType');
+  function npTypeChanged(){
+    const t = TYPES[npType.value] || TYPES['Andet'];
+    document.getElementById('npCure').value = t.cure;
+    const st = t.steps.map(x => `${STEP_DEFS[x.key].name.toLowerCase()} ${x.day} ${x.day === 1 ? 'dag' : 'dage'} efter produktion`);
+    document.getElementById('npSteps').textContent = `${t.cure} ${t.cure === 1 ? 'dag' : 'dage'} før pakning. ` + (st.length ? `Trin undervejs: ${st.join(' og ')}.` : 'Ingen trin undervejs.');
+  }
+  npType.addEventListener('change', npTypeChanged);
+  document.getElementById('btnNewProd').addEventListener('click', () => {
+    document.getElementById('formProd').reset(); npTypeChanged(); document.getElementById('npErr').hidden = true;
+    dlgP.showModal(); document.getElementById('npName').focus();
+  });
+  const slug = t => t.toLowerCase().replace(/æ/g,'ae').replace(/ø/g,'oe').replace(/å/g,'aa').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'produkt';
+  document.getElementById('formProd').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = document.getElementById('npErr');
+    const name = document.getElementById('npName').value.trim();
+    const num = id => Math.max(0, parseInt(document.getElementById(id).value, 10) || 0);
+    if (!name){ err.textContent = 'Skriv et navn på produktet.'; err.hidden = false; document.getElementById('npName').focus(); return; }
+    if (S.products.some(p => p.name.toLowerCase() === name.toLowerCase())){ err.textContent = `Der findes allerede et produkt med navnet ${name}.`; err.hidden = false; return; }
+    let id = slug(name), k = 2; while (prod(id)) id = slug(name) + '-' + (k++);
+    S.products.push({ id, name, sku: document.getElementById('npSku').value.trim(), type: npType.value,
+      min: num('npMin'), rate: num('npRate'), cure: Math.max(1, num('npCure')), batch: Math.max(1, num('npBatch')),
+      count: num('npCount'), countDate: TODAY, steps: (TYPES[npType.value] || TYPES['Andet']).steps.map(x => ({...x})) });
+    save(); dlgP.close(); renderAll(); toast(`${name} er oprettet`);
+  });
+
+  // Dialog: hvem skar kanterne
+  const dlgT = document.getElementById('dlgTrim'), tWho = document.getElementById('tWho'), tWhoNew = document.getElementById('tWhoNew');
+  let stepTarget = null;
+  tWho.addEventListener('change', () => { tWhoNew.hidden = tWho.value !== '__new'; if (!tWhoNew.hidden) tWhoNew.focus(); });
+  function openStep(b, key){
+    stepTarget = {b, key}; const p = prod(b.pid);
+    document.getElementById('tTitle').textContent = TASK_DEFS[key].doneText;
+    document.getElementById('tInfo').textContent = `Batch #${bn(b)} ${p ? p.name : ''} · ${key === 'flakes' ? flakesOpen(b) + ' kasserede stk.' : b.qty + ' stk.'}`;
+    document.getElementById('tResWrap').hidden = key !== 'flakes'; document.getElementById('tRes').value = 'made';
+    tWhoNew.hidden = true; tWhoNew.value = ''; document.getElementById('tErr').hidden = true;
+    fillWho(tWho, null);
+    dlgT.showModal();
+  }
+  document.getElementById('formTrim').addEventListener('submit', e => {
+    e.preventDefault();
+    const who = pickWhoFrom(tWho, tWhoNew);
+    if (!who){ const er = document.getElementById('tErr'); er.textContent = 'Skriv navnet på den, der har udført trinnet.'; er.hidden = false; tWhoNew.focus(); return; }
+    try { localStorage.setItem('kystnaer-hvem', who); } catch(e2) {}
+    dlgT.close(); if (stepTarget){ if (stepTarget.key === 'make') markMade(stepTarget.b, who); else if (stepTarget.key === 'flakes') setFlakes(stepTarget.b, who, document.getElementById('tRes').value === 'made'); else setStep(stepTarget.b, stepTarget.key, true, who); }
+  });
+
+  document.getElementById('formBatch').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = document.getElementById('bErr');
+    const d = document.getElementById('bDate').value;
+    const ls = readBatchLines();
+    document.querySelectorAll('#bLines .bad').forEach(x => x.classList.remove('bad'));
+    const fail = (msg, el) => { err.textContent = msg; err.hidden = false; if (el){ el.classList.add('bad'); el.focus(); } };
+    if (!d) return fail('Vælg en dato.', document.getElementById('bDate'));
+    if (!ls.length) return fail('Tilføj mindst ét produkt.');
+    const who = pickWho();
+    if (!who) return fail('Skriv navnet på den, der har lavet eller planlagt batchen.', bWhoNew);
+    const conv = convertFrom != null ? S.batches.find(x => x.no === convertFrom) : null;
+    const existing = new Set(S.batches.filter(x => x !== conv).map(bn)), seen = new Set();
+    for (const l of ls){
+      if (!l.p) return fail('Vælg et produkt.', l.el.querySelector('.l-prod'));
+      if (!l.qty || l.qty < 1) return fail('Antal skal være mindst 1.', l.el.querySelector('.l-qty'));
+      if (!l.label) return fail('Skriv et batchnummer.', l.el.querySelector('.l-no'));
+      if (existing.has(l.label) || seen.has(l.label)) return fail(`Batchnummer ${l.label} er allerede brugt. Vælg et andet.`, l.el.querySelector('.l-no'));
+      seen.add(l.label);
+    }
+    const status = document.querySelector('input[name="bkind"]:checked').value;
+    let used = false;
+    for (const l of ls){
+      if (conv && !used && l.p.id === conv.pid){
+        // den planlagte batch bliver til den registrerede batch (beholder "Oprettet af")
+        Object.assign(conv, {label: l.label, qty: l.qty, made: d, cure: l.cure, status});
+        if (status === 'aktiv') conv.madeBy = who;
+        used = true; continue;
+      }
+      S.batches.push({no: S.nextNo++, label: l.label, by: who, pid: l.p.id, qty: l.qty, made: d, cure: l.cure, status});
+    }
+    convertFrom = null;
+    try { localStorage.setItem('kystnaer-hvem', who); } catch(e2) {}
+    save(); dlgB.close(); renderAll();
+    const what = ls.length === 1 ? `Batch #${ls[0].label}` : `${ls.length} batches`;
+    toast(status === 'planlagt' ? `${what} planlagt` : `${what} registreret`);
+  });
+
+  // Bestilling/event: flere produkter på én gang. Hver linje bliver sin egen reservation.
+  function resLine(pid){
+    const k = ++lineSeq, el = document.createElement('div');
+    el.className = 'line line-r';
+    el.innerHTML = `<select class="l-prod" id="rl-prod-${k}" aria-label="Produkt">${prodOpts(pid)}</select>
+      <input class="l-qty" id="rl-qty-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Antal stk." placeholder="Antal">
+      <button type="button" class="line-del" aria-label="Fjern produkt">×</button>`;
+    el.querySelector('.line-del').addEventListener('click', () => { el.remove(); syncResDel(); });
+    return el;
+  }
+  function syncResDel(){
+    const dels = document.querySelectorAll('#rLines .line-del');
+    dels.forEach(b => b.disabled = dels.length <= 1);
+  }
+  function openRes(){
+    const lines = document.getElementById('rLines'); lines.innerHTML = '';
+    lines.appendChild(resLine(activeProducts()[0].id)); syncResDel();
+    document.getElementById('rWho').value = '';
+    document.getElementById('rDate').value = add(TODAY, 14);
+    document.getElementById('rkindOrd').checked = true;
+    document.getElementById('rErr').hidden = true;
+    dlgR.showModal();
+  }
+  document.getElementById('rAdd').addEventListener('click', () => {
+    const used = [...document.querySelectorAll('#rLines .l-prod')].map(x => x.value);
+    const nextP = activeProducts().find(p => !used.includes(p.id)) || activeProducts()[0];
+    const el = resLine(nextP.id); document.getElementById('rLines').appendChild(el); syncResDel();
+    el.querySelector('.l-qty').focus();
+  });
+  document.getElementById('formRes').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = document.getElementById('rErr');
+    document.querySelectorAll('#rLines .bad, #rWho.bad').forEach(x => x.classList.remove('bad'));
+    const fail = (msg, el) => { err.textContent = msg; err.hidden = false; if (el){ el.classList.add('bad'); el.focus(); } };
+    const who = document.getElementById('rWho').value.trim();
+    const d = document.getElementById('rDate').value;
+    if (!who) return fail('Skriv kunde eller event.', document.getElementById('rWho'));
+    if (!d) return fail('Vælg en dato.', document.getElementById('rDate'));
+    const ls = [...document.querySelectorAll('#rLines .line')].map(el => ({el, pid: el.querySelector('.l-prod').value, qty: parseInt(el.querySelector('.l-qty').value, 10)}));
+    for (const l of ls) if (!l.qty || l.qty < 1) return fail('Skriv et antal på mindst 1 for hvert produkt.', l.el.querySelector('.l-qty'));
+    const kind = document.querySelector('input[name="rkind"]:checked').value;
+    const group = 'g' + Date.now();
+    ls.forEach((l, i) => S.res.push({id: group + '-' + i, group, kind, who, pid: l.pid, qty: l.qty, date: d}));
+    save(); dlgR.close(); renderAll(); toast(ls.length === 1 ? 'Gemt i kalenderen' : `${ls.length} produkter gemt i kalenderen`);
+  });
+
+  function flakesDetail(b){
+    if (!typeOf(prod(b.pid)).flakes || !rejectedCount(b)) return '';
+    const open = flakesOpen(b);
+    const dd = open > 0 ? `<button class="btn small primary" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button> <span class="muted small">${open} kasserede stk.</span>`
+      : `${b.flakes.made ? `Lavet af ${b.flakes.made} stk.` : 'Ikke brugt'} ${esc(fmtW(b.flakes.on))}${b.flakes.by ? ' af ' + esc(b.flakes.by) : ''} <button class="btn small ghost" type="button" data-unflakes="${b.no}">Fortryd</button>`;
+    return `<dt>Sæbespåner</dt><dd>${dd}</dd>`;
+  }
+
+  function stepDetailRows(b){
+    return batchSteps(b).filter(x => x.state).map(({st, state, date}) => {
+      let dd;
+      if (state === 'done'){ const d0 = stepDone(b, st.key); dd = `${esc(fmtW(d0.on))}${d0.by ? ' af ' + esc(d0.by) : ''} <button class="btn small ghost" type="button" data-unstep="${b.no}|${st.key}">Fortryd</button>`; }
+      else if (state === 'due') dd = `<button class="btn small primary" type="button" data-step="${b.no}|${st.key}">${esc(st.doneText)}</button> <span class="muted small">${diff(date, TODAY) > 0 ? 'skulle være gjort ' + esc(fmt(date)) : 'i dag'}</span>`;
+      else dd = esc(fmtW(date));
+      return `<dt>${esc(st.name)}</dt><dd>${dd}</dd>`;
+    }).join('');
+  }
+
+  function openDetail(no){
+    const b = S.batches.find(x => x.no === no); if (!b) return;
+    const p = prod(b.pid); const st = batchState(b);
+    const left = diff(TODAY, ready(b));
+    let actions = '';
+    if (b.status === 'aktiv' && b.packed) actions = `<button class="btn" type="button" id="dUnpack">Fortryd pakket</button>`;
+    else if (b.status === 'aktiv') actions = `${ready(b) <= TODAY ? `<button class="btn primary" type="button" id="dPack">Marker som pakket</button>` : ''}<button class="btn danger" type="button" id="dDiscard">Marker som fejlet</button>`;
+    if (b.status === 'planlagt') actions = `<button class="btn primary" type="button" id="dMade">Registrér batch</button>`;
+    if (b.status === 'kasseret') actions = `<button class="btn" type="button" id="dRestore">Gendan</button>`;
+    document.getElementById('detailBody').innerHTML = `
+      <h2>Batch #${esc(bn(b))}</h2>
+      <span class="chip st-${st.cls}" style="align-self:flex-start">${st.label}</span>
+      <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:b.pid)}</dd><dt>Antal lavet</dt><dd class="num">${b.qty} stk.</dd>
+      ${b.status === 'aktiv' ? `<dt><label for="dRej">Kasserede</label></dt><dd>${canEditRej(b) ? `<input id="dRej" class="d-rej" type="number" min="0" max="${b.qty}" step="1" inputmode="numeric" value="${b.rejected || 0}"> stk.` : `${b.rejected || 0} stk.`}</dd><dt>Godkendt</dt><dd class="num"><strong id="dNet">${net(b)} stk.</strong></dd>` : ''}
+      <dt>Oprettet af</dt><dd>${esc(b.by || '–')}</dd>${b.madeBy ? `<dt>Lavet af</dt><dd>${esc(b.madeBy)}</dd>` : ''}
+      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}</dl>
+      <div class="dlg-actions">${actions}<button class="btn" type="button" id="dClose">Luk</button></div>`;
+    document.getElementById('dClose').onclick = () => dlgD.close();
+    const dis = document.getElementById('dDiscard');
+    if (dis) dis.onclick = () => {
+      if (dis.dataset.armed){ b.status = 'kasseret'; b.rejectedOn = TODAY; save(); dlgD.close(); renderAll(); toast(`Batch #${bn(b)} kasseret`); return; }
+      dis.dataset.armed = '1'; dis.textContent = `Bekræft: kassér ${b.qty} stk.`;
+    };
+    const mk = document.getElementById('dMade'); if (mk) mk.onclick = () => { dlgD.close(); openBatchFromPlanned(b); };
+    const dr = document.getElementById('dRej');
+    if (dr){
+      dr.addEventListener('input', () => { const v = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); document.getElementById('dNet').textContent = `${b.qty - v} stk.`; });
+      dr.addEventListener('change', () => { b.rejected = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); if (b.rejected > 0) b.rejectedOn = TODAY; save(); renderAll(); });
+    }
+    const pk = document.getElementById('dPack'); if (pk) pk.onclick = () => { if (dr) b.rejected = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); b.packed = true; b.packedOn = TODAY; save(); dlgD.close(); renderAll(); toast(`Batch #${bn(b)} er pakket: ${net(b)} stk. godkendt`); };
+    const up = document.getElementById('dUnpack'); if (up) up.onclick = () => { b.packed = false; delete b.packedOn; save(); dlgD.close(); renderAll(); toast(`Batch #${bn(b)} er ikke længere pakket`); };
+    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; save(); dlgD.close(); renderAll(); toast(`Batch #${bn(b)} gendannet`); };
+    dlgD.showModal();
+  }
+
+  function openResDetail(id){
+    const r = S.res.find(x => x.id === id); if (!r) return; const p = prod(r.pid);
+    document.getElementById('detailBody').innerHTML = `<h2>${r.kind==='event'?'Event':'Forudbestilling'}: ${esc(r.who)}</h2>
+      <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:r.pid)}</dd><dt>Antal</dt><dd class="num">${r.qty} stk.</dd><dt>Dato</dt><dd>${esc(fmtW(r.date))}</dd></dl>
+      <div class="dlg-actions"><button class="btn" type="button" id="dClose">Luk</button></div>`;
+    document.getElementById('dClose').onclick = () => dlgD.close();
+    dlgD.showModal();
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button'); if (!t) return;
+    const ds = t.dataset;
+    if (ds.tab){
+      document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+      ['uger','kalender','produkter','batches','bestillinger','rackbeat'].forEach(n => document.getElementById('p-'+n).hidden = n !== ds.tab);
+      return;
+    }
+    if (ds.plan){ if (ds.mode === 'plan') openBatch(ds.plan, ds.latest, true); else openRegister(ds.plan, ds.latest); return; }
+    if (ds.batch){ openDetail(Number(ds.batch)); return; }
+    if (ds.res){ openResDetail(ds.res); return; }
+    if (ds.askArchive){ pendingProd = ds.askArchive; renderProducts(); return; }
+    if ('cancelProd' in ds){ pendingProd = null; renderProducts(); return; }
+    if (ds.archive){ const p = prod(ds.archive); if (p){ if (activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); pendingProd = null; renderProducts(); return; } p.archived = true; pendingProd = null; save(); renderAll(); toast(`${p.name} er arkiveret`);} return; }
+    if (ds.unarchive){ const p = prod(ds.unarchive); if (p){ p.archived = false; save(); renderAll(); toast(`${p.name} er gendannet`);} return; }
+    if (ds.step){ const [no, key] = ds.step.split('|'); const b = S.batches.find(x => x.no === Number(no)); if (b && TASK_DEFS[key]){ if (dlgD.open) dlgD.close(); openStep(b, key); } return; }
+    if (ds.unflakes){ const b = S.batches.find(x => x.no === Number(ds.unflakes)); if (b){ if (dlgD.open) dlgD.close(); delete b.flakes; save(); renderAll(); toast(`Batch #${bn(b)}: sæbespåner fortrudt`);} return; }
+    if (ds.unstep){ const [no, key] = ds.unstep.split('|'); const b = S.batches.find(x => x.no === Number(no)); if (b && STEP_DEFS[key]){ if (dlgD.open) dlgD.close(); setStep(b, key, false); } return; }
+    if (ds.pack){ const b = S.batches.find(x => x.no === Number(ds.pack)); if (b){ b.packed = true; b.packedOn = TODAY; save(); renderAll(); toast(`Batch #${bn(b)} er pakket`);} return; }
+    if (ds.unpack){ const b = S.batches.find(x => x.no === Number(ds.unpack)); if (b){ b.packed = false; delete b.packedOn; save(); renderAll(); toast(`Batch #${bn(b)} er ikke længere pakket`);} return; }
+    if (ds.askDiscard){ pendingRow = {type:'batch', id:Number(ds.askDiscard)}; renderBatches(); return; }
+    if (ds.discard){ const b = S.batches.find(x => x.no === Number(ds.discard)); if (b){ b.status='kasseret'; b.rejectedOn = TODAY; pendingRow=null; save(); renderAll(); toast(`Batch #${bn(b)} kasseret`);} return; }
+    if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; save(); renderAll(); toast(`Batch #${bn(b)} gendannet`);} return; }
+    if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b) openBatchFromPlanned(b); return; }
+    if (ds.delplan){ S.batches = S.batches.filter(x => x.no !== Number(ds.delplan)); save(); renderAll(); toast('Planlagt batch slettet'); return; }
+    if (ds.askDelres){ pendingRow = {type:'res', id:ds.askDelres}; renderRes(); return; }
+    if (ds.delres){ S.res = S.res.filter(x => x.id !== ds.delres); pendingRow=null; save(); renderAll(); toast('Slettet'); return; }
+    if ('cancel' in ds){ pendingRow = null; renderBatches(); renderRes(); return; }
+  });
+
+  document.getElementById('prodTbl').addEventListener('change', e => {
+    const i = e.target;
+    if (i.dataset.pstep){
+      const p = prod(i.dataset.id), x = p && (p.steps || []).find(y => y.key === i.dataset.pstep); if (!x) return;
+      x.day = Math.max(1, parseInt(i.value, 10) || 1); save(); renderAll();
+      toast(`${p.name}: ${STEP_DEFS[x.key].name.toLowerCase()} ${x.day} ${x.day === 1 ? 'dag' : 'dage'} efter produktion`); return;
+    }
+    if (!i.dataset.pf) return;
+    const p = prod(i.dataset.id); const v = Math.max(0, parseInt(i.value, 10) || 0);
+    if (i.dataset.pf === 'count'){ p.count = v; p.countDate = TODAY; toast(`Ny optælling for ${p.name} gemt`); }
+    else if (i.dataset.pf === 'cure') p.cure = Math.max(1, v);
+    else if (i.dataset.pf === 'batch') p.batch = Math.max(1, v);
+    else p[i.dataset.pf] = v;
+    save(); renderAll();
+  });
+
+  document.getElementById('batchTbl').addEventListener('change', e => {
+    const i = e.target;
+    if (i.dataset.brej){ const b = S.batches.find(x => x.no === Number(i.dataset.brej)); if (b) setRejected(b, i.value); return; }
+    if (!i.dataset.bcure) return;
+    const b = S.batches.find(x => x.no === Number(i.dataset.bcure)); if (!b) return;
+    b.cure = Math.max(1, parseInt(i.value, 10) || 1);
+    save(); renderAll(); toast(`Batch #${bn(b)} er nu klar ${fmt(ready(b))}`);
+  });
+
+  document.getElementById('btnNewBatch').addEventListener('click', () => openBatch(activeProducts()[0].id));
+  document.getElementById('btnNewRes').addEventListener('click', openRes);
+  document.getElementById('prevM').addEventListener('click', () => { month = add(month+'-01', -1).slice(0,7); renderCalendar(); });
+  document.getElementById('nextM').addEventListener('click', () => { const [y,m] = month.split('-').map(Number); month = iso(new Date(Date.UTC(y, m, 1))).slice(0,7); renderCalendar(); });
+  document.getElementById('prevW').addEventListener('click', () => { weekStart = add(weekStart, -7*NW); renderWeeks(); });
+  document.getElementById('nextW').addEventListener('click', () => { weekStart = add(weekStart, 7*NW); renderWeeks(); });
+  document.getElementById('todayW').addEventListener('click', () => { weekStart = monday(TODAY); renderWeeks(); });
+  document.getElementById('wkc'+NW).checked = true;
+  document.querySelectorAll('input[name="wkcount"]').forEach(r => r.addEventListener('change', () => {
+    NW = Math.min(6, Math.max(1, parseInt(r.value, 10) || 4));
+    try { localStorage.setItem('kystnaer-uger', String(NW)); } catch(e) {}
+    renderWeeks();
+  }));
+  document.getElementById('todayM').addEventListener('click', () => { month = TODAY.slice(0,7); renderCalendar(); });
+  document.getElementById('alerts').addEventListener('click', e => { if (e.target.id === 'moreAlerts'){ showAllAlerts = !showAllAlerts; renderAlerts(); } });
+
+  const resetWrap = document.getElementById('resetWrap');
+  resetWrap.addEventListener('click', e => {
+    if (e.target.id === 'btnReset'){ resetWrap.innerHTML = `<span class="small">Alle ændringer slettes.</span> <button class="btn small danger" id="btnResetYes" type="button">Nulstil</button> <button class="btn small" id="btnResetNo" type="button">Fortryd</button>`; }
+    else if (e.target.id === 'btnResetYes'){ S = sampleData(); save(); renderAll(); resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; toast('Eksempeldata nulstillet'); }
+    else if (e.target.id === 'btnResetNo'){ resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; }
+  });
+
+  document.getElementById('btnSync').addEventListener('click', () => {
+    const t = new Intl.DateTimeFormat('da-DK',{hour:'2-digit',minute:'2-digit'}).format(new Date());
+    document.getElementById('syncLog').textContent = `Forsøgt kl. ${t}: ingen forbindelse, eksempeldata bruges`;
+    toast('Ingen forbindelse til Rackbeat endnu');
+  });
+
+  renderAll();
+})();
+</script>
