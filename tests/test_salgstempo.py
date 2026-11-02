@@ -135,13 +135,12 @@ def test_hele_aaret_har_tal_i_alle_maaneder():
     assert None not in resultat(lav(*hver_uge()))["maanedlig"]
 
 
-def test_kn_3005_faar_null_i_november_trods_salg(tmp_path):
-    sti = tmp_path / "eksempel.csv"
-    lav_eksempeldata.lav_linjer(KOERSEL).to_csv(sti, index=False, sep=";")
-    linjer = ok.fil_kilde(sti, {**KOLONNER, "kanal": "Kanal"}).hent_ordrelinjer()
-    november = linjer[(linjer["sku"] == "KN-3005") & (linjer["dato"].dt.month == 11)]
+def test_nyt_produkt_faar_null_i_november_trods_salg():
+    # Lanceret i uge 34 (mandag 29. juni) og med salg på vinduets eneste novemberdag
+    linjer = lav(*hver_uge(antal=5, uger=18, fra=START + timedelta(weeks=34)), (SLUT, "A", 5))
+    november = linjer[linjer["dato"].dt.month == 11]
     assert november["antal"].sum() > 0  # Der er salg, men kun på én dag af vinduet
-    r = resultat(linjer, "KN-3005")
+    r = resultat(linjer)
     assert r["maanedlig"][10] is None
     assert r["maanedlig"][5] is None  # Juni: kun to dage efter første salg
     assert r["maanedlig"][9] is not None
@@ -410,10 +409,10 @@ def test_rackbeat_afvist_noegle_giver_tydelig_fejl(status):
 
 
 def test_koer_med_rackbeat_kilde(tmp_path, capsys):
-    linjer = [rb_linje("KN-1001", 5, str(START + timedelta(weeks=u)), ordre=u) for u in range(52)]
+    linjer = [rb_linje("HAT003", 5, str(START + timedelta(weeks=u)), ordre=u) for u in range(52)]
     hent, _ = falsk_rackbeat(linjer)
     res = bs.koer(None, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL, ok.rackbeat_kilde("x", hent=hent))
-    assert res["KN-1001"]["rate"] == 5
+    assert res["HAT003"]["rate"] == 5
     assert "ingen salgskanal" in capsys.readouterr().out
 
 
@@ -421,17 +420,17 @@ def test_koer_med_rackbeat_kilde(tmp_path, capsys):
 
 def test_v2_produktliste_laeses_fra_html():
     produkter = bs.laes_v2_produkter(V2)
-    assert len(produkter) == 18
-    assert produkter["KN-1001"] == {"navn": "Havtorn sæbe bar", "rate": 20.0}
-    assert produkter["KN-4001"]["rate"] == 6.0
+    assert len(produkter) == 17
+    assert produkter["HAT003"] == {"navn": "Havtorn sæbe bar", "rate": 20.0}
+    assert produkter["HAA001"]["rate"] == 6.0
 
 
 def test_sku_uden_salg_rapporteres_og_kommer_ikke_i_json(tmp_path, capsys):
-    sti = skriv_csv(tmp_path, f"Ordredato;Varenr.;Antal\n{(START + timedelta(days=1)).strftime('%d-%m-%Y')};KN-1001;5\n")
+    sti = skriv_csv(tmp_path, f"Ordredato;Varenr.;Antal\n{(START + timedelta(days=1)).strftime('%d-%m-%Y')};HAT003;5\n")
     res = bs.koer(sti, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL)
-    assert res["KN-1002"]["rate"] is None and "ingen_salg" in res["KN-1002"]["flag"]
+    assert res["HYB003"]["rate"] is None and "ingen_salg" in res["HYB003"]["flag"]
     data = json.loads((tmp_path / "ud" / "salgstempo.json").read_text(encoding="utf-8"))
-    assert "KN-1001" in data and "KN-1002" not in data
+    assert "HAT003" in data and "HYB003" not in data
     assert "uden løbende salg" in capsys.readouterr().out
 
 
@@ -487,14 +486,14 @@ def test_json_og_csv_gemmer_fuld_praecision(tmp_path):
 
 
 def test_rapporten_afrunder_uden_at_aendre_resultatet(tmp_path, capsys):
-    uger = hver_uge(antal=5, uger=44) + [(START + timedelta(days=7 * (44 + i)), "KN-1001", v)
+    uger = hver_uge(antal=5, uger=44) + [(START + timedelta(days=7 * (44 + i)), "HAT003", v)
                                         for i, v in enumerate([0, 1, 0, 0, 1, 0, 2, 1])]
-    linjer = lav(*[(d, "KN-1001", a) for d, _, a in uger])
+    linjer = lav(*[(d, "HAT003", a) for d, _, a in uger])
     sti = tmp_path / "ordrer.csv"
     linjer.assign(dato=linjer["dato"].dt.strftime("%d-%m-%Y")).rename(
         columns={"dato": "Ordredato", "sku": "Varenr.", "antal": "Antal"})[["Ordredato", "Varenr.", "Antal"]].to_csv(sti, index=False, sep=";")
     res = bs.koer(sti, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL)
-    assert res["KN-1001"]["seneste8"] == 0.625
+    assert res["HAT003"]["seneste8"] == 0.625
     assert " 0,63 " in capsys.readouterr().out
 
 
@@ -511,19 +510,19 @@ def test_json_format_og_csv_paa_eksempeldata(tmp_path):
 
     data = json.loads((tmp_path / "ud" / "salgstempo.json").read_text(encoding="utf-8"))
     assert set(lav_eksempeldata.GRUNDSALG) <= set(data)
-    post = data["KN-1001"]
+    post = data["HAT003"]
     assert {"rate", "maanedlig", "seneste8", "beregnet", "vindue_uger", "sikkerhed", "flag"} <= set(post)
     assert len(post["maanedlig"]) == 12 and post["beregnet"] == "2026-11-02" and post["vindue_uger"] == 52
     # De indbyggede situationer i eksempeldata skal kunne genfindes
     assert post["engangsordrer_stk"] >= 180
-    assert data["KN-1002"]["engangsordrer_stk"] >= 40
-    assert "muligt_udsolgt" in data["KN-2002"]["flag"]
-    assert "lavt_salg" in data["KN-1006"]["flag"] and "muligt_udsolgt" not in data["KN-1006"]["flag"]
-    assert "kort_historik" in data["KN-3005"]["flag"]
+    assert data["HYB003"]["engangsordrer_stk"] >= 40
+    assert "muligt_udsolgt" in data["HYB001"]["flag"]
+    assert "lavt_salg" in data["LAN002"]["flag"] and "muligt_udsolgt" not in data["LAN002"]["flag"]
+    assert "kort_historik" in data["NEU002"]["flag"]
 
     tabel = pd.read_csv(tmp_path / "ud" / "salgstempo.csv", sep=";", dtype=str, encoding="utf-8-sig")
     assert {"estimat_nu", "beregnet", "afvigelse_pct", "beregnet_dato"} <= set(tabel.columns)
-    assert len(tabel) == 19  # 18 produkter og KN-9999
+    assert len(tabel) == 18  # 17 produkter og KN-9999
 
 
 def test_eksempeldata_er_reproducerbare():

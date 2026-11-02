@@ -18,13 +18,13 @@ ROD = Path(__file__).resolve().parent.parent
 
 # Opdigtet grundsalg pr. uge
 GRUNDSALG = {
-    "KN-1001": 17, "KN-1002": 15, "KN-1003": 13, "KN-1004": 8, "KN-1005": 11, "KN-1006": 0.6,
-    "KN-2001": 19, "KN-2002": 12, "KN-2003": 6, "KN-2004": 10, "KN-2005": 13, "KN-2006": 8,
-    "KN-3001": 7, "KN-3002": 6, "KN-3003": 4, "KN-3004": 9, "KN-3005": 6, "KN-4001": 2,
+    "HAT003": 17, "HYB003": 15, "TAN003": 13, "ROS004": 8, "NEU003": 11, "LAN002": 0.6,
+    "HAT001": 19, "HYB001": 12, "AKT001": 6, "TAN001": 10, "ROS001": 13, "NEU001": 8,
+    "HAT002": 7, "HYB002": 6, "ROS002": 9, "NEU002": 6, "HAA001": 2,
 }
 SAESON = {1: 0.8, 2: 0.85, 3: 0.9, 4: 0.95, 5: 1, 6: 0.9, 7: 0.7, 8: 0.85, 9: 1, 10: 1.1, 11: 1.6, 12: 2}
-UDSOLGT_SKU, UDSOLGT_UGER = "KN-2002", range(30, 35)  # Ugenumre i vinduet uden salg
-NYT_PRODUKT, NYT_FRA_UGE = "KN-3005", 34
+UDSOLGT_SKU, UDSOLGT_UGER = "HYB001", range(30, 35)  # Ugenumre i vinduet uden salg
+NYT_PRODUKT, NYT_FRA_UGE = "NEU002", 34
 
 
 def poisson(rng, middel):
@@ -61,9 +61,9 @@ def lav_linjer(koerselsdato, uger=52, seed=1):
                 rest -= antal
 
     # Store engangsordrer. Dansani-ordren fanges kun via kanalen: 40 er under 3 × hybens medianuge.
-    tilfoej(start + timedelta(days=7 * 20 + 1), "KN-1002", 40, "b2b")  # Dansani
-    tilfoej(start + timedelta(days=7 * 3 + 2), "KN-1001", 30, "event")  # Julemarked
-    tilfoej(start + timedelta(days=7 * 40 + 3), "KN-1001", 150, "webshop")  # Kun over grænsen
+    tilfoej(start + timedelta(days=7 * 20 + 1), "HYB003", 40, "b2b")  # Dansani
+    tilfoej(start + timedelta(days=7 * 3 + 2), "HAT003", 30, "event")  # Julemarked
+    tilfoej(start + timedelta(days=7 * 40 + 3), "HAT003", 150, "webshop")  # Kun over grænsen
 
     # Linjer, som scriptet skal springe over
     for i in range(8):

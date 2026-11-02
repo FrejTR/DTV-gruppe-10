@@ -482,7 +482,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   <h2>Nyt produkt</h2>
   <div class="field-row">
     <div class="field"><label for="npName">Navn</label><input id="npName" type="text" placeholder="Fx Lavendel sæbe bar" required></div>
-    <div class="field"><label for="npSku">Varenummer i Rackbeat</label><input id="npSku" type="text" placeholder="Fx KN-1004"></div>
+    <div class="field"><label for="npSku">Varenummer i Rackbeat</label><input id="npSku" type="text" placeholder="Fx HAT003"></div>
   </div>
   <div class="field-row">
     <div class="field"><label for="npType">Produkttype</label>
@@ -567,24 +567,23 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       cure: cure || TYPES[type].cure, steps: TYPES[type].steps.map(x => ({...x}))});
     const B = (no,by,pid,qty,made,status,extra) => ({no,by,pid,qty,made:add(T,made),status,...(extra||{})});
     const products = [
-      P('havtorn-saebe','Havtorn sæbe bar','Sæbebarer',50,20,120,65,'KN-1001'),
-      P('hyben-saebe','Hyben sæbe bar','Sæbebarer',50,18,70,65,'KN-1002'),
-      P('tang-saebe','Tang sæbe bar','Sæbebarer',40,12,96,60,'KN-1003'),
-      P('rosmarin-saebe','Rosmarin sæbe bar','Sæbebarer',30,9,48,60,'KN-1004'),
-      P('neutral-saebe','Neutral sæbe bar','Sæbebarer',30,10,52,60,'KN-1005'),
-      P('lanolin-saebe','Lanolin sæbe bar','Sæbebarer',20,5,30,40,'KN-1006'),
-      P('havtorn-shampoo','Havtorn shampoo bar','Shampoobarer',40,16,104,60,'KN-2001',7),
-      P('hyben-shampoo','Hyben shampoo bar','Shampoobarer',40,14,42,55,'KN-2002',7),
-      P('kul-shampoo','Aktivt kul shampoo bar','Shampoobarer',30,8,61,50,'KN-2003',7),
-      P('tang-shampoo','Tang shampoo bar','Shampoobarer',30,9,48,55,'KN-2004',3),
-      P('rosmarin-shampoo','Rosmarin shampoo bar','Shampoobarer',40,15,74,55,'KN-2005',3),
-      P('neutral-shampoo','Neutral shampoo bar','Shampoobarer',30,7,72,50,'KN-2006',3),
-      P('havtorn-balsam','Havtorn balsam bar','Balsambarer',25,8,40,50,'KN-3001'),
-      P('hyben-balsam','Hyben balsam bar','Balsambarer',25,7,22,50,'KN-3002'),
-      P('tang-balsam','Tang balsam bar','Balsambarer',20,5,35,50,'KN-3003'),
-      P('rosmarin-balsam','Rosmarin balsam bar','Balsambarer',25,8,44,50,'KN-3004'),
-      P('neutral-balsam','Neutral balsam bar','Balsambarer',20,5,30,50,'KN-3005'),
-      P('harkur','Hårkur bar','Hårkure',20,6,26,40,'KN-4001'),
+      P('havtorn-saebe','Havtorn sæbe bar','Sæbebarer',50,20,120,65,'HAT003'),
+      P('hyben-saebe','Hyben sæbe bar','Sæbebarer',50,18,70,65,'HYB003'),
+      P('tang-saebe','Tang sæbe bar','Sæbebarer',40,12,96,60,'TAN003'),
+      P('rosmarin-saebe','Rosmarin sæbe bar','Sæbebarer',30,9,48,60,'ROS004'),
+      P('neutral-saebe','Neutral Sæbe Bar','Sæbebarer',30,10,52,60,'NEU003'),
+      P('lanolin-saebe','Lanolin sæbe bar','Sæbebarer',20,5,30,40,'LAN002'),
+      P('havtorn-shampoo','Havtorn shampoo bar','Shampoobarer',40,16,104,60,'HAT001',7),
+      P('hyben-shampoo','Hyben shampoo bar','Shampoobarer',40,14,42,55,'HYB001',7),
+      P('kul-shampoo','Aktivt kul shampoo bar','Shampoobarer',30,8,61,50,'AKT001',7),
+      P('tang-shampoo','Tang shampoo bar','Shampoobarer',30,9,48,55,'TAN001',3),
+      P('rosmarin-shampoo','Rosmarin shampoo bar','Shampoobarer',40,15,74,55,'ROS001',3),
+      P('neutral-shampoo','Neutral Shampoo Bar','Shampoobarer',30,7,72,50,'NEU001',3),
+      P('havtorn-balsam','Havtorn balsam bar','Balsambarer',25,8,40,50,'HAT002'),
+      P('hyben-balsam','Hyben balsam bar','Balsambarer',25,7,22,50,'HYB002'),
+      P('rosmarin-balsam','Rosmarin balsam bar','Balsambarer',25,8,44,50,'ROS002'),
+      P('neutral-balsam','Neutral Balsam Bar','Balsambarer',20,5,30,50,'NEU002'),
+      P('harkur','Tang hårkur','Hårkure',20,6,26,40,'HAA001'),
     ];
     const batches = [
       B(31,'Mette','havtorn-saebe',65,-24,'aktiv',{packed:true,packedOn:add(T,-1),steps:{demold:{on:add(T,-23),by:'Mette'},trim:{on:add(T,-16),by:'Lena'}}}),
@@ -625,6 +624,14 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   // Produkter er data: nye produkter kommer automatisk med i alle visninger og beregninger
   const OLD_TYPES = {'Sæbe bar':'Sæbebarer','Shampoo bar':'Shampoobarer','Balsam bar':'Balsambarer','Hårkur':'Hårkure'};
   S.products.forEach(p => { if (OLD_TYPES[p.type]) p.type = OLD_TYPES[p.type]; if (!p.type) p.type = 'Andet'; if (!Array.isArray(p.steps)) p.steps = typeOf(p).steps.map(x => ({...x})); });
+  // Eksempeldata havde opdigtede varenumre. Gemte data får Rackbeats rigtige numre og navne (navnet kun, hvis det ikke er rettet)
+  const OLD_SKUS = {'KN-1001':['HAT003','Havtorn sæbe bar'],'KN-1002':['HYB003','Hyben sæbe bar'],'KN-1003':['TAN003','Tang sæbe bar'],
+    'KN-1004':['ROS004','Rosmarin sæbe bar'],'KN-1005':['NEU003','Neutral Sæbe Bar','Neutral sæbe bar'],'KN-1006':['LAN002','Lanolin sæbe bar'],
+    'KN-2001':['HAT001','Havtorn shampoo bar'],'KN-2002':['HYB001','Hyben shampoo bar'],'KN-2003':['AKT001','Aktivt kul shampoo bar'],
+    'KN-2004':['TAN001','Tang shampoo bar'],'KN-2005':['ROS001','Rosmarin shampoo bar'],'KN-2006':['NEU001','Neutral Shampoo Bar','Neutral shampoo bar'],
+    'KN-3001':['HAT002','Havtorn balsam bar'],'KN-3002':['HYB002','Hyben balsam bar'],'KN-3004':['ROS002','Rosmarin balsam bar'],
+    'KN-3005':['NEU002','Neutral Balsam Bar','Neutral balsam bar'],'KN-4001':['HAA001','Tang hårkur','Hårkur bar']};
+  S.products.forEach(p => { const m = OLD_SKUS[p.sku]; if (!m) return; p.sku = m[0]; if (p.name === (m[2] || m[1])) p.name = m[1]; });
   const activeProducts = () => S.products.filter(p => !p.archived);
 
   // ---------- trin undervejs (fx tag ud af forme, skær kanter) ----------
