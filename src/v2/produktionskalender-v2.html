@@ -837,7 +837,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
 
   // Kilden til salgstempoet: "Estimat", eller beregnet ud fra ordrehistorik og importeret fra scripts/beregn_salgstempo.py
-  const FLAG_TEXT = {kort_historik:'kort historik', ufuldstaendig_saeson:'ufuldstændig sæson', muligt_udsolgt:'muligt udsolgt'};
+  const FLAG_TEXT = {kort_historik:'kort historik', ufuldstaendig_saeson:'ufuldstændig sæson', muligt_udsolgt:'muligt udsolgt', lavt_salg:'lavt salg'};
   function rateSource(p){
     const s = p.salgstempo;
     if (!s) return `<div class="muted small rate-src">Estimat</div>`;
@@ -857,7 +857,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></td>
         <td class="n">${Math.max(0,x.cur)}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
-        <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${p.rate}" id="rate-${p.id}">${rateSource(p)}</td>
+        <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Lager i Rackbeat for ${esc(p.name)}" data-pf="count" data-id="${p.id}" value="${p.count}" id="count-${p.id}"><div class="muted small">${esc(fmt(p.countDate))}</div></td>

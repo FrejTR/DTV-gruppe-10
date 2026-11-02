@@ -29,17 +29,18 @@ Eller åbn `src/v2/produktionskalender-v2.html` direkte i browseren (ingen serve
 ### Salgstempo: hvad beregningen bygger på
 Scriptet `scripts/beregn_salgstempo.py` beregner et gennemsnitligt ugentligt salg pr. produkt (`rate`), som kalenderen bruger til at forudsige lagerets udvikling. Tallet er et estimat og bygger på disse antagelser:
 
-1. **Salg er et mål for efterspørgsel.** Uger, hvor produktet var udsolgt, viser lavere salg end efterspørgslen, så tempoet kan være for lavt. Sådanne produkter flages `muligt_udsolgt`.
+1. **Salg er et mål for efterspørgsel.** Uger, hvor produktet var udsolgt, viser lavere salg end efterspørgslen, så tempoet kan være for lavt. Sådanne produkter flages `muligt_udsolgt`, hvis deres salg er højt nok til, at nuluger siger noget (se punkt 12).
 2. **Fortiden forudsiger fremtiden.** Tempoet antager, at salget fremover ligner det seneste år. Vækst, tilbagegang, nye kanaler og kampagner indgår ikke.
 3. **Vindue på 52 hele uger** (mandag–søndag). Uger uden salg tæller som 0. Et produkt, der er lanceret inden for året, beregnes kun fra første salg og flages `kort_historik`.
-4. **Ét års data giver én observation pr. måned.** Det månedlige tempo (`maanedlig`) er derfor usikkert, og en enkelt usædvanlig uge kan slå stærkt igennem. Kalenderen bruger i første omgang kun årsgennemsnittet, som kan undervurdere højsæson og overvurdere lavsæson.
-5. **Engangsordrer er ikke løbende salg.** Ordrer fra kanalerne event og b2b (hvis kanalen findes i eksporten) og enkeltordrer over 3 × produktets mediane ugesalg udelades af tempoet og rapporteres separat. De oprettes ikke automatisk som reservationer i kalenderen. Grænsen på 3 × er et skøn og bør justeres sammen med ejeren.
+4. **Ét års data giver én observation pr. måned.** Det månedlige tempo (`maanedlig`) er derfor usikkert, og en enkelt usædvanlig uge kan slå stærkt igennem. Kalenderen bruger i første omgang kun årsgennemsnittet, som kan undervurdere højsæson og overvurdere lavsæson. Et månedstal beregnes kun, hvis produktet har salg i måneden og mindst 3 hele uger (mandag–søndag) med data i den, ellers er det `null`. Grænsen på 3 uger er et skøn, der skal valideres med ejeren. `maanedlig` kan altså indeholde `null`, og det skal V2 håndtere, når månedstallene tages i brug.
+5. **Engangsordrer er ikke løbende salg.** Ordrer fra kanalerne event og b2b (hvis kanalen findes i eksporten) og enkeltordrer over 3 × produktets mediane ugesalg udelades af tempoet og rapporteres separat. De oprettes ikke automatisk som reservationer i kalenderen. Når produktets mediane ugesalg er 0, bruges medianen af uger med salg som grundlag for grænsen. Grænsen på 3 × er et skøn og bør justeres sammen med ejeren.
 6. **Returvarer og kreditnotaer ignoreres.** Linjer med negativt antal trækkes ikke fra. Hvis returneringer er væsentlige, vil tempoet være for højt.
 7. **Datoen i eksporten er ordredatoen.** Hvis eksporten bruger faktura- eller afsendelsesdato, forskydes ugerne en smule.
 8. **SKU er nøglen.** Produkter, der er omdøbt, har skiftet varenummer eller er udfaset, kan ikke sammenlignes på tværs af perioden.
 9. **Alle salgskanaler lægges sammen.** Der skelnes ikke mellem webshop, forhandlere og markeder, medmindre eksporten indeholder kanal.
 10. **Enhed er styk pr. uge**, regnet på færdigvaren (en bar), ikke på batchstørrelse.
 11. **Sikkerhed** er høj, middel eller lav. Grænser: høj = mindst 40 uger med salg og variationskoefficient under 0,6; lav = under 12 uger med salg eller variationskoefficient over 1,2; ellers middel. Grænserne er skønnede og bør valideres.
+12. **Flag om udsolgt og lavt salg.** `muligt_udsolgt` sættes kun, hvis medianen af produktets uger med salg er mindst 3, og der er mindst 2 nuluger i træk efter en periode med salg. Produkter med en median under 3 får i stedet `lavt_salg`, uanset om de har nuluger, fordi nuluger er normale ved så lavt salg. Engangsordrer indgår ikke i medianen. Tærsklerne (median 3 og 2 nuluger) er skøn, der skal valideres med ejeren.
 
 ## Git-arbejdsgang
 - `main` er altid fungerende. Nye ændringer sker i grene: `feature/<navn>`, merges via pull request.

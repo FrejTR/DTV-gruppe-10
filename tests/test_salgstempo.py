@@ -122,6 +122,31 @@ def test_ufuldstaendig_saeson_beregner_kun_solgte_maaneder():
     assert "ufuldstaendig_saeson" in r["flag"]
 
 
+@pytest.mark.parametrize("foerste_salg,har_tal", [(date(2026, 10, 5), True), (date(2026, 10, 12), False)])
+def test_maanedstal_kraever_tre_hele_uger(foerste_salg, har_tal):
+    # Oktober 2026 har tre hele uger: 5.-11., 12.-18. og 19.-25.
+    uger = (SLUT - foerste_salg).days // 7 + 1
+    oktober = resultat(lav(*hver_uge(uger=uger, fra=foerste_salg)))["maanedlig"][9]
+    assert (oktober is not None) == har_tal
+
+
+def test_hele_aaret_har_tal_i_alle_maaneder():
+    assert None not in resultat(lav(*hver_uge()))["maanedlig"]
+
+
+def test_kn_3005_faar_null_i_november_trods_salg(tmp_path):
+    sti = tmp_path / "eksempel.csv"
+    lav_eksempeldata.lav_linjer(KOERSEL).to_csv(sti, index=False, sep=";")
+    linjer = ok.fil_kilde(sti, {**KOLONNER, "kanal": "Kanal"}).hent_ordrelinjer()
+    november = linjer[(linjer["sku"] == "KN-3005") & (linjer["dato"].dt.month == 11)]
+    assert november["antal"].sum() > 0  # Der er salg, men kun på én dag af vinduet
+    r = resultat(linjer, "KN-3005")
+    assert r["maanedlig"][10] is None
+    assert r["maanedlig"][5] is None  # Juni: kun to dage efter første salg
+    assert r["maanedlig"][9] is not None
+    assert "ufuldstaendig_saeson" in r["flag"]
+
+
 # ---------- engangsordrer ----------
 
 def test_stor_enkeltordre_fjernes_og_rapporteres():
@@ -163,6 +188,34 @@ def test_kun_engangsordrer_kommer_ikke_i_json(tmp_path):
 
 
 # ---------- udsolgt og sikkerhed ----------
+
+def med_pause(antal, uger=52, pause=(20, 21)):
+    return [u for i, u in enumerate(hver_uge(antal=antal, uger=uger)) if i not in pause]
+
+
+def test_muligt_udsolgt_ved_median_paa_taerskel_og_to_nuluger():
+    flag = resultat(lav(*med_pause(3)))["flag"]
+    assert "muligt_udsolgt" in flag and "lavt_salg" not in flag
+
+
+def test_lavt_salg_i_stedet_for_muligt_udsolgt():
+    flag = resultat(lav(*med_pause(2)))["flag"]
+    assert "lavt_salg" in flag and "muligt_udsolgt" not in flag
+
+
+def test_lavt_salg_kraever_ikke_nuluger():
+    assert "lavt_salg" in resultat(lav(*hver_uge(antal=2)))["flag"]
+
+
+def test_en_nuluge_giver_ikke_muligt_udsolgt():
+    flag = resultat(lav(*med_pause(3, pause=(20,))))["flag"]
+    assert "muligt_udsolgt" not in flag and "lavt_salg" not in flag
+
+
+def test_engangsordrer_taeller_ikke_med_i_median_for_lavt_salg():
+    uger = [(d, s, a, "b2b", f"B{i}") for i, (d, s, a) in enumerate(hver_uge(antal=9, uger=10))]
+    assert "lavt_salg" in resultat(lav(*uger, *hver_uge(antal=2)))["flag"]
+
 
 def test_muligt_udsolgt():
     assert bs.muligt_udsolgt([5, 5, 0, 0, 5], False)
@@ -316,6 +369,41 @@ def test_main_returnerer_2_ved_inputfejl(tmp_path, capsys):
     assert "FEJL" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("tal,decimaler,tekst", [
+    (0.625, 2, "0,63"), (16.625, 2, "16,63"), (1.005, 2, "1,01"), (17.288461538461537, 2, "17,29"),
+    (20.0, 2, "20,00"), (-13.55, 1, "-13,6"), (None, 2, "–"),
+])
+def test_vis_tal_bruger_almindelig_afrunding(tal, decimaler, tekst):
+    assert bs.vis_tal(tal, decimaler) == tekst
+
+
+def test_json_og_csv_gemmer_fuld_praecision(tmp_path):
+    linjer = lav(*[(START + timedelta(days=7 * i), "A", 3 if i % 3 else 4) for i in range(52)])
+    produkter = {"A": {"navn": "A", "rate": 7.0}}
+    res = bs.saml_resultater(linjer, produkter, KOERSEL, 52)
+    bs.skriv_json(res, tmp_path / "ud.json")
+    bs.skriv_csv(res, tmp_path / "ud.csv", produkter)
+
+    forventet = (3 * 52 + 18) / 52
+    post = json.loads((tmp_path / "ud.json").read_text(encoding="utf-8"))["A"]
+    assert post["rate"] == forventet
+    tabel = pd.read_csv(tmp_path / "ud.csv", sep=";", dtype=str, encoding="utf-8-sig")
+    assert float(tabel.loc[0, "rate"].replace(",", ".")) == forventet
+    assert float(tabel.loc[0, "afvigelse_pct"].replace(",", ".")) == (forventet - 7) / 7 * 100
+
+
+def test_rapporten_afrunder_uden_at_aendre_resultatet(tmp_path, capsys):
+    uger = hver_uge(antal=5, uger=44) + [(START + timedelta(days=7 * (44 + i)), "KN-1001", v)
+                                        for i, v in enumerate([0, 1, 0, 0, 1, 0, 2, 1])]
+    linjer = lav(*[(d, "KN-1001", a) for d, _, a in uger])
+    sti = tmp_path / "ordrer.csv"
+    linjer.assign(dato=linjer["dato"].dt.strftime("%d-%m-%Y")).rename(
+        columns={"dato": "Ordredato", "sku": "Varenr.", "antal": "Antal"})[["Ordredato", "Varenr.", "Antal"]].to_csv(sti, index=False, sep=";")
+    res = bs.koer(sti, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL)
+    assert res["KN-1001"]["seneste8"] == 0.625
+    assert " 0,63 " in capsys.readouterr().out
+
+
 def test_afvigelse():
     assert bs.afvigelse_pct(20, 25) == 25
     assert bs.afvigelse_pct(0, 25) is None
@@ -336,6 +424,7 @@ def test_json_format_og_csv_paa_eksempeldata(tmp_path):
     assert post["engangsordrer_stk"] >= 180
     assert data["KN-1002"]["engangsordrer_stk"] >= 40
     assert "muligt_udsolgt" in data["KN-2002"]["flag"]
+    assert "lavt_salg" in data["KN-1006"]["flag"] and "muligt_udsolgt" not in data["KN-1006"]["flag"]
     assert "kort_historik" in data["KN-3005"]["flag"]
 
     tabel = pd.read_csv(tmp_path / "ud" / "salgstempo.csv", sep=";", dtype=str, encoding="utf-8-sig")

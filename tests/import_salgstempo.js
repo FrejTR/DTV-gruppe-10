@@ -81,6 +81,18 @@ const check = (name, ok, info) => { console.log(ok ? 'OK   ' : 'FEJL ', name, ok
   check('ugyldig post rapporteres', (await dlgText()).includes('Ugyldige i filen: KN-1004'));
   await p.click('#importNo');
 
+  // Fuld præcision gemmes, men feltet viser to decimaler, og lavt_salg vises på dansk
+  await pick({ 'KN-1006': post(0.5384615384615384, { flag: ['lavt_salg'] }) });
+  await p.waitForSelector('#importYes');
+  check('bekræftelsen afrunder', (await dlgText()).includes('5 → 0,54'), await dlgText());
+  await p.click('#importYes');
+  await p.click('#importClose');
+  check('feltet viser to decimaler', await inputRate('lanolin-saebe') === '0.54', await inputRate('lanolin-saebe'));
+  check('fuld præcision er gemt', await rate('KN-1006') === 0.5384615384615384);
+  await p.fill('#min-lanolin-saebe', '21'); await p.dispatchEvent('#min-lanolin-saebe', 'change');
+  check('anden redigering bevarer fuld præcision', await rate('KN-1006') === 0.5384615384615384);
+  check('lavt salg vises', (await p.$eval('#p-produkter', el => el.textContent)).includes('lavt salg'));
+
   // Nulstil rydder importen
   await p.click('#btnReset'); await p.click('#btnResetYes');
   check('nulstil giver Estimat igen', !(await state()).products.some(x => x.salgstempo));

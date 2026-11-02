@@ -10,6 +10,7 @@ import re
 import statistics
 import sys
 from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,8 @@ ROD = Path(__file__).resolve().parent.parent
 ENGANGS_KANALER = {"event", "b2b"}
 ENGANGS_FAKTOR = 3  # Skøn: enkeltordrer over 3 × mediant ugesalg er engangsordrer
 SENESTE_UGER = 8
+MIN_HELE_UGER_I_MAANED = 3  # Skøn: færre hele uger giver et månedstal, der ikke kan bruges
+LAVT_SALG_MEDIAN = 3  # Skøn: under denne median kan nuluger ikke skelnes fra normalt salg
 MAANEDER = ("jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec")
 
 
@@ -61,11 +64,19 @@ def find_engangsordrer(linjer, start, slut):
 
 
 def maanedligt_tempo(linjer, start, slut):
-    """Gennemsnitligt ugentligt salg pr. kalendermåned. None for måneder uden salg."""
+    """Gennemsnitligt ugentligt salg pr. kalendermåned.
+
+    None for måneder uden salg eller med for få hele uger (mandag–søndag) i perioden.
+    Start skal være en mandag.
+    """
     dage_pr_maaned = pd.Series(pd.date_range(start, slut).month).value_counts()
+    mandage = pd.date_range(start, slut, freq="7D")
+    hele_uger = mandage[mandage.month == (mandage + pd.Timedelta(days=6)).month]
+    uger_pr_maaned = pd.Series(hele_uger.month).value_counts()
     solgt = linjer.groupby(linjer["dato"].dt.month)["antal"].sum() if not linjer.empty else {}
     return [
-        solgt[m] / dage_pr_maaned[m] * 7 if m in solgt and solgt[m] > 0 else None
+        solgt[m] / dage_pr_maaned[m] * 7
+        if uger_pr_maaned.get(m, 0) >= MIN_HELE_UGER_I_MAANED and m in solgt and solgt[m] > 0 else None
         for m in range(1, 13)
     ]
 
@@ -130,16 +141,19 @@ def beregn_sku(linjer, start, slut, uger):
         flag.append("kort_historik")
     if any(v is None for v in maanedlig):
         flag.append("ufuldstaendig_saeson")
+    salgsuger = grund_uger[grund_uger > 0]
+    if salgsuger.empty or salgsuger.median() < LAVT_SALG_MEDIAN:
+        flag.append("lavt_salg")
     # Alle salg tæller her: en uge med kun en engangsordre viser, at der var varer på lager
-    if muligt_udsolgt(alle_uger, foerste < start_ts):
+    elif muligt_udsolgt(alle_uger, foerste < start_ts):
         flag.append("muligt_udsolgt")
     if rate == 0:
         flag.append("kun_engangsordrer")
 
     return {
-        "rate": round(float(rate), 2),
-        "maanedlig": [None if v is None else round(float(v), 2) for v in maanedlig],
-        "seneste8": round(float(grund_uger.tail(SENESTE_UGER).mean()), 2),
+        "rate": float(rate),
+        "maanedlig": [None if v is None else float(v) for v in maanedlig],
+        "seneste8": float(grund_uger.tail(SENESTE_UGER).mean()),
         "vindue_uger": uger,
         "sikkerhed": sikkerhed(uger_med_salg, variation),
         "flag": flag,
@@ -147,7 +161,7 @@ def beregn_sku(linjer, start, slut, uger):
         "engangsordrer_stk": float(engangs_stk),
         "uger_i_beregning": uger_i_beregning,
         "uger_med_salg": uger_med_salg,
-        "variationskoefficient": None if variation is None else round(variation, 2),
+        "variationskoefficient": variation,
     }
 
 
@@ -173,7 +187,7 @@ def laes_v2_produkter(sti):
 def afvigelse_pct(estimat, beregnet):
     if not estimat or beregnet is None:
         return None
-    return round((beregnet - estimat) / estimat * 100, 1)
+    return (beregnet - estimat) / estimat * 100
 
 
 def saml_resultater(linjer, produkter, koerselsdato, uger):
@@ -241,15 +255,22 @@ def daekningsadvarsler(linjer, start, slut):
     return ud
 
 
+def vis_tal(tal, decimaler=2):
+    """Afrunder kun til visning, med almindelig afrunding: 0,625 bliver 0,63."""
+    if tal is None:
+        return "–"
+    afrundet = Decimal(repr(float(tal))).quantize(Decimal(1).scaleb(-decimaler), rounding=ROUND_HALF_UP)
+    return str(afrundet).replace(".", ",")
+
+
 def tekstrapport(resultater, produkter, sprunget, advarsler, start, slut, uden_for_vindue):
     t = [f"Salgstempo for {start} til {slut}", ""]
     t.append(f"{'SKU':<9} {'Produkt':<26} {'Estimat':>7} {'Beregnet':>8} {'Afv. %':>7} {'Sen. 8':>7} {'Sikkerhed':<9} {'Engangs':>7}  Flag")
-    tal = lambda v: "–" if v is None else f"{v:g}"
     for sku, r in resultater.items():
         navn = produkter.get(sku, {}).get("navn", "(ikke i V2)")
         engangs = f"{r['engangsordrer_stk']:g}" if r["engangsordrer_antal"] else "–"
-        t.append(f"{sku:<9} {navn:<26} {tal(r['estimat_nu']):>7} {tal(r['rate']):>8} {tal(r['afvigelse_pct']):>7} "
-                 f"{tal(r['seneste8']):>7} {r['sikkerhed']:<9} {engangs:>7}  {', '.join(r['flag'])}")
+        t.append(f"{sku:<9} {navn:<26} {vis_tal(r['estimat_nu']):>7} {vis_tal(r['rate']):>8} {vis_tal(r['afvigelse_pct'], 1):>7} "
+                 f"{vis_tal(r['seneste8']):>7} {r['sikkerhed']:<9} {engangs:>7}  {', '.join(r['flag'])}")
 
     t.append("")
     lav = [s for s, r in resultater.items() if r["sikkerhed"] == "lav" and s in produkter]
