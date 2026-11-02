@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 import beregn_salgstempo as bs
+import hent_lager
 import lav_eksempeldata
 import ordrekilder as ok
 
@@ -406,6 +407,32 @@ def test_rackbeat_afvist_noegle_giver_tydelig_fejl(status):
     hent, _ = falsk_rackbeat([], status=status)
     with pytest.raises(ok.InputFejl, match="afviste API-nøglen"):
         ok.rackbeat_kilde("x", hent=hent).hent_ordrelinjer()
+
+
+def test_rackbeat_lager_henter_alle_sider(tmp_path):
+    sider = [[{"number": "HAT003", "stock_quantity": 62}, {"number": "HOT004", "stock_quantity": -3}],
+             [{"number": "TAN001", "stock_quantity": 119}, {"number": None, "stock_quantity": 1}]]
+    kald = []
+
+    def hent(url, headers):
+        kald.append(url)
+        side = int(re.search(r"page=(\d+)", url).group(1))
+        return 200, {"products": sider[side - 1], "pages": 2}
+    kilde = ok.rackbeat_kilde("x", hent=hent)
+    assert kilde.hent_lager() == {"HAT003": 62, "HOT004": -3, "TAN001": 119}
+    assert all("/api/products?" in u for u in kald) and len(kald) == 2
+
+    assert hent_lager.main(["--ud", str(tmp_path)], kilde=kilde) == 0
+    data = json.loads((tmp_path / "lager.json").read_text(encoding="utf-8"))
+    # Kun V2's produkter kommer med. HOT004 findes ikke i V2
+    assert data["kilde"] == "rackbeat" and data["lager"] == {"HAT003": 62, "TAN001": 119}
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", data["hentet"])
+
+
+def test_hent_lager_uden_noegle_giver_fejlkode(monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv("RACKBEAT_API_KEY", raising=False)
+    assert hent_lager.main(["--ud", str(tmp_path)], kilde=ok.rackbeat_kilde(env_fil=tmp_path / "x")) == 2
+    assert "RACKBEAT_API_KEY" in capsys.readouterr().err
 
 
 def test_koer_med_rackbeat_kilde(tmp_path, capsys):

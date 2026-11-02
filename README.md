@@ -26,6 +26,13 @@ Eller åbn `src/v2/produktionskalender-v2.html` direkte i browseren (ingen serve
 - Eksempeldata og estimeret salgstempo pr. produkt (iteration 1 og 2).
 - Salgstempo kan hentes direkte fra Rackbeat (se nedenfor). Lager og minimum i kalenderen og fælles login er designet, men ikke bygget.
 
+### Lager fra Rackbeat
+Med nøglen i `.env` (se nedenfor):
+```powershell
+python scripts/hent_lager.py
+```
+Scriptet henter beholdningen (`GET /products`, feltet `stock_quantity`) og skriver kun de varer, der er i V2's produktliste, til `output/lager.json`. Klik *Importér lager fra Rackbeat* i V2 og vælg filen. Tallet står i kolonnen *Lager i Rackbeat* præcis som i Rackbeat, uden beregning. Lagertallene gemmes kun i browseren og kommer aldrig i git eller på den offentlige side.
+
 ### Salgstempo fra Rackbeat
 Opret en API-nøgle i Rackbeat under *Firmaindstillinger > API* (adgang til ordrer er nok). Første gang kopieres `.env.example` til `.env`, og nøglen skrives efter `RACKBEAT_API_KEY=`. `.env` er i `.gitignore`, så nøglen kommer aldrig med i git. Derefter er det bare:
 ```powershell
