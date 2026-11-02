@@ -231,10 +231,10 @@ def _hent_json(url, headers, timeout=30):
 
 
 class rackbeat_kilde:
-    """Ordrelinjer fra Rackbeat-API'en (GET /orders/lines).
+    """Ordrelinjer (GET /orders/lines) og lager (GET /products) fra Rackbeat-API'en.
 
     Slået op på developer.rackbeat.com (november 2026): Bearer-nøgle i Authorization,
-    sider med page/limit og felterne pages og order_lines i svaret, højst 480 kald i minuttet.
+    sider med page/limit og felterne pages og order_lines/products i svaret, højst 480 kald i minuttet.
     Datoen er ordredatoen (order.order_date) og antallet er det bestilte (quantities.ordered),
     som i den eksporterede fil. Annullerede ordrer springes over.
     Rackbeat-linjer har ingen salgskanal, så kanal er tom.
@@ -245,6 +245,7 @@ class rackbeat_kilde:
     API_NOEGLE_VARIABEL = "RACKBEAT_API_KEY"
     BASIS_URL = "https://app.rackbeat.com/api"
     ENDPOINT_ORDRER = "/orders/lines"
+    ENDPOINT_PRODUKTER = "/products"
     PR_SIDE = 100
     FORSOEG_VED_429 = 5
 
@@ -256,8 +257,8 @@ class rackbeat_kilde:
         self.advarsler = ["Rackbeat har ingen salgskanal på ordrelinjerne. Event- og b2b-ordrer "
                           "frasorteres derfor kun, hvis de er store enkeltordrer."]
 
-    def _side(self, params):
-        url = self.BASIS_URL + self.ENDPOINT_ORDRER + "?" + urllib.parse.urlencode(params)
+    def _side(self, endpoint, params):
+        url = self.BASIS_URL + endpoint + "?" + urllib.parse.urlencode(params)
         headers = {"Authorization": f"Bearer {self.api_noegle}", "Accept": "application/json",
                    "Content-Type": "application/json"}
         for forsoeg in range(self.FORSOEG_VED_429 + 1):
@@ -267,37 +268,48 @@ class rackbeat_kilde:
             self._vent(2 ** forsoeg)
         if status in (401, 403):
             raise InputFejl(f"Rackbeat afviste API-nøglen (HTTP {status}). Tjek {self.API_NOEGLE_VARIABEL}, "
-                            "og at nøglen har adgang til ordrer.")
+                            "og at nøglen har adgang til ordrer og produkter.")
         if status == 429:
             raise InputFejl("Rackbeat svarer stadig 429 (for mange kald). Prøv igen om et minut.")
         if not 200 <= status < 300 or not isinstance(data, dict):
             raise InputFejl(f"Uventet svar fra Rackbeat (HTTP {status}).")
         return data
 
-    def hent_ordrelinjer(self, fra_dato=None, til_dato=None):
-        """Returnerer linjer mellem datoerne (begge inklusive). None betyder ingen grænse."""
+    def _hent_alle(self, endpoint, felt, params=None):
+        """Henter alle sider fra et endpoint og returnerer posterne i feltet (fx products)."""
         if not self.api_noegle:
             raise InputFejl(f"Ingen Rackbeat-nøgle fundet. Kopiér .env.example til .env, og skriv nøglen efter "
                             f"{self.API_NOEGLE_VARIABEL}=. Nøglen oprettes i Rackbeat under Firmaindstillinger > API.")
-        params = {"limit": self.PR_SIDE}
+        poster, side, sider = [], 1, 1
+        while side <= sider:
+            data = self._side(endpoint, {**(params or {}), "limit": self.PR_SIDE, "page": side})
+            sider = int(data.get("pages") or 0)
+            poster.extend(data.get(felt) or [])
+            side += 1
+        return poster
+
+    def hent_lager(self):
+        """Returnerer beholdningen (stock_quantity) pr. varenummer, som den står i Rackbeat."""
+        return {p["number"]: p.get("stock_quantity") for p in self._hent_alle(self.ENDPOINT_PRODUKTER, "products")
+                if p.get("number")}
+
+    def hent_ordrelinjer(self, fra_dato=None, til_dato=None):
+        """Returnerer linjer mellem datoerne (begge inklusive). None betyder ingen grænse."""
+        params = {}
         if fra_dato is not None:
             params["order_date_from"] = f"{pd.Timestamp(fra_dato):%Y-%m-%d} 00:00:00"
         if til_dato is not None:
             params["order_date_to"] = f"{pd.Timestamp(til_dato):%Y-%m-%d} 23:59:59"
 
-        raekker, side, sider = [], 1, 1
-        while side <= sider:
-            data = self._side({**params, "page": side})
-            sider = int(data.get("pages") or 0)
-            for l in data.get("order_lines") or []:
-                ordre = l.get("order") or {}
-                if (ordre.get("status") or {}).get("is_cancelled"):
-                    self.sprunget["annulleret ordre"] += 1
-                    continue
-                raekker.append({"dato": ordre.get("order_date"), "sku": (l.get("item") or {}).get("number"),
-                                "antal": (l.get("quantities") or {}).get("ordered"), "kanal": None,
-                                "ordre_id": ordre.get("number")})
-            side += 1
+        raekker = []
+        for l in self._hent_alle(self.ENDPOINT_ORDRER, "order_lines", params):
+            ordre = l.get("order") or {}
+            if (ordre.get("status") or {}).get("is_cancelled"):
+                self.sprunget["annulleret ordre"] += 1
+                continue
+            raekker.append({"dato": ordre.get("order_date"), "sku": (l.get("item") or {}).get("number"),
+                            "antal": (l.get("quantities") or {}).get("ordered"), "kanal": None,
+                            "ordre_id": ordre.get("number")})
 
         raa = pd.DataFrame(raekker, columns=["dato", "sku", "antal", "kanal", "ordre_id"], dtype=object)
         linjer, sprunget, advarsler = normaliser(raa, {f: f for f in (*PAAKRAEVEDE, *VALGFRIE)})

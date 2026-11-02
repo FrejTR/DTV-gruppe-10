@@ -425,8 +425,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
   <footer class="footer">
     <span class="rb-sync">
-      <span class="rb-pill">Rackbeat: ikke forbundet</span>
-      <button class="btn small ghost" id="btnSync" type="button">Hent data</button>
+      <span class="rb-pill" id="rbPill">Rackbeat: ikke forbundet</span>
+      <button class="btn small ghost" id="btnSync" type="button">Importér lager fra Rackbeat</button>
+      <input id="lagerFile" type="file" accept=".json,application/json" aria-label="Vælg fil med lager fra Rackbeat" hidden>
       <button class="btn small ghost" id="btnImport" type="button">Importér salgstempo</button>
       <input id="importFile" type="file" accept=".json,application/json" aria-label="Vælg fil med salgstempo" hidden>
       <span class="muted small" id="syncLog" aria-live="polite">Eksempeldata</span>
@@ -852,22 +853,28 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     return `<div class="muted small rate-src">Beregnet (${esc(s.vindueUger)} uger, ${esc(fmt(s.dato))})<br>Sikkerhed: ${esc(s.sikkerhed)}${flags.length ? `<br>${esc(flags.join(', '))}` : ''}</div>`;
   }
 
+  // Lager i Rackbeat vises præcis som hentet med scripts/hent_lager.py, uden beregning
+  const fT = new Intl.DateTimeFormat('da-DK', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+  const fmtHentet = s => fT.format(new Date(s));
+  const lagerCell = p => p.lagerHentet
+    ? `<span id="lager-${p.id}">${esc(p.count)}</span><div class="muted small">Hentet ${esc(fmtHentet(p.lagerHentet))}</div>`
+    : `<span id="lager-${p.id}" class="muted">–</span><div class="muted small">Ikke hentet</div>`;
+
   function renderProducts(){
     const list =[...activeProducts(), ...S.products.filter(p => p.archived)];
     const rows = list.map(p => {
-      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="10" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
+      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="9" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
       const x = analyze(p);
       const in3 = proj(p, add(TODAY, p.cure));
       const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
       const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
       return `<tr>
         <td><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></td>
-        <td class="n">${Math.max(0,x.cur)}</td>
+        <td class="n">${lagerCell(p)}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
-        <td class="n"><input type="number" min="0" step="1" aria-label="Lager i Rackbeat for ${esc(p.name)}" data-pf="count" data-id="${p.id}" value="${p.count}" id="count-${p.id}"><div class="muted small">${esc(fmt(p.countDate))}</div></td>
         <td class="n">${in3}</td>
         <td>${risk}</td>
         <td class="num">${esc(latest)}</td>
@@ -875,7 +882,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td>${pendingProd === p.id ? `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button><button class="btn small" type="button" data-cancel-prod>Fortryd</button></div>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`}</td>
       </tr>`;
     }).join('');
-    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">På lager nu</th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">${list.some(p => p.salgstempo) ? 'Se kilde' : 'Estimat'}</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Når ny batch er klar</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">${list.some(p => p.salgstempo) ? 'Se kilde' : 'Estimat'}</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th class="n">Når ny batch er klar</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
   }
 
   // Kasserede stk. kan rettes, indtil batchen er pakket og sendt videre til Rackbeat
@@ -1451,8 +1458,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }
     if (!i.dataset.pf) return;
     const p = prod(i.dataset.id); const v = Math.max(0, parseInt(i.value, 10) || 0);
-    if (i.dataset.pf === 'count'){ p.count = v; p.countDate = TODAY; toast(`Ny optælling for ${p.name} gemt`); }
-    else if (i.dataset.pf === 'cure') p.cure = Math.max(1, v);
+    if (i.dataset.pf === 'cure') p.cure = Math.max(1, v);
     else if (i.dataset.pf === 'batch') p.batch = Math.max(1, v);
     else if (i.dataset.pf === 'rate'){ p.rate = Math.max(0, parseFloat(i.value) || 0); delete p.salgstempo; }   // Rettet i hånden er ikke længere beregnet
     else p[i.dataset.pf] = v;
@@ -1487,14 +1493,52 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const resetWrap = document.getElementById('resetWrap');
   resetWrap.addEventListener('click', e => {
     if (e.target.id === 'btnReset'){ resetWrap.innerHTML = `<span class="small">Alle ændringer slettes.</span> <button class="btn small danger" id="btnResetYes" type="button">Nulstil</button> <button class="btn small" id="btnResetNo" type="button">Fortryd</button>`; }
-    else if (e.target.id === 'btnResetYes'){ S = sampleData(); save(); renderAll(); resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; toast('Eksempeldata nulstillet'); }
+    else if (e.target.id === 'btnResetYes'){ S = sampleData(); save(); renderAll(); showSyncState(); resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; toast('Eksempeldata nulstillet'); }
     else if (e.target.id === 'btnResetNo'){ resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; }
   });
 
-  document.getElementById('btnSync').addEventListener('click', () => {
-    const t = new Intl.DateTimeFormat('da-DK',{hour:'2-digit',minute:'2-digit'}).format(new Date());
-    document.getElementById('syncLog').textContent = `Forsøgt kl. ${t}: ingen forbindelse, eksempeldata bruges`;
-    toast('Ingen forbindelse til Rackbeat endnu');
+  // ---------- import af lager (JSON fra scripts/hent_lager.py) ----------
+  // Lageret erstatter "Lager i Rackbeat" for produkter med samme varenummer. Intet regnes om.
+  function showSyncState(){
+    const h = S.products.map(p => p.lagerHentet).filter(Boolean).sort().pop();
+    document.getElementById('rbPill').textContent = h ? 'Rackbeat: lager hentet' : 'Rackbeat: ikke forbundet';
+    document.getElementById('syncLog').textContent = h ? `Lager fra Rackbeat, hentet ${fmtHentet(h)}` : 'Eksempeldata';
+  }
+  function readLager(data){
+    if (!data || typeof data !== 'object' || data.kilde !== 'rackbeat' || !data.lager || typeof data.lager !== 'object' || Array.isArray(data.lager)
+      || typeof data.hentet !== 'string' || isNaN(Date.parse(data.hentet))) return null;
+    const out = {hentet: data.hentet, updates: [], missing: []};
+    for (const p of S.products){
+      if (!p.sku) continue;
+      const n = data.lager[p.sku];
+      if (Number.isInteger(n)) out.updates.push({p, n}); else out.missing.push(p.sku);
+    }
+    return out;
+  }
+  function showLagerResult(title, html){
+    importBody.innerHTML = `<h2>${title}</h2>${html}${closeBtn}`;
+    document.getElementById('importClose').onclick = () => dlgI.close();
+    if (!dlgI.open) dlgI.showModal();
+  }
+  const lagerFile = document.getElementById('lagerFile');
+  document.getElementById('btnSync').addEventListener('click', () => lagerFile.click());
+  lagerFile.addEventListener('change', () => {
+    const f = lagerFile.files[0]; if (!f) return;
+    const rd = new FileReader();
+    const fejl = msg => showLagerResult('Importér lager', `<p class="form-err" role="alert">${esc(msg)}</p><p class="hint">Intet er ændret.</p>`);
+    rd.onload = () => {
+      lagerFile.value = '';   // Så samme fil kan vælges igen
+      let data; try { data = JSON.parse(rd.result); } catch(e) { fejl('Filen er ikke gyldig JSON.'); return; }
+      const r = readLager(data);
+      if (!r){ fejl('Filen er ikke en lagerfil fra scripts/hent_lager.py.'); return; }
+      if (!r.updates.length){ fejl('Ingen af kalenderens varenumre findes i filen.'); return; }
+      r.updates.forEach(({p, n}) => { p.count = n; p.countDate = r.hentet.slice(0,10); p.lagerHentet = r.hentet; });
+      save(); renderAll(); showSyncState();
+      showLagerResult('Lager importeret', `<p>Lager i Rackbeat opdateret for ${r.updates.length} ${r.updates.length === 1 ? 'produkt' : 'produkter'}, hentet ${esc(fmtHentet(r.hentet))}.</p>
+        ${skuLine('Ikke fundet i Rackbeat', r.missing) || '<p class="hint">Alle varenumre blev fundet.</p>'}`);
+    };
+    rd.onerror = () => { lagerFile.value = ''; fejl('Filen kunne ikke læses.'); };
+    rd.readAsText(f);
   });
 
   // ---------- import af salgstempo (JSON fra scripts/beregn_salgstempo.py) ----------
@@ -1562,6 +1606,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     rd.readAsText(f);
   });
 
-  renderAll();
+  renderAll(); showSyncState();
 })();
 </script>
