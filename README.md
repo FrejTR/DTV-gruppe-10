@@ -24,7 +24,18 @@ Eller åbn `src/v2/produktionskalender-v2.html` direkte i browseren (ingen serve
 
 ## Status
 - Eksempeldata og estimeret salgstempo pr. produkt (iteration 1 og 2).
-- Rackbeat-integration og fælles login er designet, men ikke bygget.
+- Salgstempo kan hentes direkte fra Rackbeat (se nedenfor). Lager og minimum i kalenderen og fælles login er designet, men ikke bygget.
+
+### Salgstempo fra Rackbeat
+Opret en API-nøgle i Rackbeat under *Firmaindstillinger > API* (adgang til ordrer er nok). Første gang kopieres `.env.example` til `.env`, og nøglen skrives efter `RACKBEAT_API_KEY=`. `.env` er i `.gitignore`, så nøglen kommer aldrig med i git. Derefter er det bare:
+```powershell
+python scripts/beregn_salgstempo.py --rackbeat
+```
+En miljøvariabel med samme navn går forud for `.env`, fx på en server.
+Scriptet henter alle ordrelinjer fra `GET /orders/lines` og skriver `output/salgstempo.json`, som importeres i V2 med *Importér salgstempo*. Forskelle fra den eksporterede fil:
+- Annullerede ordrer springes over.
+- Rackbeat har ingen salgskanal på ordrelinjerne, så event- og b2b-ordrer fjernes kun, hvis de er store enkeltordrer (punkt 5 nedenfor).
+- Antal er det bestilte antal, og datoen er ordredatoen.
 
 ### Salgstempo: hvad beregningen bygger på
 Scriptet `scripts/beregn_salgstempo.py` beregner et gennemsnitligt ugentligt salg pr. produkt (`rate`), som kalenderen bruger til at forudsige lagerets udvikling. Tallet er et estimat og bygger på disse antagelser:

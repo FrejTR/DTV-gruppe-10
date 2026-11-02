@@ -1,5 +1,6 @@
 """Test af salgstempo-beregningen. Kørsel: python -m pytest tests/"""
 import json
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -134,13 +135,12 @@ def test_hele_aaret_har_tal_i_alle_maaneder():
     assert None not in resultat(lav(*hver_uge()))["maanedlig"]
 
 
-def test_kn_3005_faar_null_i_november_trods_salg(tmp_path):
-    sti = tmp_path / "eksempel.csv"
-    lav_eksempeldata.lav_linjer(KOERSEL).to_csv(sti, index=False, sep=";")
-    linjer = ok.fil_kilde(sti, {**KOLONNER, "kanal": "Kanal"}).hent_ordrelinjer()
-    november = linjer[(linjer["sku"] == "KN-3005") & (linjer["dato"].dt.month == 11)]
+def test_nyt_produkt_faar_null_i_november_trods_salg():
+    # Lanceret i uge 34 (mandag 29. juni) og med salg på vinduets eneste novemberdag
+    linjer = lav(*hver_uge(antal=5, uger=18, fra=START + timedelta(weeks=34)), (SLUT, "A", 5))
+    november = linjer[linjer["dato"].dt.month == 11]
     assert november["antal"].sum() > 0  # Der er salg, men kun på én dag af vinduet
-    r = resultat(linjer, "KN-3005")
+    r = resultat(linjer)
     assert r["maanedlig"][10] is None
     assert r["maanedlig"][5] is None  # Juni: kun to dage efter første salg
     assert r["maanedlig"][9] is not None
@@ -315,29 +315,122 @@ def test_kilde_filtrerer_paa_datoer(tmp_path):
     assert len(ok.fil_kilde(sti, KOLONNER).hent_ordrelinjer(date(2026, 1, 6), date(2026, 1, 6))) == 1
 
 
-def test_rackbeat_kilde_er_en_stub(monkeypatch):
+# ---------- Rackbeat ----------
+
+def rb_linje(sku, antal, dato="2026-01-05", ordre=1, annulleret=False):
+    return {"item": {"number": sku} if sku else None, "quantities": {"ordered": antal, "shipped": 0},
+            "order": {"number": ordre, "order_date": dato, "status": {"is_cancelled": annulleret}}}
+
+
+def falsk_rackbeat(*sider, status=206):
+    """Svarer med én side ad gangen og gemmer de kaldte URL'er."""
+    kald = []
+
+    def hent(url, headers):
+        kald.append((url, headers))
+        side = int(re.search(r"page=(\d+)", url).group(1))
+        return status, {"order_lines": sider[side - 1], "pages": len(sider), "page": side}
+    return hent, kald
+
+
+def test_rackbeat_noegle_laeses_fra_miljoeet(monkeypatch):
     monkeypatch.setenv("RACKBEAT_API_KEY", "test")
-    kilde = ok.rackbeat_kilde()
-    assert kilde.api_noegle == "test"
-    with pytest.raises(NotImplementedError):
-        kilde.hent_ordrelinjer(date(2026, 1, 1), date(2026, 2, 1))
+    assert ok.rackbeat_kilde().api_noegle == "test"
+
+
+def test_rackbeat_uden_noegle_giver_tydelig_fejl(monkeypatch, tmp_path):
+    monkeypatch.delenv("RACKBEAT_API_KEY", raising=False)
+    with pytest.raises(ok.InputFejl, match="RACKBEAT_API_KEY"):
+        ok.rackbeat_kilde(env_fil=tmp_path / "findes-ikke").hent_ordrelinjer()
+
+
+def test_rackbeat_noegle_laeses_fra_env_fil(monkeypatch, tmp_path):
+    monkeypatch.delenv("RACKBEAT_API_KEY", raising=False)
+    env = tmp_path / ".env"
+    env.write_text("# kommentar\nANDEN=1\nRACKBEAT_API_KEY = \"fra-fil\"\n", encoding="utf-8")
+    assert ok.rackbeat_kilde(env_fil=env).api_noegle == "fra-fil"
+
+
+def test_miljoevariabel_gaar_forud_for_env_fil(monkeypatch, tmp_path):
+    monkeypatch.setenv("RACKBEAT_API_KEY", "fra-miljoe")
+    env = tmp_path / ".env"
+    env.write_text("RACKBEAT_API_KEY=fra-fil\n", encoding="utf-8")
+    assert ok.rackbeat_kilde(env_fil=env).api_noegle == "fra-miljoe"
+
+
+def test_tom_noegle_i_env_fil_taeller_som_manglende(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("RACKBEAT_API_KEY=\n", encoding="utf-8")
+    assert ok.laes_env("RACKBEAT_API_KEY", env) is None
+
+
+def test_rackbeat_henter_alle_sider_og_normaliserer():
+    hent, kald = falsk_rackbeat([rb_linje("A", 2), rb_linje("B", 1, ordre=2)], [rb_linje("A", 3, "2026-01-06")])
+    linjer = ok.rackbeat_kilde("hemmelig", hent=hent).hent_ordrelinjer()
+    assert len(kald) == 2
+    assert kald[0][1]["Authorization"] == "Bearer hemmelig"
+    assert list(linjer["sku"]) == ["A", "B", "A"]
+    assert list(linjer["antal"]) == [2.0, 1.0, 3.0]
+    assert list(linjer["ordre_id"]) == ["1", "2", "1"]
+    assert linjer["dato"].iloc[2] == pd.Timestamp(2026, 1, 6)
+
+
+def test_rackbeat_sender_datofilter():
+    hent, kald = falsk_rackbeat([])
+    ok.rackbeat_kilde("x", hent=hent).hent_ordrelinjer(date(2026, 1, 1), date(2026, 2, 1))
+    url = kald[0][0]
+    assert "order_date_from=2026-01-01+00%3A00%3A00" in url
+    assert "order_date_to=2026-02-01+23%3A59%3A59" in url
+
+
+def test_rackbeat_springer_annullerede_og_linjer_uden_vare_over():
+    hent, _ = falsk_rackbeat([rb_linje("A", 2, annulleret=True), rb_linje(None, 1), rb_linje("A", -1), rb_linje("A", 4)])
+    kilde = ok.rackbeat_kilde("x", hent=hent)
+    linjer = kilde.hent_ordrelinjer()
+    assert list(linjer["antal"]) == [4.0]
+    assert kilde.sprunget["annulleret ordre"] == 1
+    assert kilde.sprunget["uden SKU (fragt, rabat)"] == 1
+    assert kilde.sprunget["negativt antal (kreditnota, retur)"] == 1
+
+
+def test_rackbeat_venter_og_proever_igen_ved_429():
+    svar = [(429, None), (429, None), (206, {"order_lines": [rb_linje("A", 1)], "pages": 1})]
+    ventet = []
+    kilde = ok.rackbeat_kilde("x", hent=lambda url, h: svar.pop(0), vent=ventet.append)
+    assert len(kilde.hent_ordrelinjer()) == 1
+    assert ventet == [1, 2]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_rackbeat_afvist_noegle_giver_tydelig_fejl(status):
+    hent, _ = falsk_rackbeat([], status=status)
+    with pytest.raises(ok.InputFejl, match="afviste API-nøglen"):
+        ok.rackbeat_kilde("x", hent=hent).hent_ordrelinjer()
+
+
+def test_koer_med_rackbeat_kilde(tmp_path, capsys):
+    linjer = [rb_linje("HAT003", 5, str(START + timedelta(weeks=u)), ordre=u) for u in range(52)]
+    hent, _ = falsk_rackbeat(linjer)
+    res = bs.koer(None, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL, ok.rackbeat_kilde("x", hent=hent))
+    assert res["HAT003"]["rate"] == 5
+    assert "ingen salgskanal" in capsys.readouterr().out
 
 
 # ---------- output og hele kørslen ----------
 
 def test_v2_produktliste_laeses_fra_html():
     produkter = bs.laes_v2_produkter(V2)
-    assert len(produkter) == 18
-    assert produkter["KN-1001"] == {"navn": "Havtorn sæbe bar", "rate": 20.0}
-    assert produkter["KN-4001"]["rate"] == 6.0
+    assert len(produkter) == 17
+    assert produkter["HAT003"] == {"navn": "Havtorn sæbe bar", "rate": 20.0}
+    assert produkter["HAA001"]["rate"] == 6.0
 
 
 def test_sku_uden_salg_rapporteres_og_kommer_ikke_i_json(tmp_path, capsys):
-    sti = skriv_csv(tmp_path, f"Ordredato;Varenr.;Antal\n{(START + timedelta(days=1)).strftime('%d-%m-%Y')};KN-1001;5\n")
+    sti = skriv_csv(tmp_path, f"Ordredato;Varenr.;Antal\n{(START + timedelta(days=1)).strftime('%d-%m-%Y')};HAT003;5\n")
     res = bs.koer(sti, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL)
-    assert res["KN-1002"]["rate"] is None and "ingen_salg" in res["KN-1002"]["flag"]
+    assert res["HYB003"]["rate"] is None and "ingen_salg" in res["HYB003"]["flag"]
     data = json.loads((tmp_path / "ud" / "salgstempo.json").read_text(encoding="utf-8"))
-    assert "KN-1001" in data and "KN-1002" not in data
+    assert "HAT003" in data and "HYB003" not in data
     assert "uden løbende salg" in capsys.readouterr().out
 
 
@@ -393,14 +486,14 @@ def test_json_og_csv_gemmer_fuld_praecision(tmp_path):
 
 
 def test_rapporten_afrunder_uden_at_aendre_resultatet(tmp_path, capsys):
-    uger = hver_uge(antal=5, uger=44) + [(START + timedelta(days=7 * (44 + i)), "KN-1001", v)
+    uger = hver_uge(antal=5, uger=44) + [(START + timedelta(days=7 * (44 + i)), "HAT003", v)
                                         for i, v in enumerate([0, 1, 0, 0, 1, 0, 2, 1])]
-    linjer = lav(*[(d, "KN-1001", a) for d, _, a in uger])
+    linjer = lav(*[(d, "HAT003", a) for d, _, a in uger])
     sti = tmp_path / "ordrer.csv"
     linjer.assign(dato=linjer["dato"].dt.strftime("%d-%m-%Y")).rename(
         columns={"dato": "Ordredato", "sku": "Varenr.", "antal": "Antal"})[["Ordredato", "Varenr.", "Antal"]].to_csv(sti, index=False, sep=";")
     res = bs.koer(sti, 52, _mapping(tmp_path), V2, tmp_path / "ud", KOERSEL)
-    assert res["KN-1001"]["seneste8"] == 0.625
+    assert res["HAT003"]["seneste8"] == 0.625
     assert " 0,63 " in capsys.readouterr().out
 
 
@@ -417,19 +510,19 @@ def test_json_format_og_csv_paa_eksempeldata(tmp_path):
 
     data = json.loads((tmp_path / "ud" / "salgstempo.json").read_text(encoding="utf-8"))
     assert set(lav_eksempeldata.GRUNDSALG) <= set(data)
-    post = data["KN-1001"]
+    post = data["HAT003"]
     assert {"rate", "maanedlig", "seneste8", "beregnet", "vindue_uger", "sikkerhed", "flag"} <= set(post)
     assert len(post["maanedlig"]) == 12 and post["beregnet"] == "2026-11-02" and post["vindue_uger"] == 52
     # De indbyggede situationer i eksempeldata skal kunne genfindes
     assert post["engangsordrer_stk"] >= 180
-    assert data["KN-1002"]["engangsordrer_stk"] >= 40
-    assert "muligt_udsolgt" in data["KN-2002"]["flag"]
-    assert "lavt_salg" in data["KN-1006"]["flag"] and "muligt_udsolgt" not in data["KN-1006"]["flag"]
-    assert "kort_historik" in data["KN-3005"]["flag"]
+    assert data["HYB003"]["engangsordrer_stk"] >= 40
+    assert "muligt_udsolgt" in data["HYB001"]["flag"]
+    assert "lavt_salg" in data["LAN002"]["flag"] and "muligt_udsolgt" not in data["LAN002"]["flag"]
+    assert "kort_historik" in data["NEU002"]["flag"]
 
     tabel = pd.read_csv(tmp_path / "ud" / "salgstempo.csv", sep=";", dtype=str, encoding="utf-8-sig")
     assert {"estimat_nu", "beregnet", "afvigelse_pct", "beregnet_dato"} <= set(tabel.columns)
-    assert len(tabel) == 19  # 18 produkter og KN-9999
+    assert len(tabel) == 18  # 17 produkter og KN-9999
 
 
 def test_eksempeldata_er_reproducerbare():

@@ -2,12 +2,16 @@
 
 Alle kilder har samme interface: hent_ordrelinjer(fra_dato, til_dato) returnerer
 en DataFrame med kolonnerne dato, sku, antal, kanal og ordre_id. Beregningen kender
-kun det interface, så filen senere kan skiftes ud med Rackbeat-API'en.
+kun det interface, så en eksporteret fil og Rackbeat-API'en kan bruges på samme måde.
 """
 import io
 import json
 import os
 import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
@@ -196,24 +200,107 @@ class fil_kilde:
         return l.copy()
 
 
-class rackbeat_kilde:
-    """Tom stub til Rackbeat-API'en. Ikke bygget endnu.
+ENV_FIL = Path(__file__).resolve().parent.parent / ".env"
 
-    UVERIFICERET: endpoints, feltnavne og godkendelse er ikke slået op. De skal
-    findes på developer.rackbeat.com og må ikke gættes.
-    Beregningen skal kende produktets første salg, så stubben skal også kunne hente
-    historik fra før vinduet (fra_dato=None).
+
+def laes_env(navn, sti=ENV_FIL):
+    """Læser én værdi fra .env-filen (NAVN=værdi). Returnerer None, hvis den ikke findes."""
+    sti = Path(sti)
+    if not sti.exists():
+        return None
+    for linje in sti.read_text(encoding="utf-8-sig").splitlines():
+        noegle, lig, vaerdi = linje.strip().removeprefix("export ").partition("=")
+        if lig and noegle.strip() == navn:
+            vaerdi = vaerdi.strip()
+            if len(vaerdi) >= 2 and vaerdi[0] == vaerdi[-1] and vaerdi[0] in "\"'":
+                vaerdi = vaerdi[1:-1]
+            return vaerdi or None
+    return None
+
+
+def _hent_json(url, headers, timeout=30):
+    """Henter én side fra API'en. Returnerer (statuskode, JSON)."""
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as svar:
+            return svar.status, json.loads(svar.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return e.code, None
+    except urllib.error.URLError as e:
+        raise InputFejl(f"Ingen forbindelse til Rackbeat: {e.reason}") from e
+
+
+class rackbeat_kilde:
+    """Ordrelinjer fra Rackbeat-API'en (GET /orders/lines).
+
+    Slået op på developer.rackbeat.com (november 2026): Bearer-nøgle i Authorization,
+    sider med page/limit og felterne pages og order_lines i svaret, højst 480 kald i minuttet.
+    Datoen er ordredatoen (order.order_date) og antallet er det bestilte (quantities.ordered),
+    som i den eksporterede fil. Annullerede ordrer springes over.
+    Rackbeat-linjer har ingen salgskanal, så kanal er tom.
     """
 
-    API_NOEGLE_VARIABEL = "RACKBEAT_API_KEY"  # Nøglen læses kun fra miljøet, aldrig fra kode eller commit
-    ENDPOINT_ORDRER = None  # UVERIFICERET: se developer.rackbeat.com
+    # Nøglen læses fra miljøet eller fra .env (som ikke er i git), aldrig fra kode eller commit.
+    # Miljøvariablen går forud, så en server kan sætte den uden en .env-fil.
+    API_NOEGLE_VARIABEL = "RACKBEAT_API_KEY"
+    BASIS_URL = "https://app.rackbeat.com/api"
+    ENDPOINT_ORDRER = "/orders/lines"
+    PR_SIDE = 100
+    FORSOEG_VED_429 = 5
 
-    def __init__(self):
-        self.api_noegle = os.environ.get(self.API_NOEGLE_VARIABEL)
+    def __init__(self, api_noegle=None, hent=_hent_json, vent=time.sleep, env_fil=ENV_FIL):
+        self.api_noegle = (api_noegle or os.environ.get(self.API_NOEGLE_VARIABEL)
+                           or laes_env(self.API_NOEGLE_VARIABEL, env_fil))
+        self._hent, self._vent = hent, vent
         self.sprunget = Counter()
-        self.advarsler = []
+        self.advarsler = ["Rackbeat har ingen salgskanal på ordrelinjerne. Event- og b2b-ordrer "
+                          "frasorteres derfor kun, hvis de er store enkeltordrer."]
+
+    def _side(self, params):
+        url = self.BASIS_URL + self.ENDPOINT_ORDRER + "?" + urllib.parse.urlencode(params)
+        headers = {"Authorization": f"Bearer {self.api_noegle}", "Accept": "application/json",
+                   "Content-Type": "application/json"}
+        for forsoeg in range(self.FORSOEG_VED_429 + 1):
+            status, data = self._hent(url, headers)
+            if status != 429:
+                break
+            self._vent(2 ** forsoeg)
+        if status in (401, 403):
+            raise InputFejl(f"Rackbeat afviste API-nøglen (HTTP {status}). Tjek {self.API_NOEGLE_VARIABEL}, "
+                            "og at nøglen har adgang til ordrer.")
+        if status == 429:
+            raise InputFejl("Rackbeat svarer stadig 429 (for mange kald). Prøv igen om et minut.")
+        if not 200 <= status < 300 or not isinstance(data, dict):
+            raise InputFejl(f"Uventet svar fra Rackbeat (HTTP {status}).")
+        return data
 
     def hent_ordrelinjer(self, fra_dato=None, til_dato=None):
-        raise NotImplementedError(
-            "Rackbeat-kilden er ikke bygget endnu. Brug en eksporteret fil (--fil)."
-        )
+        """Returnerer linjer mellem datoerne (begge inklusive). None betyder ingen grænse."""
+        if not self.api_noegle:
+            raise InputFejl(f"Ingen Rackbeat-nøgle fundet. Kopiér .env.example til .env, og skriv nøglen efter "
+                            f"{self.API_NOEGLE_VARIABEL}=. Nøglen oprettes i Rackbeat under Firmaindstillinger > API.")
+        params = {"limit": self.PR_SIDE}
+        if fra_dato is not None:
+            params["order_date_from"] = f"{pd.Timestamp(fra_dato):%Y-%m-%d} 00:00:00"
+        if til_dato is not None:
+            params["order_date_to"] = f"{pd.Timestamp(til_dato):%Y-%m-%d} 23:59:59"
+
+        raekker, side, sider = [], 1, 1
+        while side <= sider:
+            data = self._side({**params, "page": side})
+            sider = int(data.get("pages") or 0)
+            for l in data.get("order_lines") or []:
+                ordre = l.get("order") or {}
+                if (ordre.get("status") or {}).get("is_cancelled"):
+                    self.sprunget["annulleret ordre"] += 1
+                    continue
+                raekker.append({"dato": ordre.get("order_date"), "sku": (l.get("item") or {}).get("number"),
+                                "antal": (l.get("quantities") or {}).get("ordered"), "kanal": None,
+                                "ordre_id": ordre.get("number")})
+            side += 1
+
+        raa = pd.DataFrame(raekker, columns=["dato", "sku", "antal", "kanal", "ordre_id"], dtype=object)
+        linjer, sprunget, advarsler = normaliser(raa, {f: f for f in (*PAAKRAEVEDE, *VALGFRIE)})
+        self.sprunget.update(sprunget)
+        self.advarsler.extend(advarsler)
+        return linjer
