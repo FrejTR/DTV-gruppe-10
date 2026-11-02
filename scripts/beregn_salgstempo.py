@@ -1,6 +1,7 @@
 """Beregner salgstempo pr. produkt ud fra ordrehistorik.
 
 Kørsel: python scripts/beregn_salgstempo.py --fil data/ordrehistorik.xlsx --uger 52
+Eller direkte fra Rackbeat: python scripts/beregn_salgstempo.py --rackbeat (kræver RACKBEAT_API_KEY)
 Antagelserne bag beregningen står i README.md.
 """
 import argparse
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ordrekilder import InputFejl, fil_kilde, laes_kolonner
+from ordrekilder import InputFejl, fil_kilde, laes_kolonner, rackbeat_kilde
 
 ROD = Path(__file__).resolve().parent.parent
 ENGANGS_KANALER = {"event", "b2b"}
@@ -293,11 +294,13 @@ def tekstrapport(resultater, produkter, sprunget, advarsler, start, slut, uden_f
     return "\n".join(t)
 
 
-def koer(fil, uger, kolonner_sti, v2_sti, ud_mappe, koerselsdato):
+def koer(fil, uger, kolonner_sti, v2_sti, ud_mappe, koerselsdato, kilde=None):
+    """Bruger filen, eller kilden (fx Rackbeat), hvis den er givet."""
     if uger < 1:
         raise InputFejl("--uger skal være mindst 1.")
     produkter = laes_v2_produkter(v2_sti)
-    kilde = fil_kilde(fil, laes_kolonner(kolonner_sti))
+    if kilde is None:
+        kilde = fil_kilde(fil, laes_kolonner(kolonner_sti))
     start, slut = vindue(koerselsdato, uger)
     # Hele historikken hentes, fordi første salg kan ligge før vinduet
     linjer = kilde.hent_ordrelinjer(None, None)
@@ -319,7 +322,9 @@ def koer(fil, uger, kolonner_sti, v2_sti, ud_mappe, koerselsdato):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="Beregner salgstempo pr. produkt ud fra ordrehistorik.")
-    p.add_argument("--fil", required=True, help="CSV- eller XLSX-fil med ordrelinjer")
+    k = p.add_mutually_exclusive_group(required=True)
+    k.add_argument("--fil", help="CSV- eller XLSX-fil med ordrelinjer")
+    k.add_argument("--rackbeat", action="store_true", help="hent ordrelinjer fra Rackbeat (nøgle i RACKBEAT_API_KEY)")
     p.add_argument("--uger", type=int, default=52, help="antal hele uger i vinduet (standard 52)")
     p.add_argument("--kolonner", default=ROD / "config" / "kolonner.json", help="kolonnemapping (JSON)")
     p.add_argument("--v2", default=ROD / "src" / "v2" / "produktionskalender-v2.html", help="V2's HTML-fil")
@@ -327,7 +332,8 @@ def main(argv=None):
     p.add_argument("--dato", type=date.fromisoformat, default=None, help="kørselsdato (YYYY-MM-DD), standard i dag")
     a = p.parse_args(argv)
     try:
-        koer(a.fil, a.uger, a.kolonner, a.v2, a.ud, a.dato or date.today())
+        kilde = rackbeat_kilde() if a.rackbeat else None
+        koer(a.fil, a.uger, a.kolonner, a.v2, a.ud, a.dato or date.today(), kilde)
     except InputFejl as e:
         print(f"FEJL: {e}", file=sys.stderr)
         return 2
