@@ -11,5 +11,8 @@
   "devDependencies": {
     "http-server": "^14.1.1",
     "playwright": "^1.48.0"
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.11.0"
   }
 }

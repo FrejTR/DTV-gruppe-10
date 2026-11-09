@@ -3,6 +3,9 @@ node_modules/
 .DS_Store
 tests/out/
 .env
+# Vercel: lokale indstillinger og byggeoutput
+.vercel
+.env*.local
 .Rhistory
 __pycache__/
 .pytest_cache/
