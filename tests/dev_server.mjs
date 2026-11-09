@@ -1,6 +1,6 @@
 // Lokal server til udvikling: serverer src/ og kører de rigtige handlers i api/ uden Vercel-konto.
 // Kørsel: node tests/dev_server.mjs [port]   (standard 8788)
-// Variabler læses fra .env i projektroden (eller fra miljøet): RACKBEAT_API_KEY, RACKBEAT_LAGER_KEY, RACKBEAT_SKRIV_KEY,
+// Variabler læses fra .env i projektroden (eller fra miljøet): RACKBEAT_API_KEY, RACKBEAT_SKRIV_KEY,
 // RACKBEAT_BASE_URL (peg på mocken: node tests/mock_rackbeat.js) og SALGSTEMPO_MAX_SIDER.
 // Serveren lytter kun på 127.0.0.1 og har ingen login. Brug den kun lokalt.
 import http from 'node:http';

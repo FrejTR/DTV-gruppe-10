@@ -9,7 +9,6 @@ import { _nulstil as nulstilCache } from '../functions/_lib/cache.js';
 import { erLokalUdvikling, lokaleDeps } from '../functions/_lib/lokal.js';
 
 const NOEGLE = 'hemmelig-test-noegle-123';
-const LAGER_NOEGLE = 'hemmelig-lager-noegle-456';
 const SKRIV_NOEGLE = 'hemmelig-skrive-noegle-789';
 const ENV = { RACKBEAT_API_KEY: NOEGLE };
 const URL_PROD = 'https://kalender.example.com/api/status';
@@ -61,14 +60,14 @@ afterEach(() => { console.error = originalError; });
 const krop = async svar => JSON.parse(await svar.clone().text());
 async function ingenHemmeligheder(svar) {
   const tekst = await svar.clone().text();
-  for (const s of [NOEGLE, LAGER_NOEGLE, SKRIV_NOEGLE, 'Hemmelig Kunde', 'Bearer']) {
+  for (const s of [NOEGLE, SKRIV_NOEGLE, 'Hemmelig Kunde', 'Bearer']) {
     assert.ok(!tekst.includes(s), `svaret indeholder ${s}`);
     assert.ok(!logs.join('\n').includes(s), `loggen indeholder ${s}`);
   }
 }
 
 // ---------- /api/status ----------
-test('status: format, lager og salg pr. sku og dag uden persondata', async () => {
+test('status: format og lager pr. varenummer', async () => {
   const rb = falskRackbeat();
   const svar = await status(ctx(), deps(rb));
   assert.equal(svar.status, 200);
@@ -76,40 +75,25 @@ test('status: format, lager og salg pr. sku og dag uden persondata', async () =>
   assert.deepEqual(Object.keys(b).sort(), ['data', 'forældet', 'hentet', 'kilde']);
   assert.equal(b.kilde, 'rackbeat'); assert.equal(b.forældet, false);
   assert.equal(b.hentet, new Date(NU).toISOString());
-  assert.deepEqual(b.data.lager, { HAT003: 62, TAN001: -3 });
-  assert.equal(b.data.lagerStatus, 'ok');
-  // Annulleret, uden varenummer og negativt antal er sorteret fra
-  assert.deepEqual(b.data.salg, { HAT003: { '2026-11-02': 5 }, TAN001: { '2026-10-30': 1 } });
-  assert.equal(b.data.salgFra, '2026-10-28'); assert.equal(b.data.salgTil, '2026-11-03');
+  assert.deepEqual(b.data, { lager: { HAT003: 62, TAN001: -3 }, lagerStatus: 'ok' });
   await ingenHemmeligheder(svar);
 });
 
-test('status: kun GET mod faste Rackbeat-adresser med Bearer-nøgle', async () => {
+test('status: kun ét GET-kald til produkter med Bearer-nøgle, ingen ordrer', async () => {
   const rb = falskRackbeat();
   await status(ctx(), deps(rb));
-  assert.ok(rb.kald.length > 0);
-  for (const k of rb.kald) {
-    assert.equal(k.metode, 'GET');
-    assert.equal(k.auth, `Bearer ${NOEGLE}`);
-    assert.match(k.url, /^https:\/\/app\.rackbeat\.com\/api\/(orders\/lines|products)\?/);
-  }
-  const ordre = new URL(rb.kald.find(k => k.url.includes('/orders/lines')).url);
-  assert.equal(ordre.searchParams.get('order_date_from'), '2026-10-28 00:00:00');
-  assert.equal(ordre.searchParams.get('order_date_to'), '2026-11-03 23:59:59');
-  assert.equal(new URL(rb.kald.find(k => k.url.includes('/products')).url).searchParams.get('fields'), 'number,stock_quantity');
+  assert.equal(rb.kald.length, 1);
+  const [k] = rb.kald;
+  assert.equal(k.metode, 'GET');
+  assert.equal(k.auth, `Bearer ${NOEGLE}`);
+  assert.match(k.url, /^https:\/\/app\.rackbeat\.com\/api\/products\?/);
+  assert.equal(new URL(k.url).searchParams.get('fields'), 'number,stock_quantity');
 });
 
 test('status: klienten kan ikke styre Rackbeat-sti eller adresse', async () => {
   const rb = falskRackbeat();
   await status(ctx(ENV, URL_PROD + '?sti=/customers&url=https://ondt.example&page=9'), deps(rb));
-  assert.ok(rb.kald.every(k => k.url.startsWith('https://app.rackbeat.com/api/') && !k.url.includes('customers') && !k.url.includes('ondt')));
-});
-
-test('status: separat lagernøgle bruges kun til lager', async () => {
-  const rb = falskRackbeat();
-  await status(ctx({ ...ENV, RACKBEAT_LAGER_KEY: LAGER_NOEGLE }), deps(rb));
-  assert.equal(rb.kald.find(k => k.url.includes('/products')).auth, `Bearer ${LAGER_NOEGLE}`);
-  assert.equal(rb.kald.find(k => k.url.includes('/orders')).auth, `Bearer ${NOEGLE}`);
+  assert.ok(rb.kald.every(k => k.url.startsWith('https://app.rackbeat.com/api/products?') && !k.url.includes('ondt')));
 });
 
 test('status: manglende nøgle giver 503', async () => {
@@ -121,27 +105,26 @@ test('status: manglende nøgle giver 503', async () => {
 test('status: cache. Andet kald inden for 20 sekunder rammer ikke Rackbeat', async () => {
   const rb = falskRackbeat();
   await status(ctx(), deps(rb));
-  const foer = rb.kald.length;
   ur = NU + STATUS_TTL_MS - 1;
   const b = await krop(await status(ctx(), deps(rb)));
-  assert.equal(rb.kald.length, foer);
+  assert.equal(rb.kald.length, 1);
   assert.equal(b.hentet, new Date(NU).toISOString());
   ur = NU + STATUS_TTL_MS;
   await status(ctx(), deps(rb));
-  assert.ok(rb.kald.length > foer);
+  assert.equal(rb.kald.length, 2);
 });
 
 test('status: samtidige kald giver kun én hentning', async () => {
   const rb = falskRackbeat();
   await Promise.all([1, 2, 3, 4, 5].map(() => status(ctx(), deps(rb))));
-  assert.equal(rb.kald.length, 2);   // én side ordrelinjer og én side produkter
+  assert.equal(rb.kald.length, 1);
 });
 
-for (const kode of [401, 403, 404, 429, 500, 502, 503]) {
+for (const kode of [401, 404, 429, 500, 502, 503]) {
   test(`status: Rackbeat ${kode} giver gemt version som forældet`, async () => {
     await status(ctx(), deps(falskRackbeat()));
     ur = NU + 60 * 1000;
-    const svar = await status(ctx(), deps(falskRackbeat({ order_linesStatus: kode })));
+    const svar = await status(ctx(), deps(falskRackbeat({ productsStatus: kode })));
     assert.equal(svar.status, 200);
     const b = await krop(svar);
     assert.equal(b.forældet, true);
@@ -151,7 +134,7 @@ for (const kode of [401, 403, 404, 429, 500, 502, 503]) {
   });
 
   test(`status: Rackbeat ${kode} uden gemt version giver kort fejl`, async () => {
-    const svar = await status(ctx(), deps(falskRackbeat({ order_linesStatus: kode })));
+    const svar = await status(ctx(), deps(falskRackbeat({ productsStatus: kode })));
     assert.equal(svar.status, 502);
     const b = await krop(svar);
     assert.equal(b.data, null); assert.equal(b.forældet, true);
@@ -160,6 +143,15 @@ for (const kode of [401, 403, 404, 429, 500, 502, 503]) {
   });
 }
 
+test('status: 403 (nøglen mangler adgang til produkter) gives som lagerStatus, ikke som fejl', async () => {
+  const svar = await status(ctx(), deps(falskRackbeat({ productsStatus: 403 })));
+  assert.equal(svar.status, 200);
+  const b = await krop(svar);
+  assert.equal(b.forældet, false);
+  assert.deepEqual(b.data, { lager: null, lagerStatus: 'mangler_adgang' });
+  await ingenHemmeligheder(svar);
+});
+
 test('status: netværksfejl giver gemt version', async () => {
   await status(ctx(), deps(falskRackbeat()));
   ur = NU + 60 * 1000;
@@ -167,32 +159,15 @@ test('status: netværksfejl giver gemt version', async () => {
   assert.equal(b.forældet, true);
 });
 
-test('status: lager 403 (nøglen har kun ordreadgang) giver resten af data', async () => {
-  const svar = await status(ctx(), deps(falskRackbeat({ productsStatus: 403 })));
-  assert.equal(svar.status, 200);
-  const b = await krop(svar);
-  assert.equal(b.forældet, false);
-  assert.equal(b.data.lager, null);
-  assert.equal(b.data.lagerStatus, 'mangler_adgang');
-  assert.deepEqual(Object.keys(b.data.salg), ['HAT003', 'TAN001']);
-});
-
-test('status: lager 500 behandles som fejl, ikke som manglende adgang', async () => {
-  const svar = await status(ctx(), deps(falskRackbeat({ productsStatus: 500 })));
-  assert.equal(svar.status, 502);
-});
-
 test('status: paginering henter alle sider', async () => {
-  const rb = falskRackbeat({ order_lines: [[linje('A', 1, '2026-11-01', 1)], [linje('A', 2, '2026-11-01', 2)], [linje('B', 4, '2026-11-02', 3)]] });
+  const rb = falskRackbeat({ products: [[{ number: 'A', stock_quantity: 1 }], [{ number: 'B', stock_quantity: 2 }], [{ number: 'C', stock_quantity: 3 }]] });
   const b = await krop(await status(ctx(), deps(rb)));
-  assert.deepEqual(b.data.salg, { A: { '2026-11-01': 3 }, B: { '2026-11-02': 4 } });
-  assert.deepEqual(rb.kald.filter(k => k.url.includes('/orders')).map(k => new URL(k.url).searchParams.get('page')), ['1', '2', '3']);
+  assert.deepEqual(b.data.lager, { A: 1, B: 2, C: 3 });
+  assert.deepEqual(rb.kald.map(k => new URL(k.url).searchParams.get('page')), ['1', '2', '3']);
 });
 
-test('status: tom side giver tomme data uden fejl', async () => {
-  const rb = falskRackbeat({ order_lines: [[]], products: [[]] });
-  const b = await krop(await status(ctx(), deps(rb)));
-  assert.deepEqual(b.data.salg, {});
+test('status: tom side giver tomt lager uden fejl', async () => {
+  const b = await krop(await status(ctx(), deps(falskRackbeat({ products: [[]] }))));
   assert.deepEqual(b.data.lager, {});
 });
 
@@ -313,7 +288,7 @@ async function medFalskFetch(opgave) {
 }
 
 test('ruter: GET /api/status henter fra Rackbeat med nøglen fra miljøet', async () => {
-  const kald = await medFalskFetch(() => medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_LAGER_KEY: undefined, RACKBEAT_BASE_URL: undefined },
+  const kald = await medFalskFetch(() => medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_BASE_URL: undefined },
     () => statusRute.GET(new Request('https://kalender.example.com/api/status'))));
   assert.ok(kald.length > 0);
   assert.ok(kald.every(k => k.metode === 'GET' && k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/')));
@@ -351,7 +326,7 @@ test('lokal: RACKBEAT_BASE_URL virker kun uden for Vercel og kun fra localhost',
 
 // ---------- POST /api/lagerregulering ----------
 const URL_REG = 'https://kalender.example.com/api/lagerregulering';
-const REG_ENV = { RACKBEAT_API_KEY: NOEGLE, RACKBEAT_LAGER_KEY: LAGER_NOEGLE, RACKBEAT_SKRIV_KEY: SKRIV_NOEGLE };
+const REG_ENV = { RACKBEAT_API_KEY: NOEGLE, RACKBEAT_SKRIV_KEY: SKRIV_NOEGLE };
 const GYLDIG = { sku: 'HAT003', antal: 63, batch: 43, reference: 'b43-1a2b3c4d' };
 
 function regAnmodning(krop = GYLDIG, { origin = 'https://kalender.example.com', type = 'application/json' } = {}) {
@@ -392,9 +367,9 @@ test('lagerregulering: lægger antallet til på Hovedlager i kategorien Produkti
   await ingenHemmeligheder(svar);
 });
 
-test('lagerregulering: uden RACKBEAT_SKRIV_KEY skrives intet, heller ikke med læsenøglerne', async () => {
+test('lagerregulering: uden RACKBEAT_SKRIV_KEY skrives intet, heller ikke med læsenøglen', async () => {
   const rb = falskSkriv();
-  const svar = await lagerregulering({ request: regAnmodning(), env: { RACKBEAT_API_KEY: NOEGLE, RACKBEAT_LAGER_KEY: LAGER_NOEGLE } }, deps(rb));
+  const svar = await lagerregulering({ request: regAnmodning(), env: { RACKBEAT_API_KEY: NOEGLE } }, deps(rb));
   assert.equal(svar.status, 503);
   assert.equal(rb.kald.length, 0);
 });

@@ -1,5 +1,5 @@
-// Salgstempo pr. varenummer. Port af scripts/beregn_salgstempo.py med samme regler,
-// så serveren og scriptet giver samme tal (se tests/salgstempo_paritet.test.mjs).
+// Salgstempo pr. varenummer. Oprindeligt porteret fra et Python-script (nu slettet) med samme regler.
+// tests/salgstempo_paritet.test.mjs sammenligner med facit fra scriptet.
 // Datoer regnes som dagnumre (dage siden 1970-01-01), så tidszoner ikke spiller ind.
 
 const ENGANGS_KANALER = new Set(['event', 'b2b']);
@@ -172,7 +172,7 @@ export function beregnAlle(linjer, koerselsdato, uger = 52) {
   return ud;
 }
 
-/** Felterne, V2 importerer. Uden løbende salg er der intet tempo, så V2 beholder sit estimat. */
+/** Felterne, V2 bruger. Uden løbende salg er der intet tempo, og produktet kommer ikke med. */
 export function tilKlient(resultater, koerselsdato) {
   const ud = {};
   for (const [sku, r] of Object.entries(resultater)) {

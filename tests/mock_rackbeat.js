@@ -1,5 +1,5 @@
 // Lokal mock af Rackbeat til udvikling og test uden rigtig nøgle.
-// Leverer GET /orders/lines og GET /products i samme format som Rackbeat ud fra data/eksempel_ordrehistorik.csv,
+// Leverer GET /orders/lines og GET /products i samme format som Rackbeat ud fra tests/fixtures/eksempel_ordrehistorik.csv,
 // og GET/POST /inventory-adjustments. En regulering ændrer mockens lager, så den ses i næste GET /products.
 // Kørsel: node tests/mock_rackbeat.js [port]   (standard 8790)
 // MOCK_NOEGLE (standard "lokal-test") er den nøgle, mocken godtager. MOCK_LAGER_STATUS=403 efterligner en nøgle uden lageradgang.
@@ -11,7 +11,7 @@ const PORT = Number(process.argv[2] || 8790);
 const NOEGLE = process.env.MOCK_NOEGLE || 'lokal-test';
 const LAGER_STATUS = Number(process.env.MOCK_LAGER_STATUS || 0);
 
-const [hoved, ...raekker] = fs.readFileSync(path.join(__dirname, '..', 'data', 'eksempel_ordrehistorik.csv'), 'utf-8')
+const [hoved, ...raekker] = fs.readFileSync(path.join(__dirname, 'fixtures', 'eksempel_ordrehistorik.csv'), 'utf-8')
   .replace(/^﻿/, '').trim().split(/\r?\n/);
 const navne = hoved.split(';');
 // Datoerne flyttes, så den nyeste ordre ligger i går. Så ser data friske ud, uanset hvornår mocken startes.

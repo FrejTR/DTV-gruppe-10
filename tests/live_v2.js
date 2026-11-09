@@ -6,7 +6,8 @@ const fs = require('fs');
 const path = require('path');
 
 const V2 = '/v2/produktionskalender-v2.html';
-const KEY = 'kystnaer-produktionskalender-v2-onepager-i';
+const KEY = 'kystnaer-produktionskalender-v2-onepager-j';
+const GAMMEL_KEY = 'kystnaer-produktionskalender-v2-onepager-i';
 // Uret starter på det rigtige tidspunkt, så testserverens "hentet" og sidens dato er samme dag
 const START = new Date();
 
@@ -18,8 +19,9 @@ const api = { status: null, salgstempo: null, ingenApi: false };
 const hits = { status: 0, salgstempo: 0 };
 const ok = (data, extra) => ({ code: 200, body: { data, hentet: new Date().toISOString(), forældet: false, kilde: 'rackbeat', ...extra } });
 const LAGER = { HAT003: 62, TAN001: 100, HAT001: 50 };
-const statusOk = (lager = LAGER, extra) => ok({ lager, lagerStatus: 'ok', salg: {}, salgFra: '2026-10-28', salgTil: '2026-11-03' }, extra);
-const TEMPO = { HAT003: { rate: 12.345, maanedlig: Array(12).fill(12), seneste8: 13, beregnet: '2026-11-03', vindue_uger: 52, sikkerhed: 'høj', flag: ['muligt_udsolgt'] } };
+const statusOk = (lager = LAGER, extra) => ok({ lager, lagerStatus: 'ok' }, extra);
+const tempo = (rate, flag = [], sikkerhed = 'høj') => ({ rate, maanedlig: Array(12).fill(rate), seneste8: rate, beregnet: '2026-11-03', vindue_uger: 52, sikkerhed, flag });
+const TEMPO = { HAT003: tempo(12.345, ['muligt_udsolgt']), LAN002: tempo(0.6, ['lavt_salg'], 'lav'), HYB003: tempo(15, [], 'middel') };
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -78,6 +80,30 @@ async function ventPaa(fn, ms = 3000) {
   api.status = () => statusOk(); api.salgstempo = () => ok(TEMPO);
   let { p, ctx, errs } = await aaben();
   await naarHits('status', 1); await naarHits('salgstempo', 1);
+  await ventPaa(() => p.evaluate(k => localStorage.getItem(k) !== null, KEY));
+
+  // ---------- starttilstand: ingen opdigtede batches, reservationer eller personer ----------
+  let st = await state(p);
+  check('start: ingen batches, reservationer eller personer', st.batches.length === 0 && st.res.length === 0 && st.people.length === 0 && st.nextNo === 1, JSON.stringify({ b: st.batches.length, r: st.res.length, pe: st.people }));
+  check('start: 17 produkter med Rackbeats varenumre', st.products.length === 17 && st.products.every(x => /^[A-Z]{3}\d{3}$/.test(x.sku)));
+  check('start: intet estimeret salgstempo', st.products.filter(x => !Object.keys(TEMPO).includes(x.sku)).every(x => x.rate === 0));
+  check('start: ingen import- eller nulstil-knapper', await p.$('#btnImport') === null && await p.$('#btnSync') === null && await p.$('#btnReset') === null);
+  // Data under den gamle nøgle (med eksempelbatches) bruges ikke
+  await p.evaluate(([gammel, k]) => { localStorage.setItem(gammel, JSON.stringify({ products: [{ id: 'x', name: 'X', sku: 'X', type: 'Andet', min: 1, rate: 1, count: 1, batch: 1, cure: 1, countDate: '2026-01-01', steps: [] }], batches: [{ no: 31, pid: 'x', qty: 1, made: '2026-01-01', cure: 1, status: 'aktiv' }], res: [], people: ['Lena'] })); localStorage.removeItem(k); }, [GAMMEL_KEY, KEY]);
+  hits.status = hits.salgstempo = 0;
+  await p.reload(); await p.evaluate(() => { document.getElementById('sec-produkter').open = true; });
+  await naarHits('status', 1); await naarHits('salgstempo', 1);
+  await ventPaa(() => p.evaluate(k => localStorage.getItem(k) !== null, KEY));
+  st = await state(p);
+  check('gamle data ignoreres', st.batches.length === 0 && st.products.length === 17 && !st.people.includes('Lena'));
+  // Første batch uden personer: feltet til nyt navn vises, og batchen får nr. 1
+  await p.click('#btnNewBatch');
+  check('uden personer: feltet til nyt navn vises', await p.$eval('#bWho', el => el.value) === '__new' && await p.$eval('#bWhoNew', el => !el.hidden));
+  await p.fill('#bWhoNew', 'Testperson');
+  await p.click('#bSubmit');
+  await ventPaa(async () => (await state(p)).batches.length === 1);
+  st = await state(p);
+  check('første batch registreres med nr. 1 og navnet gemmes', st.batches.length === 1 && st.batches[0].no === 1 && st.people.join() === 'Testperson', JSON.stringify(st.batches));
   await ventPaa(async () => (await pill(p)).cls === 'ok');
   let s = await pill(p);
   check('start: status og salgstempo hentes straks', hits.status === 1 && hits.salgstempo === 1, JSON.stringify(hits));
@@ -85,9 +111,17 @@ async function ventPaa(fn, ms = 3000) {
   check('lager fra Rackbeat vises', await lager(p, 'havtorn-saebe') === '62');
   const txt = await prodText(p);
   check('kilde pr. produkt: Rackbeat, hh:mm:ss', /Rackbeat, \d\d:\d\d:\d\d/.test(txt));
-  check('produkt uden data viser Estimat', (await p.$eval('#lager-lanolin-saebe', el => el.parentElement.textContent)).includes('Estimat'));
+  check('produkt uden lager viser Ikke hentet', (await p.$eval('#lager-lanolin-saebe', el => el.parentElement.textContent)).includes('Ikke hentet'));
+  check('produkt uden salgstempo viser Ikke hentet', (await p.$eval('#rate-neutral-saebe', el => el.parentElement.textContent)).includes('Ikke hentet'));
   check('salgstempo sat og fuld præcision gemt', (await state(p)).products.find(x => x.sku === 'HAT003').rate === 12.345);
-  check('salgstempo vises med kilde og flag', /Rackbeat, \d\d:\d\d:\d\d\s*Sikkerhed: høj\s*muligt udsolgt/.test(txt), txt.slice(0, 400));
+  const rateTekst = async id => (await p.$eval('#rate-' + id, el => el.parentElement.innerText)).replace(/\s+/g, ' ');
+  // Under Salg/uge står kun tidspunktet for seneste opdatering, uanset sikkerhed og flag
+  for (const [id, hvad] of [['havtorn-saebe', 'høj sikkerhed med flag'], ['hyben-saebe', 'middel sikkerhed'], ['lanolin-saebe', 'lav sikkerhed med flag']]) {
+    check(`Salg/uge viser kun seneste opdatering (${hvad})`, /^Rackbeat, \d\d:\d\d:\d\d$/.test(await rateTekst(id)), await rateTekst(id));
+  }
+  check('ingen statuser eller flag i tabellen', !/Sikkerhed|datagrundlag|muligt udsolgt|lavt salg|kort historik|ufuldstændig/i.test(txt), txt.slice(0, 300));
+  const sidefod = await p.$eval('#syncLog', el => el.textContent.trim());
+  check('sidefoden har ikke teksten "Lager og salgstempo fra Rackbeat"', sidefod === '', JSON.stringify(sidefod));
   const foer = await state(p);
 
   // ---------- polling hvert 20. sekund ----------
@@ -155,7 +189,7 @@ async function ventPaa(fn, ms = 3000) {
   s = await pill(p);
   check('forældet: gul pille', s.cls === 'stale' && /^Rackbeat: forældet \(\d\d:\d\d:\d\d\)$/.test(s.text), JSON.stringify(s));
 
-  api.status = () => ok({ lager: null, lagerStatus: 'mangler_adgang', salg: {} });
+  api.status = () => ok({ lager: null, lagerStatus: 'mangler_adgang' });
   const lagerFoer = await lager(p, 'havtorn-saebe');
   await spol(p, 20000); await ventPaa(async () => (await pill(p)).text.includes('mangler adgang'));
   s = await pill(p);
@@ -208,34 +242,43 @@ async function ventPaa(fn, ms = 3000) {
   await ctx.close();
 
   // ---------- dobbelttælling: pakkede batches er med i Rackbeats lager ----------
-  api.status = () => statusOk(); api.salgstempo = () => ok({});
+  // Status ("OK" eller "Start snart") afhænger af, om batches tælles rigtigt med i det forventede lager
+  api.status = () => statusOk({ TAN001: 30, HAT001: 50 }); api.salgstempo = () => ok({ TAN001: tempo(9), HAT001: tempo(16) });
   ({ p, ctx, errs } = await aaben());
-  await naarHits('status', 1); await ventPaa(async () => await lager(p, 'tang-shampoo') === '100');
+  await naarHits('status', 1); await ventPaa(async () => await lager(p, 'tang-shampoo') === '30');
+  await ventPaa(async () => (await state(p)).products.find(x => x.sku === 'HAT001').rate === 16);
   await p.evaluate(k => {
+    const dag = n => { const d = new Date(Date.now() + n * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
     const d = JSON.parse(localStorage.getItem(k));
-    d.batches.find(b => b.no === 36).packed = true;   // Havtorn shampoo, klar om 5 dage, men allerede pakket
+    d.batches = [
+      { no: 1, by: 'Test', pid: 'tang-shampoo', qty: 55, rejected: 2, made: dag(-3), cure: 3, status: 'aktiv' },             // klar i dag, ikke pakket
+      { no: 2, by: 'Test', pid: 'havtorn-shampoo', qty: 60, made: dag(-2), cure: 7, status: 'aktiv', packed: true },          // klar om 5 dage, men allerede pakket
+    ];
+    d.nextNo = 3;
     localStorage.setItem(k, JSON.stringify(d));
   }, KEY);
   await p.reload(); await p.evaluate(() => { document.getElementById('sec-produkter').open = true; });
   await ventPaa(async () => await lager(p, 'havtorn-shampoo') === '50');
-  const naarKlar = id => p.$eval('#lager-' + id, el => el.closest('tr').children[6].textContent.trim());
-  // Tang shampoo: 100 + batch 32 (klar i dag, ikke pakket, 55 − 2 kasseret) − 9/uge × 3 dage = 149
-  check('upakket batch, der er klar, lægges til Rackbeats lager', await naarKlar('tang-shampoo') === '149', await naarKlar('tang-shampoo'));
-  // Havtorn shampoo: 50 − 16/uge × 7 dage = 34. Det pakkede batch (60 stk.) må ikke tælles igen.
-  check('pakket batch tælles ikke to gange', await naarKlar('havtorn-shampoo') === '34', await naarKlar('havtorn-shampoo'));
+  const statusFor = id => p.$eval('#lager-' + id, el => el.closest('tr').querySelector('.risk').textContent.trim());
+  // Tang shampoo: lager 30 = minimum, salg 9/uge. Det upakkede batch (klar i dag, 53 stk.) lægges til, så lageret holder længere end et nyt batch tager: OK.
+  // Hvis batchet ikke blev lagt til, ville lageret være under minimum fra i morgen: Start snart.
+  check('upakket batch, der er klar, lægges til Rackbeats lager', await statusFor('tang-shampoo') === 'OK', await statusFor('tang-shampoo'));
+  // Havtorn shampoo: lager 50, minimum 40, salg 16/uge. Det pakkede batch (60 stk.) er allerede med i lageret og må ikke tælles igen.
+  // Uden det er lageret under minimum om 5 dage, og et nyt batch skulle være startet: Start snart. Tælles det to gange, står der OK.
+  check('pakket batch tælles ikke to gange', await statusFor('havtorn-shampoo') === 'Start snart', await statusFor('havtorn-shampoo'));
+  check('kolonnen "Når ny batch er klar" er fjernet', !(await p.$$eval('#prodTbl thead th', ths => ths.map(th => th.textContent))).some(x => x.includes('Når ny batch er klar')));
   check('ingen JavaScript-fejl (dobbelttælling)', errs.length === 0, errs.join('; '));
   await ctx.close();
 
-  // ---------- uden server: eksempeldata, ingen polling ----------
+  // ---------- uden server: ingen data, ingen polling ----------
   api.ingenApi = true;
   ({ p, ctx, errs } = await aaben());
   await vent(300);
   s = await pill(p);
-  check('uden /api: ikke forbundet', s.text === 'Rackbeat: ikke forbundet' && s.cls === '', JSON.stringify(s));
+  check('uden /api: rød pille, ingen forbindelse', s.text === 'Rackbeat: ingen forbindelse' && s.cls === 'err', JSON.stringify(s));
   const k = hits.status;
   await spol(p, 120000);
   check('uden /api: ingen videre kald', hits.status === k);
-  check('uden /api: filimport findes stadig', await p.$('#btnImport') !== null && await p.$('#btnSync') !== null);
   check('ingen JavaScript-fejl (uden server)', errs.length === 0, errs.join('; '));
   await ctx.close();
 

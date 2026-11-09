@@ -19,7 +19,7 @@ async function ventPaa(fn, ms = 8000) {
 }
 
 // Mocken og den lokale server får kun falske nøgler. Tomme værdier forhindrer, at .env's rigtige nøgle læses.
-const ENV = { ...process.env, RACKBEAT_API_KEY: NOEGLE, RACKBEAT_LAGER_KEY: '', RACKBEAT_SKRIV_KEY: NOEGLE,
+const ENV = { ...process.env, RACKBEAT_API_KEY: NOEGLE, RACKBEAT_SKRIV_KEY: NOEGLE,
   RACKBEAT_BASE_URL: MOCK, MOCK_NOEGLE: NOEGLE, MOCK_LAGER_STATUS: '' };
 delete ENV.VERCEL;
 const start = (fil, port) => spawn(process.execPath, [path.join(__dirname, fil), String(port)], { env: ENV, stdio: 'ignore' });
@@ -39,7 +39,19 @@ const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&p
     await p.goto(BASE + V2);
     check('forbundet til Rackbeat', await ventPaa(() => p.$eval('#rbPill', el => el.textContent.startsWith('Rackbeat: opdateret'))), await p.$eval('#rbPill', el => el.textContent));
 
-    const batch = no => p.evaluate(n => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-i')).batches.find(x => x.no === n), no);
+    const dag = n => { const d = new Date(Date.now() + n * 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    await p.evaluate(([k, d3, d1]) => {
+      const s = JSON.parse(localStorage.getItem(k));
+      s.people = ['Test']; s.nextNo = 42;
+      s.batches = [
+        { no: 32, by: 'Test', pid: 'tang-shampoo', qty: 55, rejected: 2, made: d3, cure: 3, status: 'aktiv' },
+        { no: 41, by: 'Test', pid: 'havtorn-balsam', qty: 50, made: d1, cure: 1, status: 'aktiv' },
+      ];
+      localStorage.setItem(k, JSON.stringify(s));
+    }, ['kystnaer-produktionskalender-v2-onepager-j', dag(-3), dag(-1)]);
+    await p.reload();
+    await ventPaa(() => p.$eval('#rbPill', el => el.textContent.startsWith('Rackbeat: opdateret')));
+    const batch = no => p.evaluate(n => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-j')).batches.find(x => x.no === n), no);
     const dlg = () => p.$eval('#detailBody', el => el.textContent.replace(/\s+/g, ' '));
     const klik = sel => p.evaluate(s => document.querySelector(s).click(), sel);
 
@@ -61,7 +73,7 @@ const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&p
     const [r] = await reguleringer();
     check('reguleringen lægger til på Hovedlager i Produktion', r && r.regulate_difference === false && r.lines[0].location_id === 1001
       && r.regulation_type.number === 1004 && r.reason === 'Batch #32 godkendt' && r.description.includes(b32.rbRef), JSON.stringify(r));
-    check('kalenderen viser det nye lager', await ventPaa(() => p.evaluate(n => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-i')).products.find(x => x.sku === 'TAN001').count === n, foer + 53), 30000));
+    check('kalenderen viser det nye lager', await ventPaa(() => p.evaluate(n => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-j')).products.find(x => x.sku === 'TAN001').count === n, foer + 53), 30000));
 
     // Samme batch sendt igen (fx efter netværksfejl) registreres ikke to gange
     const igen = await p.evaluate(async ref => (await fetch('/api/lagerregulering', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -74,7 +86,7 @@ const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&p
     await p.click('#dClose');
 
     // Rackbeat afviser (ukendt varenummer): fejl vises, og batchen er ikke pakket
-    await p.evaluate(() => { const k = 'kystnaer-produktionskalender-v2-onepager-i'; const s = JSON.parse(localStorage.getItem(k));
+    await p.evaluate(() => { const k = 'kystnaer-produktionskalender-v2-onepager-j'; const s = JSON.parse(localStorage.getItem(k));
       s.products.find(x => x.id === 'havtorn-balsam').sku = 'FINDES-IKKE'; localStorage.setItem(k, JSON.stringify(s)); });
     await p.reload();
     await ventPaa(() => p.$eval('#rbPill', el => el.textContent.startsWith('Rackbeat: opdateret')));
@@ -88,9 +100,14 @@ const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&p
 
     // Uden server (åbnet som fil) pakkes kun i kalenderen, uden dialog
     const f = await (await b.newContext()).newPage();
-    await f.goto('file://' + path.resolve(__dirname, '..', 'src', 'v2', 'produktionskalender-v2.html'));
+    const fil = 'file://' + path.resolve(__dirname, '..', 'src', 'v2', 'produktionskalender-v2.html');
+    await f.goto(fil);
+    await f.evaluate(([k, d3, idag]) => localStorage.setItem(k, JSON.stringify({ people: ['Test'], nextNo: 33, res: [],
+      products: [{ id: 'tang-shampoo', name: 'Tang shampoo bar', type: 'Shampoobarer', min: 30, rate: 0, count: 0, countDate: idag, batch: 55, sku: 'TAN001', cure: 3, steps: [] }],
+      batches: [{ no: 32, by: 'Test', pid: 'tang-shampoo', qty: 55, rejected: 2, made: d3, cure: 3, status: 'aktiv' }] })), ['kystnaer-produktionskalender-v2-onepager-j', dag(-3), dag(0)]);
+    await f.reload();
     await f.evaluate(() => document.querySelector('[data-pack="32"]').click());
-    const lokal = await f.evaluate(() => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-i')).batches.find(x => x.no === 32));
+    const lokal = await f.evaluate(() => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-j')).batches.find(x => x.no === 32));
     check('uden server: pakket lokalt uden Rackbeat', lokal.packed && !lokal.rackbeat);
 
     check('ingen JavaScript-fejl', errs.length === 0, errs.join('; '));
