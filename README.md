@@ -35,7 +35,7 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 ### Rackbeat live
 Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat, og godkendte batches lægges på Hovedlager i Rackbeat, når de markeres som pakket (lagerregulering, se vejledningens afsnit 7). Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
 
-- `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`). Serveren gemmer svaret i 20 sekunder. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
+- `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`). Serveren gemmer svaret i 20 sekunder. Lige efter en pakning henter appen lageret straks uden om den gemte version (`?frisk=1`), så det nye tal vises med det samme. Svar med ældre lager end det, appen viser (fra en anden serverinstans), vises ikke. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
 - `GET /api/salgstempo` (ved start og hvert 10. minut): salgstempo beregnet af serveren efter reglerne nedenfor. Beregningen er testet mod facit fra det oprindelige Python-script (`tests/fixtures/salgstempo_facit.json`). Serveren gemmer resultatet i en time og beregner det nye i baggrunden.
 - Ved fejl venter V2 gradvist længere (20, 40, 60 sekunder) og fortsætter med de data, den har. Pillen i sidefoden viser status: grøn (opdateret), gul (forældet) eller rød (fejl, mangler adgang eller login udløbet).
 - Data ændres aldrig, mens en dialog er åben eller et felt har en ændring, der ikke er gemt. Opdateringen vises bagefter.

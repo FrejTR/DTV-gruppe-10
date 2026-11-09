@@ -1419,6 +1419,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         b.rackbeat = {id: d.id, antal: d.antal, dato: d.dato};
         b.packed = true; b.packedOn = TODAY; save(); dlgD.close(); renderAll();
         toast(`Batch #${bn(b)} er pakket, og ${d.antal} stk. er lagt på lager i Rackbeat`);
+        hentFriskLager();
       } catch(e) {
         fejl.textContent = e.message; fejl.hidden = false;
         ja.disabled = nej.disabled = false; ja.textContent = 'Prøv igen';
@@ -1535,7 +1536,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const POLL_MS = [20000, 40000, 60000];   // Ved fejl ventes gradvist længere
   const TEMPO_MS = 10 * 60000, TEMPO_IGEN_MS = 60000;
   const live = {aktiv: /^https?:$/.test(location.protocol), fejl: 0, timer: null, henter: false, svaret: false,
-    status: null, fejlkode: null, tempoForsoegt: -Infinity, tempoFejl: false, ventStatus: null, ventTempo: null};
+    status: null, nyeste: null, fejlkode: null, tempoForsoegt: -Infinity, tempoFejl: false, ventStatus: null, ventTempo: null};
 
   async function hentApi(sti){
     let r;
@@ -1555,6 +1556,22 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const el = document.activeElement;
     return !!(el && el.matches('input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), textarea') && el.value !== el.defaultValue);
   };
+
+  // Et svar med ældre lager end det, appen viser, kommer fra en anden serverinstans med ældre cache. Det vises ikke,
+  // så lageret ikke springer tilbage lige efter en pakning. Er svaret forældet, vises det dog i pillen.
+  function modtagStatus(b){
+    const aeldre = live.nyeste != null && Date.parse(b.hentet) < live.nyeste;
+    if (!aeldre || b.forældet) live.status = b;
+    if (!aeldre){ live.ventStatus = b; live.nyeste = Date.parse(b.hentet); }
+    live.fejl = 0; live.fejlkode = null;
+  }
+  // Efter en lagerregulering hentes lageret straks uden om serverens cache, så kolonnen viser det nye tal med det samme
+  async function hentFriskLager(){
+    if (!live.aktiv) return;
+    try { modtagStatus(await hentApi('/api/status?frisk=1')); }
+    catch(e) { return; }   // Den almindelige opdatering prøver igen
+    flushLive(); showLiveState();
+  }
 
   function applyStatus(b){
     const lager = b.data.lager;
@@ -1625,8 +1642,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (!live.aktiv || live.henter || document.visibilityState !== 'visible') return;
     live.henter = true;
     try {
-      const b = await hentApi('/api/status');
-      live.status = b; live.ventStatus = b; live.fejl = 0; live.fejlkode = null;
+      modtagStatus(await hentApi('/api/status'));
     } catch(e) {
       if (e.kode === 'ingen_server'){ live.aktiv = false; live.henter = false; clearTimeout(live.timer); showSyncState(); return; }
       live.fejl++; live.fejlkode = e.kode === 'login' ? 'login' : 'fejl';

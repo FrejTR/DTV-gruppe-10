@@ -44,12 +44,18 @@ function fejlkode(e) {
 /** GET /api/status (lager): frisk i 20 sekunder. Ved fejl sendes sidst gemte version som forældet. */
 export async function status({ request, env, waitUntil }, deps = {}) {
   const nu = deps.nu || Date.now;
-  const origin = new URL(request.url).origin;
+  const url = new URL(request.url);
+  const origin = url.origin;
+  // ?frisk=1 bruges lige efter en lagerregulering: hent altid fra Rackbeat, og vent ikke på en almindelig
+  // hentning, der var i gang, for den kan være startet, før reguleringen blev bogført.
+  const frisk = url.searchParams.get('frisk') === '1';
   const gammel = await laes(origin, 'status');
-  if (gammel && nu() - gammel.hentet < STATUS_TTL_MS) return dataSvar(gammel, false);
+  if (!frisk && gammel && nu() - gammel.hentet < STATUS_TTL_MS) return dataSvar(gammel, false);
   try {
-    const post = await enAdGangen('status', async () => {
-      const ny = { data: await hentStatus(env, deps), hentet: nu() };
+    const post = await enAdGangen(frisk ? 'status-frisk' : 'status', async () => {
+      // Tidspunktet er, da hentningen startede: data er mindst så nye
+      const start = nu();
+      const ny = { data: await hentStatus(env, deps), hentet: start };
       await gem(origin, 'status', ny);
       return ny;
     });

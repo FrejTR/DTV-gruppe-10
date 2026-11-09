@@ -119,6 +119,38 @@ test('status: samtidige kald giver kun én hentning', async () => {
   assert.equal(rb.kald.length, 1);
 });
 
+test('status: ?frisk=1 henter fra Rackbeat, selv om cachen er frisk, og gemmer svaret i cachen', async () => {
+  const rb = falskRackbeat();
+  await status(ctx(), deps(rb));
+  ur = NU + 1000;
+  const b = await krop(await status(ctx(ENV, URL_PROD + '?frisk=1'), deps(rb)));
+  assert.equal(rb.kald.length, 2);
+  assert.equal(b.hentet, new Date(NU + 1000).toISOString());
+  ur = NU + 2000;
+  const c = await krop(await status(ctx(), deps(rb)));
+  assert.equal(rb.kald.length, 2, 'almindelige kald bruger det friske svar fra cachen');
+  assert.equal(c.hentet, new Date(NU + 1000).toISOString());
+});
+
+test('status: ?frisk=1 venter ikke på en hentning, der var i gang, og den ældre overskriver ikke den nyere', async () => {
+  let aabn;
+  const port = new Promise(r => { aabn = r; });
+  const foer = falskRackbeat({ products: [[{ number: 'HAT003', stock_quantity: 62 }]] });
+  const efter = falskRackbeat({ products: [[{ number: 'HAT003', stock_quantity: 81 }]] });
+  // Den almindelige hentning starter før reguleringen, men svarer først efter den friske
+  const langsom = status(ctx(), deps({ hent: async (...a) => { await port; return foer.hent(...a); } }));
+  await new Promise(r => setImmediate(r));   // Den almindelige hentning er startet og venter på Rackbeat
+  ur = NU + 500;
+  const frisk = await krop(await status(ctx(ENV, URL_PROD + '?frisk=1'), deps(efter)));
+  assert.equal(frisk.data.lager.HAT003, 81);
+  aabn();
+  assert.equal((await krop(await langsom)).data.lager.HAT003, 62);
+  ur = NU + 1000;
+  const senere = await krop(await status(ctx(), deps(efter)));
+  assert.equal(senere.data.lager.HAT003, 81, 'cachen har stadig det nyeste lager');
+  assert.equal(senere.hentet, new Date(NU + 500).toISOString());
+});
+
 for (const kode of [401, 404, 429, 500, 502, 503]) {
   test(`status: Rackbeat ${kode} giver gemt version som forældet`, async () => {
     await status(ctx(), deps(falskRackbeat()));
