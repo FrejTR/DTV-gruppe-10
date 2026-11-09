@@ -10,3 +10,4 @@ tests/out/
 output/
 # Rigtige eksporter og salgstal må ikke i git
 data/
+__pycache__/
