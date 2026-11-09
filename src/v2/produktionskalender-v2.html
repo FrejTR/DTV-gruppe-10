@@ -215,6 +215,9 @@ button{cursor:pointer}
 .src.est{color:var(--muted)}
 .rb-pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:3px 12px;background:var(--sand-light);white-space:nowrap}
 .rb-pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--grey)}
+.rb-pill.ok::before{background:var(--green)}
+.rb-pill.stale::before{background:var(--amber)}
+.rb-pill.err::before{background:var(--red)}
 .rb-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start}
 .rb-head > div{min-width:0}
 .rb-sync{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
@@ -691,15 +694,17 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const counts = b => b.status === 'aktiv' || b.status === 'planlagt';
 
   // ---------- kerneberegning ----------
-  // Forventet lager på dato d = optalt lager + batches klar efter optælling og senest d
+  // Forventet lager på dato d = lager + batches klar senest d, som ikke allerede er med i lageret
   //                              − estimeret salg siden optælling − reservationer efter optælling og senest d
+  // Lager fra Rackbeat: et pakket batch antages at være registreret i Rackbeat og er derfor med i lageret.
+  // Eget optalt lager: batches klar efter optællingen er ikke med i tallet.
+  const inStock = (p, b) => p.lagerHentet ? !!b.packed : ready(b) <= p.countDate;
   function proj(p, d, opts = {}){
     let v = p.count;
     for (const b of S.batches){
       if (b.pid !== p.id || !counts(b)) continue;
       if (opts.excludePlanned && b.status === 'planlagt') continue;
-      const r = ready(b);
-      if (r > p.countDate && r <= d) v += net(b);
+      if (!inStock(p, b) && ready(b) <= d) v += net(b);
     }
     v -= p.rate / 7 * Math.max(0, diff(p.countDate, d));
     for (const r of S.res) if (r.pid === p.id && r.date > p.countDate && r.date <= d) v -= r.qty;
@@ -850,15 +855,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const s = p.salgstempo;
     if (!s) return `<div class="muted small rate-src">Estimat</div>`;
     const flags = s.flag.map(f => FLAG_TEXT[f] || f);
-    return `<div class="muted small rate-src">Beregnet (${esc(s.vindueUger)} uger, ${esc(fmt(s.dato))})<br>Sikkerhed: ${esc(s.sikkerhed)}${flags.length ? `<br>${esc(flags.join(', '))}` : ''}</div>`;
+    const kilde = s.kilde === 'rackbeat' && s.hentet ? `Rackbeat, ${tidspunkt(s.hentet)}` : `Beregnet (${s.vindueUger} uger, ${fmt(s.dato)})`;
+    return `<div class="muted small rate-src">${esc(kilde)}<br>Sikkerhed: ${esc(s.sikkerhed)}${flags.length ? `<br>${esc(flags.join(', '))}` : ''}</div>`;
   }
 
   // Lager i Rackbeat vises præcis som hentet med scripts/hent_lager.py, uden beregning
   const fT = new Intl.DateTimeFormat('da-DK', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
   const fmtHentet = s => fT.format(new Date(s));
+  // Lokal dato og klokkeslæt (hh:mm:ss) for et tidspunkt fra Rackbeat. Datoen vises kun, hvis det ikke er i dag.
+  const lokalDato = s => { const d = new Date(s); return iso(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))); };
+  const pad2 = n => String(n).padStart(2, '0');
+  const klokken = s => { const d = new Date(s); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
+  const tidspunkt = s => (lokalDato(s) === TODAY ? '' : fmt(lokalDato(s)) + ' ') + klokken(s);
   const lagerCell = p => p.lagerHentet
-    ? `<span id="lager-${p.id}">${esc(p.count)}</span><div class="muted small">Hentet ${esc(fmtHentet(p.lagerHentet))}</div>`
-    : `<span id="lager-${p.id}" class="muted">–</span><div class="muted small">Ikke hentet</div>`;
+    ? `<span id="lager-${p.id}">${esc(p.count)}</span><div class="muted small">Rackbeat, ${esc(tidspunkt(p.lagerHentet))}</div>`
+    : `<span id="lager-${p.id}" class="muted">–</span><div class="muted small">Estimat</div>`;
 
   function renderProducts(){
     const list =[...activeProducts(), ...S.products.filter(p => p.archived)];
@@ -1500,7 +1511,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   // ---------- import af lager (JSON fra scripts/hent_lager.py) ----------
   // Lageret erstatter "Lager i Rackbeat" for produkter med samme varenummer. Intet regnes om.
   function showSyncState(){
-    const h = S.products.map(p => p.lagerHentet).filter(Boolean).sort().pop();
+    if (live.aktiv){ showLiveState(); return; }
+    const pill = document.getElementById('rbPill'); pill.classList.remove('ok', 'stale', 'err');
+    const h =S.products.map(p => p.lagerHentet).filter(Boolean).sort().pop();
     document.getElementById('rbPill').textContent = h ? 'Rackbeat: lager hentet' : 'Rackbeat: ikke forbundet';
     document.getElementById('syncLog').textContent = h ? `Lager fra Rackbeat, hentet ${fmtHentet(h)}` : 'Eksempeldata';
   }
@@ -1606,6 +1619,118 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     rd.readAsText(f);
   });
 
+  // ---------- Rackbeat live: /api/status hvert 20. sekund og /api/salgstempo hvert 10. minut ----------
+  // Kun når siden kører fra en server. Uden server (åbnet som fil, eller uden /api) bruges eksempeldata og filimport.
+  // Data opdaterer kun lager (count, countDate) og salgstempo (rate). Batches, reservationer og indstillinger røres ikke.
+  const POLL_MS = [20000, 40000, 60000];   // Ved fejl ventes gradvist længere
+  const TEMPO_MS = 10 * 60000, TEMPO_IGEN_MS = 60000;
+  const live = {aktiv: /^https?:$/.test(location.protocol), fejl: 0, timer: null, henter: false, svaret: false,
+    status: null, fejlkode: null, tempoForsoegt: -Infinity, tempoFejl: false, ventStatus: null, ventTempo: null};
+
+  async function hentApi(sti){
+    let r;
+    try { r = await fetch(sti, {cache: 'no-store', credentials: 'same-origin', redirect: 'manual', headers: {Accept: 'application/json'}}); }
+    catch(e) { throw {kode: 'fejl'}; }
+    // Udløbet Cloudflare Access-login: siden skal genindlæses
+    if (r.type === 'opaqueredirect' || r.status === 401 || r.status === 403) throw {kode: 'login'};
+    if (r.status === 404 && !live.svaret) throw {kode: 'ingen_server'};
+    let b = null; try { b = await r.json(); } catch(e) {}
+    if (!r.ok || !b || !b.data || typeof b.data !== 'object' || typeof b.hentet !== 'string' || isNaN(Date.parse(b.hentet))) throw {kode: (b && b.kode) || 'fejl'};
+    live.svaret = true;
+    return b;
+  }
+  // Ingen ændringer, mens en dialog er åben, eller mens et felt har en ændring, der ikke er gemt endnu
+  const busy = () => {
+    if (document.querySelector('dialog[open]')) return true;
+    const el = document.activeElement;
+    return !!(el && el.matches('input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), textarea') && el.value !== el.defaultValue);
+  };
+
+  function applyStatus(b){
+    const lager = b.data.lager;
+    if (!lager || typeof lager !== 'object') return;
+    for (const p of S.products){
+      const n = p.sku ? lager[p.sku] : undefined;
+      if (typeof n === 'number' && isFinite(n)){ p.count = n; p.countDate = lokalDato(b.hentet); p.lagerHentet = b.hentet; }
+    }
+  }
+  function applyTempo(b){
+    const r = readSalgstempo(b.data);
+    if (!r) return;
+    r.updates.forEach(({p, x}) => {
+      p.rate = x.rate;
+      p.salgstempo = {kilde:'rackbeat', hentet:b.hentet, dato:x.beregnet, vindueUger:x.vindue_uger, sikkerhed:x.sikkerhed,
+        flag: Array.isArray(x.flag) ? x.flag.map(String) : [], maanedlig: Array.isArray(x.maanedlig) ? x.maanedlig : null,
+        seneste8: typeof x.seneste8 === 'number' ? x.seneste8 : null};
+    });
+  }
+  function flushLive(){
+    if (busy() || (!live.ventStatus && !live.ventTempo)) return;
+    if (live.ventStatus) applyStatus(live.ventStatus);
+    if (live.ventTempo) applyTempo(live.ventTempo);
+    live.ventStatus = live.ventTempo = null;
+    const fokus = document.activeElement && document.activeElement.id;   // Tabellerne tegnes forfra, så fokus sættes tilbage
+    save(); renderAll(); showLiveState();
+    const el = fokus && document.getElementById(fokus);
+    if (el && el !== document.activeElement) el.focus();
+  }
+  document.querySelectorAll('dialog').forEach(d => d.addEventListener('close', () => setTimeout(flushLive, 0)));
+  ['focusout', 'change'].forEach(t => document.addEventListener(t, () => setTimeout(flushLive, 0)));
+
+  function setPill(cls, text, log){
+    const pill = document.getElementById('rbPill');
+    pill.classList.remove('ok', 'stale', 'err'); if (cls) pill.classList.add(cls);
+    pill.textContent = text;
+    document.getElementById('syncLog').textContent = log;
+  }
+  function showLiveState(){
+    const s = live.status;
+    const venter = live.ventStatus || live.ventTempo ? ' Vises, når du er færdig med at redigere.' : '';
+    const tempo = live.tempoFejl ? ' Salgstempo kunne ikke hentes.' : '';
+    const gemt = s ? `Viser data fra ${klokken(s.hentet)}.` : 'Viser gemte data.';
+    if (live.fejlkode === 'login') return setPill('err', 'Rackbeat: log ind igen', `Login er udløbet. Genindlæs siden. ${gemt}`);
+    if (live.fejlkode) return setPill('err', 'Rackbeat: fejl', `${gemt} Prøver igen om ${POLL_MS[Math.min(live.fejl, 2)] / 1000} sek.${tempo}`);
+    if (!s) return setPill(null, 'Rackbeat: forbinder…', 'Henter data fra Rackbeat');
+    if (s.data.lagerStatus === 'mangler_adgang') return setPill('err', 'Rackbeat: mangler adgang til lager', `Nøglen har ikke adgang til lager. Opdateret ${klokken(s.hentet)}.${tempo}${venter}`);
+    if (s.forældet) return setPill('stale', `Rackbeat: forældet (${klokken(s.hentet)})`, `Rackbeat svarer ikke. Viser data fra ${klokken(s.hentet)}.${tempo}${venter}`);
+    setPill('ok', `Rackbeat: opdateret ${klokken(s.hentet)}`, `Lager og salgstempo fra Rackbeat.${tempo}${venter}`);
+  }
+
+  async function fetchTempo(){
+    live.tempoForsoegt = Date.now();
+    try {
+      live.ventTempo = await hentApi('/api/salgstempo');
+      live.tempoFejl = false;
+    } catch(e) {
+      live.tempoFejl = true;
+      live.tempoForsoegt = Date.now() - TEMPO_MS + TEMPO_IGEN_MS;   // Nyt forsøg om et minut
+    }
+    flushLive(); showLiveState();
+  }
+  function schedule(){
+    clearTimeout(live.timer);
+    if (live.aktiv && document.visibilityState === 'visible') live.timer = setTimeout(tick, POLL_MS[Math.min(live.fejl, 2)]);
+  }
+  async function tick(){
+    if (!live.aktiv || live.henter || document.visibilityState !== 'visible') return;
+    live.henter = true;
+    try {
+      const b = await hentApi('/api/status');
+      live.status = b; live.ventStatus = b; live.fejl = 0; live.fejlkode = null;
+    } catch(e) {
+      if (e.kode === 'ingen_server'){ live.aktiv = false; live.henter = false; clearTimeout(live.timer); showSyncState(); return; }
+      live.fejl++; live.fejlkode = e.kode === 'login' ? 'login' : 'fejl';
+    }
+    live.henter = false;
+    flushLive(); showLiveState();
+    if (Date.now() - live.tempoForsoegt >= TEMPO_MS) fetchTempo();
+    schedule();
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') tick(); else clearTimeout(live.timer);
+  });
+
   renderAll(); showSyncState();
+  if (live.aktiv) tick();
 })();
 </script>

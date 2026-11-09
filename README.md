@@ -17,6 +17,7 @@ Eller åbn `src/v2/produktionskalender-v2.html` direkte i browseren (ingen serve
 |---|---|
 | `src/v1/` | Iteration 1 (frosset) |
 | `src/v2/` | Aktuel version, her arbejder vi |
+| `functions/` | Serverfunktioner til Rackbeat live (Cloudflare Pages Functions) |
 | `assets/` | Kystnær-logo (sort PNG) |
 | `docs/` | Skærmbilleder og noter |
 | `report/` | Indholdsfortegnelse (PPTX/PDF) |
@@ -43,6 +44,33 @@ Scriptet henter alle ordrelinjer fra `GET /orders/lines` og skriver `output/salg
 - Annullerede ordrer springes over.
 - Rackbeat har ingen salgskanal på ordrelinjerne, så event- og b2b-ordrer fjernes kun, hvis de er store enkeltordrer (punkt 5 nedenfor).
 - Antal er det bestilte antal, og datoen er ordredatoen.
+
+### Rackbeat live
+Når V2 kører på Cloudflare Pages (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat. Der er kun læseadgang. Rackbeat-nøglen ligger kun som secret hos Cloudflare, og alle kald kræver login via Cloudflare Access.
+
+- `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`) og salg de seneste 7 dage pr. varenummer og dag. Serveren gemmer svaret i 20 sekunder. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
+- `GET /api/salgstempo` (ved start og hvert 10. minut): salgstempo beregnet efter samme regler som `scripts/beregn_salgstempo.py` (testet mod scriptet på eksempeldata). Serveren gemmer resultatet i en time og beregner det nye i baggrunden.
+- Ved fejl venter V2 gradvist længere (20, 40, 60 sekunder) og fortsætter med de data, den har. Pillen i sidefoden viser status: grøn (opdateret), gul (forældet) eller rød (fejl, mangler adgang eller login udløbet).
+- Data ændres aldrig, mens en dialog er åben eller et felt har en ændring, der ikke er gemt. Opdateringen vises bagefter.
+- Uden server (åbnet som fil eller med `npm start`) kører V2 som før med eksempeldata og filimport.
+
+**Batches og reservationer ligger stadig kun i den enkelte browser.** Det, én person registrerer, kan andre ikke se. Login og fælles database er næste fase.
+
+Antagelser, der skal afklares med ejeren:
+1. **Pakket betyder registreret i Rackbeat.** Med lager fra Rackbeat tæller et batch med i forventet lager, indtil det er markeret *Pakket*. Derefter antages det at være med i Rackbeats lagertal. Et batch, der aldrig bliver markeret pakket, bliver ved med at tælle med. Med eget optalt lager gælder den gamle regel: batches, der er klar efter optællingen.
+2. **Lager er `stock_quantity`** (beholdningen), ikke disponibelt lager. Åbne ordrer trækkes kun fra via reservationerne i kalenderen.
+3. **Rackbeat vinder.** Lager og salgstempo overskrives ved næste opdatering, også hvis de er rettet i hånden.
+4. **Historik til salgstempo:** serveren henter de 52 uger plus 26 uger før, for at kunne se, om et produkt er nyt (`kort_historik`). Scriptet bruger al historik. Et produkt, der ikke er solgt i de 26 uger før vinduet, kan derfor fejlagtigt få flaget.
+5. **Dansk tid:** dagens dato og ugerne regnes i dansk tid. Ordredatoen bruges uden klokkeslæt.
+
+Kendte begrænsninger:
+- Rackbeat har ingen salgskanal på ordrelinjerne. Event- og b2b-ordrer fjernes kun, hvis de er over 3 × medianen.
+- Cloudflares Free-plan tillader 50 kald og 10 ms CPU pr. forespørgsel. Salgstempo bruger ét kald pr. 100 ordrelinjer og stopper med fejl ved over 40 sider (ca. 4.000 linjer), frem for at regne på en halv historik. Beregningen alene tager ca. 7 ms på eksempeldata. Salgstempo kræver derfor i praksis Workers Paid.
+- Cachen gælder pr. Cloudflare-datacenter. Brugere i forskellige datacentre giver hver deres kald til Rackbeat.
+- Om nøglen må læse lager (`GET /products`) afhænger af nøglens rettigheder. Rackbeats dokumentation nævner ingen rettighed til produkter. Uden adgang viser V2 rød pille og bruger estimeret lager.
+- Kopien på GitHub Pages har ingen server og viser kun eksempeldata.
+
+Test uden nøgle: `node --test "tests/*.test.mjs"` (server og paritet med Python) og `node tests/live_v2.js` (V2 i browser).
 
 ### Salgstempo: hvad beregningen bygger på
 Scriptet `scripts/beregn_salgstempo.py` beregner et gennemsnitligt ugentligt salg pr. produkt (`rate`), som kalenderen bruger til at forudsige lagerets udvikling. Tallet er et estimat og bygger på disse antagelser:

@@ -1,0 +1,97 @@
+// Læseadgang til Rackbeat. Kun GET, kun faste endpoints, og kun de felter, kalenderen bruger.
+// Kilde: developer.rackbeat.com (Authentication, Pagination, Errors & Rate Limits,
+// "List Lines for all Orders" og "List Products"), slået op november 2026.
+
+const BASIS_URL = 'https://app.rackbeat.com/api';
+const PR_SIDE = 100;           // Dokumentationen nævner ingen øvre grænse; sidetallet læses fra svaret
+const PAUSE_MELLEM_SIDER = 150; // ms. Holder os under 480 kald i minuttet pr. konto
+
+export class RackbeatFejl extends Error {
+  /** kode er kort og generisk, så den kan vises i appen uden at afsløre noget. */
+  constructor(kode, status = null) {
+    super(kode);
+    this.kode = kode;
+    this.status = status;
+  }
+}
+
+const KODER = { 401: 'noegle_afvist', 403: 'mangler_adgang', 404: 'ikke_fundet', 429: 'for_mange_kald' };
+
+export function lavKlient({ noegle, fetch: hent = globalThis.fetch, vent = ms => new Promise(r => setTimeout(r, ms)), basisUrl = BASIS_URL, pause = PAUSE_MELLEM_SIDER }) {
+  if (!noegle) throw new RackbeatFejl('ikke_sat_op');
+
+  async function side(sti, params) {
+    const url = `${basisUrl}${sti}?${new URLSearchParams(params)}`;
+    let svar;
+    try {
+      svar = await hent(url, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${noegle}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+      });
+    } catch {
+      throw new RackbeatFejl('ingen_forbindelse');
+    }
+    if (svar.status !== 200 && svar.status !== 206) {
+      throw new RackbeatFejl(KODER[svar.status] || 'rackbeat_fejl', svar.status);
+    }
+    try {
+      return await svar.json();
+    } catch {
+      throw new RackbeatFejl('uventet_svar', svar.status);
+    }
+  }
+
+  /** Henter alle sider. Stopper med fejl i stedet for at returnere en halv historik. */
+  async function alleSider(sti, felt, params, maxSider) {
+    const poster = [];
+    for (let nr = 1, sider = 1; nr <= sider; nr++) {
+      if (nr > 1) await vent(pause);
+      const data = await side(sti, { ...params, limit: PR_SIDE, page: nr });
+      if (!data || typeof data !== 'object' || (data[felt] !== undefined && !Array.isArray(data[felt]))) {
+        throw new RackbeatFejl('uventet_svar');
+      }
+      sider = Number.isInteger(data.pages) ? data.pages : 0;
+      if (sider > maxSider) throw new RackbeatFejl('for_mange_sider');
+      const del = data[felt] || [];
+      poster.push(...del);
+      if (!del.length) break;
+    }
+    return poster;
+  }
+
+  return {
+    /** Ordrelinjer med ordredato i perioden (begge datoer inklusive, YYYY-MM-DD). */
+    async ordrelinjer(fra, til, maxSider) {
+      const params = { order_date_from: `${fra} 00:00:00`, order_date_to: `${til} 23:59:59` };
+      const raa = [];
+      for (const l of await alleSider('/orders/lines', 'order_lines', params, maxSider)) {
+        const r = ordrelinjeTilRaa(l);
+        if (r) raa.push(r);
+      }
+      return raa;
+    },
+    /** Lagerbeholdning (stock_quantity) pr. varenummer. */
+    async lager(maxSider) {
+      const lager = {};
+      for (const p of await alleSider('/products', 'products', { fields: 'number,stock_quantity' }, maxSider)) {
+        if (!p || typeof p.number !== 'string') throw new RackbeatFejl('uventet_svar');
+        if (typeof p.stock_quantity === 'number' && Number.isFinite(p.stock_quantity)) lager[p.number] = p.stock_quantity;
+      }
+      return lager;
+    },
+  };
+}
+
+/** Omsætter én ordrelinje til de fem felter, beregningen bruger. Kunde, priser og alt andet kasseres her.
+ *  Annullerede ordrer giver null. Rackbeat har ingen salgskanal på ordrelinjerne. */
+export function ordrelinjeTilRaa(l) {
+  const ordre = (l && l.order) || {};
+  if (ordre.status && ordre.status.is_cancelled) return null;
+  return {
+    dato: typeof ordre.order_date === 'string' ? ordre.order_date : null,
+    sku: l && l.item && l.item.number != null ? String(l.item.number) : null,
+    antal: l && l.quantities ? l.quantities.ordered : null,
+    kanal: null,
+    ordre_id: ordre.number != null ? String(ordre.number) : null,
+  };
+}
