@@ -9,19 +9,15 @@ Browser (V2) ──▶ Vercel Deployment Protection (login) ──▶ /api/statu
                                                               nøglen ligger kun her, som Secret
 ```
 
-Repoet og GitHub Pages-kopien er offentlige. Derfor ligger nøglen aldrig i koden. Funktionerne tjekker ikke selv, hvem der kalder: det gør Vercel, før kaldet når funktionen. **Er beskyttelsen slået fra eller sat forkert, er `/api` åben for alle.** Afsnit 3 og 5 er derfor vigtigst.
+Repoet er offentligt. Derfor ligger nøglen aldrig i koden. Funktionerne tjekker ikke selv, hvem der kalder: det gør Vercel, før kaldet når funktionen. **Er beskyttelsen slået fra eller sat forkert, er `/api` åben for alle.** Afsnit 3 og 5 er derfor vigtigst.
 
 ## 1. Rackbeat: nøgler
 
 Rackbeat: *Firmaindstillinger > API > Opret nøgle*. Fjern fluebenet ved *Alle rettigheder*, og vælg kun det nødvendige.
 
-| Variabel | Rettighed i Rackbeat | Bruges til |
-|---|---|---|
-| `RACKBEAT_API_KEY` | *Tilgå ordrer* (access orders) | Ordrelinjer: salg de seneste 7 dage og salgstempo |
-| `RACKBEAT_LAGER_KEY` (valgfri) | Adgang til produkter, se nedenfor | Lager (`GET /products`, feltet `stock_quantity`) |
+Der bruges én nøgle, `RACKBEAT_API_KEY`. Den bruges til ordrelinjer (salgstempo, `GET /orders/lines`) og produkter (lager, `GET /products`, feltet `stock_quantity`).
 
-**Lager:** Rackbeats dokumentation nævner ingen rettighed til produkter eller lager. Om en nøgle med kun *Tilgå ordrer* kan læse `GET /products`, er ikke afprøvet. Uden adgang svarer Rackbeat 401 eller 403. Så viser V2 rød pille ("mangler adgang til lager") og bruger estimeret lager, mens salgstempo stadig virker.
-- Undersøg hos Rackbeat, hvilken rettighed der giver læseadgang til produkter. Lav en separat nøgle med kun den, og sæt den som `RACKBEAT_LAGER_KEY`.
+- Rackbeats dokumentation nævner ingen særskilt rettighed til produkter. Jeres nøgle med *Tilgå ordrer* kunne læse lager i produktionen 9. november 2026 (grøn pille). Mangler en nøgle adgang, svarer Rackbeat 403, og V2 viser rød pille ("mangler adgang til lager"), mens salgstempo stadig virker.
 - Brug ikke *Alle rettigheder* uden at have overvejet det. Koden laver kun GET-kald, men en lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
 
 ## 2. Vercel-projekt
@@ -48,7 +44,6 @@ Projektet: *Settings > Environment Variables > Add*. Vælg typen **Secret** til 
 | Navn | Type | Værdi |
 |---|---|---|
 | `RACKBEAT_API_KEY` | Secret | Nøglen med *Tilgå ordrer* |
-| `RACKBEAT_LAGER_KEY` | Secret (valgfri) | Nøglen til lager |
 | `SALGSTEMPO_MAX_SIDER` | Config (valgfri) | Højeste antal sider ordrelinjer (standard 200, ca. 20.000 linjer) |
 
 Sæt **aldrig** `RACKBEAT_BASE_URL`. Den er kun til lokal udvikling og ignoreres på Vercel.
@@ -86,22 +81,19 @@ Kræver Node 18 eller nyere. Der skal ikke bruges Vercel-konto lokalt.
    ```
 2. Start mocken og den lokale server i hver sin terminal:
    ```
-   node tests/mock_rackbeat.js
-   node tests/dev_server.mjs
+   npm run mock
+   npm start
    ```
 3. Åbn `http://127.0.0.1:8788/v2/produktionskalender-v2.html`.
 
-Den lokale server kører de samme funktioner som Vercel, men uden login, og lytter kun på `127.0.0.1`. `MOCK_LAGER_STATUS=403 node tests/mock_rackbeat.js` efterligner en nøgle uden lageradgang.
+Den lokale server kører de samme funktioner som Vercel, men uden login, og lytter kun på `127.0.0.1`. `MOCK_LAGER_STATUS=403 npm run mock` efterligner en nøgle uden lageradgang.
 
-**Med rigtig nøgle:** skriv nøglen i `.env`, og fjern linjen `RACKBEAT_BASE_URL`. `.env` er i `.gitignore`. Kontrollér alligevel med `git status`, før du committer. Samme `.env` bruges af Python-scripts.
+**Med rigtig nøgle:** skriv nøglen i `.env`, og fjern linjen `RACKBEAT_BASE_URL`. `.env` er i `.gitignore`. Kontrollér alligevel med `git status`, før du committer.
 
-**Automatiske test (kræver ingen nøgle):**
-```
-node --test "tests/*.test.mjs"   # serverfunktioner og paritet med Python-scriptet
-node tests/live_v2.js            # V2 i browser: polling, backoff, dialoger, statuspille
-npm test                         # røgtest af V1 og V2
-python -m pytest tests/          # Python-scriptet
-```
+**Automatiske test (kræver ingen nøgle):** `npm test` kører
+- røgtest af V1 og V2,
+- serverfunktionerne og pariteten med facit fra det oprindelige Python-script (`node --test "tests/*.test.mjs"`),
+- V2 i browser: polling, backoff, dialoger, statuspille og starttilstand (`node tests/live_v2.js`).
 
 ## Kilder
 

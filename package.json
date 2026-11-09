@@ -4,12 +4,12 @@
   "private": true,
   "description": "Prototype: produktionskalender til Kystnær (eksamensartefakt, Digitale teknologier i virksomheder)",
   "scripts": {
-    "start": "npx http-server src -p 8080 -c-1 -o /v2/produktionskalender-v2.html",
-    "test": "node tests/smoke.js",
+    "start": "node tests/dev_server.mjs",
+    "mock": "node tests/mock_rackbeat.js",
+    "test": "node tests/smoke.js && node --test \"tests/*.test.mjs\" && node tests/live_v2.js",
     "screenshots": "node tests/screenshots.js"
   },
   "devDependencies": {
-    "http-server": "^14.1.1",
     "playwright": "^1.48.0"
   },
   "dependencies": {

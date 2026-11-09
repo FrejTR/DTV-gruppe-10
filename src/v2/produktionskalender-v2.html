@@ -192,6 +192,11 @@ button{cursor:pointer}
 #prodTbl td:first-child,#batchTbl td:nth-child(2){white-space:normal;min-width:9.5rem}
 #prodTbl th:first-child,#prodTbl td:first-child{position:sticky;left:0;z-index:1;background:var(--surface)}
 #prodTbl th:first-child{background:var(--sand-light)}
+/* lodrette streger mellem kolonnerne i Batches, Bestillinger og events og Produkter og minimum */
+#prodTbl th+th,#prodTbl td+td,#batchTbl th+th,#batchTbl td+td,#resTbl th+th,#resTbl td+td{border-left:1px solid var(--sand-dark)}
+/* første kolonne i produkttabellen er fastlåst, og en kant ville blive væk ved sidelæns scroll: brug en indre skygge */
+#prodTbl th:nth-child(2),#prodTbl td:nth-child(2){border-left:0}
+#prodTbl th:first-child,#prodTbl td:first-child{box-shadow:inset -1px 0 0 var(--sand-dark)}
 .row-actions{flex-wrap:nowrap}
 @media (max-width:1180px){
   .masthead{padding-block:12px 4px}
@@ -212,7 +217,6 @@ button{cursor:pointer}
 }
 /* rackbeat */
 .src{display:inline-block;margin-left:6px;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;border:1px solid currentColor;border-radius:15px;padding:0 6px;vertical-align:1px;color:var(--earth)}
-.src.est{color:var(--muted)}
 .rb-pill{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:3px 12px;background:var(--sand-light);white-space:nowrap}
 .rb-pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--grey)}
 .rb-pill.ok::before{background:var(--green)}
@@ -325,7 +329,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 .add-line{align-self:flex-start}
 .form-err{margin:0;color:var(--red);font-size:.88rem;font-weight:700}
 .rate-src{min-width:9.5rem;font-size:.72rem;line-height:1.3;margin-top:3px}
-.import-list{margin:0;padding-left:18px;max-height:40vh;overflow-y:auto;font-size:.88rem;font-variant-numeric:tabular-nums}
 .who{color:var(--muted);font-size:.85rem}
 @media (max-width:560px){
   .field-row{grid-template-columns:1fr}
@@ -429,13 +432,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   <footer class="footer">
     <span class="rb-sync">
       <span class="rb-pill" id="rbPill">Rackbeat: ikke forbundet</span>
-      <button class="btn small ghost" id="btnSync" type="button">Importér lager fra Rackbeat</button>
-      <input id="lagerFile" type="file" accept=".json,application/json" aria-label="Vælg fil med lager fra Rackbeat" hidden>
-      <button class="btn small ghost" id="btnImport" type="button">Importér salgstempo</button>
-      <input id="importFile" type="file" accept=".json,application/json" aria-label="Vælg fil med salgstempo" hidden>
-      <span class="muted small" id="syncLog" aria-live="polite">Eksempeldata</span>
+      <span class="muted small" id="syncLog" aria-live="polite">Henter data fra Rackbeat</span>
     </span>
-    <span id="resetWrap"><button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button></span>
   </footer>
 </div>
 
@@ -496,11 +494,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   </div>
   <div class="field-row">
     <div class="field"><label for="npMin">Minimum (stk.)</label><input id="npMin" type="number" min="0" step="1" inputmode="numeric" value="30"></div>
-    <div class="field"><label for="npRate">Forventet salg pr. uge</label><input id="npRate" type="number" min="0" step="1" inputmode="numeric" value="10"></div>
-  </div>
-  <div class="field-row">
     <div class="field"><label for="npBatch">Typisk batch (stk.)</label><input id="npBatch" type="number" min="1" step="1" inputmode="numeric" value="60"></div>
-    <div class="field"><label for="npCount">Lager i dag (stk.)</label><input id="npCount" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
   </div>
   <p class="preview" id="npSteps"></p>
   <p class="form-err" id="npErr" role="alert" hidden></p>
@@ -529,7 +523,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
 <dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
 
-<dialog id="dlgImport"><div class="dlg" id="importBody"></div></dialog>
 
 <script>
 (() => {
@@ -563,79 +556,46 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   };
   const typeOf = p => TYPES[p && p.type] || TYPES['Andet'];
 
-  // ---------- eksempeldata (tænkte lager- og salgstal, tider fra produktionsskemaet) ----------
-  const T = TODAY;
-  function sampleData(){
-    const cd = add(T,-2);
-    const P = (id,name,type,min,rate,count,batch,sku,cure) => ({id,name,type,min,rate,count,countDate:cd,batch,sku,
+  // ---------- startdata: produkter med Rackbeats varenumre og navne, tider fra produktionsoversigten ----------
+  // Ingen batches, reservationer eller personer. Lager og salgstempo hentes fra Rackbeat.
+  // Minimum og typisk batch er foreløbige tal og bliver tomme i næste fase, til ejeren udfylder dem.
+  function startData(){
+    const P = (id,name,type,min,batch,sku,cure) => ({id,name,type,min,rate:0,count:0,countDate:TODAY,batch,sku,
       cure: cure || TYPES[type].cure, steps: TYPES[type].steps.map(x => ({...x}))});
-    const B = (no,by,pid,qty,made,status,extra) => ({no,by,pid,qty,made:add(T,made),status,...(extra||{})});
-    const products = [
-      P('havtorn-saebe','Havtorn sæbe bar','Sæbebarer',50,20,120,65,'HAT003'),
-      P('hyben-saebe','Hyben sæbe bar','Sæbebarer',50,18,70,65,'HYB003'),
-      P('tang-saebe','Tang sæbe bar','Sæbebarer',40,12,96,60,'TAN003'),
-      P('rosmarin-saebe','Rosmarin sæbe bar','Sæbebarer',30,9,48,60,'ROS004'),
-      P('neutral-saebe','Neutral Sæbe Bar','Sæbebarer',30,10,52,60,'NEU003'),
-      P('lanolin-saebe','Lanolin sæbe bar','Sæbebarer',20,5,30,40,'LAN002'),
-      P('havtorn-shampoo','Havtorn shampoo bar','Shampoobarer',40,16,104,60,'HAT001',7),
-      P('hyben-shampoo','Hyben shampoo bar','Shampoobarer',40,14,42,55,'HYB001',7),
-      P('kul-shampoo','Aktivt kul shampoo bar','Shampoobarer',30,8,61,50,'AKT001',7),
-      P('tang-shampoo','Tang shampoo bar','Shampoobarer',30,9,48,55,'TAN001',3),
-      P('rosmarin-shampoo','Rosmarin shampoo bar','Shampoobarer',40,15,74,55,'ROS001',3),
-      P('neutral-shampoo','Neutral Shampoo Bar','Shampoobarer',30,7,72,50,'NEU001',3),
-      P('havtorn-balsam','Havtorn balsam bar','Balsambarer',25,8,40,50,'HAT002'),
-      P('hyben-balsam','Hyben balsam bar','Balsambarer',25,7,22,50,'HYB002'),
-      P('rosmarin-balsam','Rosmarin balsam bar','Balsambarer',25,8,44,50,'ROS002'),
-      P('neutral-balsam','Neutral Balsam Bar','Balsambarer',20,5,30,50,'NEU002'),
-      P('harkur','Tang hårkur','Hårkure',20,6,26,40,'HAA001'),
-    ];
-    const batches = [
-      B(31,'Mette','havtorn-saebe',65,-24,'aktiv',{packed:true,packedOn:add(T,-1),steps:{demold:{on:add(T,-23),by:'Mette'},trim:{on:add(T,-16),by:'Lena'}}}),
-      B(32,'Lena','tang-shampoo',55,-3,'aktiv',{rejected:2}),
-      B(33,'Anna','hyben-saebe',65,-16,'aktiv',{rejected:4,rejectedOn:T,steps:{demold:{on:add(T,-15),by:'Anna'},trim:{on:add(T,-8),by:'Mette'}}}),
-      B(34,'Mette','kul-shampoo',50,-4,'aktiv'),
-      B(35,'Lena','havtorn-shampoo',60,-5,'kasseret'),
-      B(36,'Anna','havtorn-shampoo',60,-2,'aktiv'),
-      B(37,'Lena','neutral-shampoo',50,-1,'aktiv'),
-      B(38,'Mette','tang-saebe',60,4,'planlagt'),
-      B(39,'Anna','tang-saebe',60,-8,'aktiv',{steps:{demold:{on:add(T,-7),by:'Anna'}}}),
-      B(40,'Lena','rosmarin-saebe',60,-1,'aktiv'),
-      B(41,'Mette','havtorn-balsam',50,-1,'aktiv'),
-      B(42,'Anna','hyben-balsam',50,0,'planlagt'),
-    ].map(b => ({...b, cure: products.find(p => p.id === b.pid).cure}));
     return {
-      people: ['Lena','Mette','Anna'],
-      nextNo: 43,
-      products, batches,
-      res: [
-        {id:'r1',kind:'ordre',who:'Dansani',pid:'hyben-saebe',qty:40,date:add(T,16)},
-        {id:'r2',kind:'ordre',who:'Forhandler i Sverige',pid:'tang-shampoo',qty:25,date:add(T,9)},
-        {id:'r3',kind:'event',who:'Julemarked',pid:'havtorn-saebe',qty:30,date:add(T,33)},
-        {id:'r4',kind:'event',who:'Julemarked',pid:'rosmarin-shampoo',qty:15,date:add(T,33)},
-        {id:'r5',kind:'event',who:'Julemarked',pid:'havtorn-balsam',qty:20,date:add(T,33)},
+      people: [], nextNo: 1, batches: [], res: [],
+      products: [
+        P('havtorn-saebe','Havtorn sæbe bar','Sæbebarer',50,65,'HAT003'),
+        P('hyben-saebe','Hyben sæbe bar','Sæbebarer',50,65,'HYB003'),
+        P('tang-saebe','Tang sæbe bar','Sæbebarer',40,60,'TAN003'),
+        P('rosmarin-saebe','Rosmarin sæbe bar','Sæbebarer',30,60,'ROS004'),
+        P('neutral-saebe','Neutral Sæbe Bar','Sæbebarer',30,60,'NEU003'),
+        P('lanolin-saebe','Lanolin sæbe bar','Sæbebarer',20,40,'LAN002'),
+        P('havtorn-shampoo','Havtorn shampoo bar','Shampoobarer',40,60,'HAT001',7),
+        P('hyben-shampoo','Hyben shampoo bar','Shampoobarer',40,55,'HYB001',7),
+        P('kul-shampoo','Aktivt kul shampoo bar','Shampoobarer',30,50,'AKT001',7),
+        P('tang-shampoo','Tang shampoo bar','Shampoobarer',30,55,'TAN001',3),
+        P('rosmarin-shampoo','Rosmarin shampoo bar','Shampoobarer',40,55,'ROS001',3),
+        P('neutral-shampoo','Neutral Shampoo Bar','Shampoobarer',30,50,'NEU001',3),
+        P('havtorn-balsam','Havtorn balsam bar','Balsambarer',25,50,'HAT002'),
+        P('hyben-balsam','Hyben balsam bar','Balsambarer',25,50,'HYB002'),
+        P('rosmarin-balsam','Rosmarin balsam bar','Balsambarer',25,50,'ROS002'),
+        P('neutral-balsam','Neutral Balsam Bar','Balsambarer',20,50,'NEU002'),
+        P('harkur','Tang hårkur','Hårkure',20,40,'HAA001'),
       ],
     };
   }
 
-  const KEY = 'kystnaer-produktionskalender-v2-onepager-i';
-  const OLD_KEY = 'kystnaer-produktionskalender-v2-onepager-h';   // Nøglen før salgstempo; felterne er kun tilføjet, så data kan genbruges
+  // Ny nøgle: gemte data fra før (med de opdigtede eksempelbatches og -reservationer) bruges ikke
+  const KEY = 'kystnaer-produktionskalender-v2-onepager-j';
   let S;
-  try { S = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem(OLD_KEY)); } catch(e) { S = null; }
-  if (!S || !Array.isArray(S.products)) S = sampleData();
+  try { S = JSON.parse(localStorage.getItem(KEY)); } catch(e) { S = null; }
+  if (!S || !Array.isArray(S.products)) S = startData();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
 
   const prod = id => S.products.find(p => p.id === id);
   // Produkter er data: nye produkter kommer automatisk med i alle visninger og beregninger
-  const OLD_TYPES = {'Sæbe bar':'Sæbebarer','Shampoo bar':'Shampoobarer','Balsam bar':'Balsambarer','Hårkur':'Hårkure'};
-  S.products.forEach(p => { if (OLD_TYPES[p.type]) p.type = OLD_TYPES[p.type]; if (!p.type) p.type = 'Andet'; if (!Array.isArray(p.steps)) p.steps = typeOf(p).steps.map(x => ({...x})); });
-  // Eksempeldata havde opdigtede varenumre. Gemte data får Rackbeats rigtige numre og navne (navnet kun, hvis det ikke er rettet)
-  const OLD_SKUS = {'KN-1001':['HAT003','Havtorn sæbe bar'],'KN-1002':['HYB003','Hyben sæbe bar'],'KN-1003':['TAN003','Tang sæbe bar'],
-    'KN-1004':['ROS004','Rosmarin sæbe bar'],'KN-1005':['NEU003','Neutral Sæbe Bar','Neutral sæbe bar'],'KN-1006':['LAN002','Lanolin sæbe bar'],
-    'KN-2001':['HAT001','Havtorn shampoo bar'],'KN-2002':['HYB001','Hyben shampoo bar'],'KN-2003':['AKT001','Aktivt kul shampoo bar'],
-    'KN-2004':['TAN001','Tang shampoo bar'],'KN-2005':['ROS001','Rosmarin shampoo bar'],'KN-2006':['NEU001','Neutral Shampoo Bar','Neutral shampoo bar'],
-    'KN-3001':['HAT002','Havtorn balsam bar'],'KN-3002':['HYB002','Hyben balsam bar'],'KN-3004':['ROS002','Rosmarin balsam bar'],
-    'KN-3005':['NEU002','Neutral Balsam Bar','Neutral balsam bar'],'KN-4001':['HAA001','Tang hårkur','Hårkur bar']};
-  S.products.forEach(p => { const m = OLD_SKUS[p.sku]; if (!m) return; p.sku = m[0]; if (p.name === (m[2] || m[1])) p.name = m[1]; });
+  S.products.forEach(p => { if (!p.type) p.type = 'Andet'; if (!Array.isArray(p.steps)) p.steps = typeOf(p).steps.map(x => ({...x})); });
   const activeProducts = () => S.products.filter(p => !p.archived);
 
   // ---------- trin undervejs (fx tag ud af forme, skær kanter) ----------
@@ -689,7 +649,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
   const net = b => Math.max(0, b.qty - (b.rejected || 0));
   const bn = b => (b.label != null && String(b.label).trim() !== '') ? String(b.label) : String(b.no);
-  if (!Array.isArray(S.people) || !S.people.length) S.people = ['Lena','Mette','Anna'];
+  if (!Array.isArray(S.people)) S.people = [];
   const ready = b => add(b.made, b.cure);
   const counts = b => b.status === 'aktiv' || b.status === 'planlagt';
 
@@ -849,19 +809,15 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('agenda').innerHTML = agenda || `<p class="hint">Intet planlagt i denne måned.</p>`;
   }
 
-  // Kilden til salgstempoet: "Estimat", eller beregnet ud fra ordrehistorik og importeret fra scripts/beregn_salgstempo.py
-  const FLAG_TEXT = {kort_historik:'kort historik', ufuldstaendig_saeson:'ufuldstændig sæson', muligt_udsolgt:'muligt udsolgt', lavt_salg:'lavt salg'};
+  // Kilden til salgstempoet: beregnet af serveren ud fra ordrehistorikken i Rackbeat
   function rateSource(p){
     const s = p.salgstempo;
-    if (!s) return `<div class="muted small rate-src">Estimat</div>`;
-    const flags = s.flag.map(f => FLAG_TEXT[f] || f);
-    const kilde = s.kilde === 'rackbeat' && s.hentet ? `Rackbeat, ${tidspunkt(s.hentet)}` : `Beregnet (${s.vindueUger} uger, ${fmt(s.dato)})`;
-    return `<div class="muted small rate-src">${esc(kilde)}<br>Sikkerhed: ${esc(s.sikkerhed)}${flags.length ? `<br>${esc(flags.join(', '))}` : ''}</div>`;
+    if (!s) return `<div class="muted small rate-src">Ikke hentet</div>`;
+    // Kun tidspunktet for seneste opdatering. Sikkerhed og flag gemmes på produktet, men vises ikke.
+    return `<div class="muted small rate-src">${esc(s.hentet ? `Rackbeat, ${tidspunkt(s.hentet)}` : 'Rackbeat')}</div>`;
   }
 
-  // Lager i Rackbeat vises præcis som hentet med scripts/hent_lager.py, uden beregning
-  const fT = new Intl.DateTimeFormat('da-DK', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
-  const fmtHentet = s => fT.format(new Date(s));
+  // Lager i Rackbeat vises præcis som hentet, uden beregning
   // Lokal dato og klokkeslæt (hh:mm:ss) for et tidspunkt fra Rackbeat. Datoen vises kun, hvis det ikke er i dag.
   const lokalDato = s => { const d = new Date(s); return iso(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))); };
   const pad2 = n => String(n).padStart(2, '0');
@@ -869,14 +825,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const tidspunkt = s => (lokalDato(s) === TODAY ? '' : fmt(lokalDato(s)) + ' ') + klokken(s);
   const lagerCell = p => p.lagerHentet
     ? `<span id="lager-${p.id}">${esc(p.count)}</span><div class="muted small">Rackbeat, ${esc(tidspunkt(p.lagerHentet))}</div>`
-    : `<span id="lager-${p.id}" class="muted">–</span><div class="muted small">Estimat</div>`;
+    : `<span id="lager-${p.id}" class="muted">–</span><div class="muted small">Ikke hentet</div>`;
 
   function renderProducts(){
     const list =[...activeProducts(), ...S.products.filter(p => p.archived)];
     const rows = list.map(p => {
-      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="9" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
+      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="8" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
       const x = analyze(p);
-      const in3 = proj(p, add(TODAY, p.cure));
       const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
       const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
       return `<tr>
@@ -886,14 +841,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
-        <td class="n">${in3}</td>
         <td>${risk}</td>
         <td class="num">${esc(latest)}</td>
         <td>${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep">${esc(st.name)} efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
         <td>${pendingProd === p.id ? `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button><button class="btn small" type="button" data-cancel-prod>Fortryd</button></div>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`}</td>
       </tr>`;
     }).join('');
-    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Minimum<span class="src">Rackbeat</span></th><th class="n">Salg/uge<span class="src est">${list.some(p => p.salgstempo) ? 'Se kilde' : 'Estimat'}</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th class="n">Når ny batch er klar</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Minimum</th><th class="n">Salg/uge<span class="src">Rackbeat</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
   }
 
   // Kasserede stk. kan rettes, indtil batchen er pakket og sendt videre til Rackbeat
@@ -1159,7 +1113,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const prev = sel.value;
     sel.innerHTML = S.people.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') + `<option value="__new">+ Nyt navn…</option>`;
     let last = null; try { last = localStorage.getItem('kystnaer-hvem'); } catch(e) {}
-    sel.value = S.people.includes(prev) ? prev : (S.people.includes(last) ? last : S.people[0]);
+    sel.value = S.people.includes(prev) ? prev : (S.people.includes(last) ? last : (S.people[0] ?? '__new'));
+    sel.dispatchEvent(new Event('change'));   // Viser feltet til nyt navn, når der ikke er nogen personer endnu
     if (labelEl) labelEl.textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
   }
   const bWho = document.getElementById('bWho'), bWhoNew = document.getElementById('bWhoNew');
@@ -1257,8 +1212,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (S.products.some(p => p.name.toLowerCase() === name.toLowerCase())){ err.textContent = `Der findes allerede et produkt med navnet ${name}.`; err.hidden = false; return; }
     let id = slug(name), k = 2; while (prod(id)) id = slug(name) + '-' + (k++);
     S.products.push({ id, name, sku: document.getElementById('npSku').value.trim(), type: npType.value,
-      min: num('npMin'), rate: num('npRate'), cure: Math.max(1, num('npCure')), batch: Math.max(1, num('npBatch')),
-      count: num('npCount'), countDate: TODAY, steps: (TYPES[npType.value] || TYPES['Andet']).steps.map(x => ({...x})) });
+      min: num('npMin'), rate: 0, cure: Math.max(1, num('npCure')), batch: Math.max(1, num('npBatch')),
+      count: 0, countDate: TODAY, steps: (TYPES[npType.value] || TYPES['Andet']).steps.map(x => ({...x})) });
     save(); dlgP.close(); renderAll(); toast(`${name} er oprettet`);
   });
 
@@ -1501,60 +1456,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   document.getElementById('todayM').addEventListener('click', () => { month = TODAY.slice(0,7); renderCalendar(); });
   document.getElementById('alerts').addEventListener('click', e => { if (e.target.id === 'moreAlerts'){ showAllAlerts = !showAllAlerts; renderAlerts(); } });
 
-  const resetWrap = document.getElementById('resetWrap');
-  resetWrap.addEventListener('click', e => {
-    if (e.target.id === 'btnReset'){ resetWrap.innerHTML = `<span class="small">Alle ændringer slettes.</span> <button class="btn small danger" id="btnResetYes" type="button">Nulstil</button> <button class="btn small" id="btnResetNo" type="button">Fortryd</button>`; }
-    else if (e.target.id === 'btnResetYes'){ S = sampleData(); save(); renderAll(); showSyncState(); resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; toast('Eksempeldata nulstillet'); }
-    else if (e.target.id === 'btnResetNo'){ resetWrap.innerHTML = `<button class="btn small ghost" id="btnReset" type="button">Nulstil eksempeldata</button>`; }
-  });
-
-  // ---------- import af lager (JSON fra scripts/hent_lager.py) ----------
-  // Lageret erstatter "Lager i Rackbeat" for produkter med samme varenummer. Intet regnes om.
+  // Uden server er der ingen data. Appen skal åbnes fra Vercel (eller den lokale server, se docs/rackbeat-opsaetning.md).
   function showSyncState(){
     if (live.aktiv){ showLiveState(); return; }
-    const pill = document.getElementById('rbPill'); pill.classList.remove('ok', 'stale', 'err');
-    const h =S.products.map(p => p.lagerHentet).filter(Boolean).sort().pop();
-    document.getElementById('rbPill').textContent = h ? 'Rackbeat: lager hentet' : 'Rackbeat: ikke forbundet';
-    document.getElementById('syncLog').textContent = h ? `Lager fra Rackbeat, hentet ${fmtHentet(h)}` : 'Eksempeldata';
+    setPill('err', 'Rackbeat: ingen forbindelse', 'Appen skal åbnes fra serveren. Der hentes ingen data.');
   }
-  function readLager(data){
-    if (!data || typeof data !== 'object' || data.kilde !== 'rackbeat' || !data.lager || typeof data.lager !== 'object' || Array.isArray(data.lager)
-      || typeof data.hentet !== 'string' || isNaN(Date.parse(data.hentet))) return null;
-    const out = {hentet: data.hentet, updates: [], missing: []};
-    for (const p of S.products){
-      if (!p.sku) continue;
-      const n = data.lager[p.sku];
-      if (Number.isInteger(n)) out.updates.push({p, n}); else out.missing.push(p.sku);
-    }
-    return out;
-  }
-  function showLagerResult(title, html){
-    importBody.innerHTML = `<h2>${title}</h2>${html}${closeBtn}`;
-    document.getElementById('importClose').onclick = () => dlgI.close();
-    if (!dlgI.open) dlgI.showModal();
-  }
-  const lagerFile = document.getElementById('lagerFile');
-  document.getElementById('btnSync').addEventListener('click', () => lagerFile.click());
-  lagerFile.addEventListener('change', () => {
-    const f = lagerFile.files[0]; if (!f) return;
-    const rd = new FileReader();
-    const fejl = msg => showLagerResult('Importér lager', `<p class="form-err" role="alert">${esc(msg)}</p><p class="hint">Intet er ændret.</p>`);
-    rd.onload = () => {
-      lagerFile.value = '';   // Så samme fil kan vælges igen
-      let data; try { data = JSON.parse(rd.result); } catch(e) { fejl('Filen er ikke gyldig JSON.'); return; }
-      const r = readLager(data);
-      if (!r){ fejl('Filen er ikke en lagerfil fra scripts/hent_lager.py.'); return; }
-      if (!r.updates.length){ fejl('Ingen af kalenderens varenumre findes i filen.'); return; }
-      r.updates.forEach(({p, n}) => { p.count = n; p.countDate = r.hentet.slice(0,10); p.lagerHentet = r.hentet; });
-      save(); renderAll(); showSyncState();
-      showLagerResult('Lager importeret', `<p>Lager i Rackbeat opdateret for ${r.updates.length} ${r.updates.length === 1 ? 'produkt' : 'produkter'}, hentet ${esc(fmtHentet(r.hentet))}.</p>
-        ${skuLine('Ikke fundet i Rackbeat', r.missing) || '<p class="hint">Alle varenumre blev fundet.</p>'}`);
-    };
-    rd.onerror = () => { lagerFile.value = ''; fejl('Filen kunne ikke læses.'); };
-    rd.readAsText(f);
-  });
 
-  // ---------- import af salgstempo (JSON fra scripts/beregn_salgstempo.py) ----------
+  // ---------- salgstempo fra /api/salgstempo: kontrol og match på varenummer ----------
   // Foreløbig bruges kun rate i beregningerne. maanedlig og seneste8 gemmes til senere.
   function readSalgstempo(data){
     if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
@@ -1569,58 +1477,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }
     return out;
   }
-  const importBody = document.getElementById('importBody');
-  const dlgI = document.getElementById('dlgImport');
-  const skuLine = (label, list) => list.length ? `<p class="hint">${label}: ${esc(list.join(', '))}</p>` : '';
-  const closeBtn = `<div class="dlg-actions"><button class="btn primary" type="button" id="importClose">Luk</button></div>`;
-  const rateNo = n => n.toLocaleString('da-DK', {maximumFractionDigits:2});
-  function showImportError(msg){
-    importBody.innerHTML = `<h2>Importér salgstempo</h2><p class="form-err" role="alert">${esc(msg)}</p><p class="hint">Intet er ændret.</p>${closeBtn}`;
-    document.getElementById('importClose').onclick = () => dlgI.close();
-    dlgI.showModal();
-  }
-  function showImportConfirm(r){
-    const rows = r.updates.map(({p, x}) => `<li>${esc(p.name)}: ${rateNo(p.rate)} → ${rateNo(x.rate)}</li>`).join('');
-    const notFound = skuLine('Ikke fundet i kalenderen', r.missing) + skuLine('Ugyldige i filen', r.invalid);
-    if (!r.updates.length){ showImportError('Filen indeholder ingen produkter, der matcher kalenderen.' + (r.missing.length || r.invalid.length ? ' SKU\'er: ' + r.missing.concat(r.invalid).join(', ') : '')); return; }
-    importBody.innerHTML = `<h2>Importér salgstempo?</h2>
-      <p class="hint">Salg pr. uge ændres for ${r.updates.length} ${r.updates.length === 1 ? 'produkt' : 'produkter'}, og det ændrer forventet lager og startdatoer.</p>
-      <ul class="import-list">${rows}</ul>${notFound}
-      <div class="dlg-actions"><button class="btn" type="button" id="importNo">Annullér</button><button class="btn primary" type="button" id="importYes">Importér</button></div>`;
-    document.getElementById('importNo').onclick = () => dlgI.close();
-    document.getElementById('importYes').onclick = () => {
-      r.updates.forEach(({p, x}) => {
-        p.rate = x.rate;
-        p.salgstempo = {kilde:'beregnet', dato:x.beregnet, vindueUger:x.vindue_uger, sikkerhed:x.sikkerhed,
-          flag: Array.isArray(x.flag) ? x.flag.map(String) : [], maanedlig: Array.isArray(x.maanedlig) ? x.maanedlig : null,
-          seneste8: typeof x.seneste8 === 'number' ? x.seneste8 : null};
-      });
-      save(); renderAll();
-      importBody.innerHTML = `<h2>Salgstempo importeret</h2>
-        <p>${r.updates.length} ${r.updates.length === 1 ? 'produkt' : 'produkter'} opdateret.</p>
-        ${skuLine('Ikke fundet i kalenderen', r.missing) || '<p class="hint">Alle SKU\'er i filen blev fundet.</p>'}${skuLine('Ugyldige i filen', r.invalid)}${closeBtn}`;
-      document.getElementById('importClose').onclick = () => dlgI.close();
-    };
-    dlgI.showModal();
-  }
-  const importFile = document.getElementById('importFile');
-  document.getElementById('btnImport').addEventListener('click', () => importFile.click());
-  importFile.addEventListener('change', () => {
-    const f = importFile.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      importFile.value = '';   // Så samme fil kan vælges igen
-      let data; try { data = JSON.parse(rd.result); } catch(e) { showImportError('Filen er ikke gyldig JSON.'); return; }
-      const r = readSalgstempo(data);
-      if (!r){ showImportError('Filen har ikke det forventede format.'); return; }
-      showImportConfirm(r);
-    };
-    rd.onerror = () => { importFile.value = ''; showImportError('Filen kunne ikke læses.'); };
-    rd.readAsText(f);
-  });
-
   // ---------- Rackbeat live: /api/status hvert 20. sekund og /api/salgstempo hvert 10. minut ----------
-  // Kun når siden kører fra en server. Uden server (åbnet som fil, eller uden /api) bruges eksempeldata og filimport.
+  // Kun når siden kører fra en server. Uden server (åbnet som fil, eller uden /api) vises en fejl i pillen.
   // Data opdaterer kun lager (count, countDate) og salgstempo (rate). Batches, reservationer og indstillinger røres ikke.
   const POLL_MS = [20000, 40000, 60000];   // Ved fejl ventes gradvist længere
   const TEMPO_MS = 10 * 60000, TEMPO_IGEN_MS = 60000;
@@ -1693,7 +1551,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (!s) return setPill(null, 'Rackbeat: forbinder…', 'Henter data fra Rackbeat');
     if (s.data.lagerStatus === 'mangler_adgang') return setPill('err', 'Rackbeat: mangler adgang til lager', `Nøglen har ikke adgang til lager. Opdateret ${klokken(s.hentet)}.${tempo}${venter}`);
     if (s.forældet) return setPill('stale', `Rackbeat: forældet (${klokken(s.hentet)})`, `Rackbeat svarer ikke. Viser data fra ${klokken(s.hentet)}.${tempo}${venter}`);
-    setPill('ok', `Rackbeat: opdateret ${klokken(s.hentet)}`, `Lager og salgstempo fra Rackbeat.${tempo}${venter}`);
+    setPill('ok', `Rackbeat: opdateret ${klokken(s.hentet)}`, `${tempo}${venter}`.trim());
   }
 
   async function fetchTempo(){
@@ -1726,8 +1584,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (Date.now() - live.tempoForsoegt >= TEMPO_MS) fetchTempo();
     schedule();
   }
+  // Hent straks, når fanen bliver synlig igen. Browseren kan også sende hændelsen uden at fanen har været skjult (fx ved genindlæsning).
+  let varSkjult = document.visibilityState !== 'visible';
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') tick(); else clearTimeout(live.timer);
+    if (document.visibilityState !== 'visible'){ varSkjult = true; clearTimeout(live.timer); return; }
+    if (varSkjult){ varSkjult = false; tick(); }
   });
 
   renderAll(); showSyncState();

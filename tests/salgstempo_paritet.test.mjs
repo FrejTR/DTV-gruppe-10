@@ -1,30 +1,21 @@
-// Viser, at serverens JavaScript-port giver samme salgstempo som scripts/beregn_salgstempo.py
-// på data/eksempel_ordrehistorik.csv. Kørsel: node --test tests/
+// Viser, at serverens beregning giver samme salgstempo som det oprindelige Python-script.
+// Facit (tests/fixtures/salgstempo_facit.json) blev lavet med scripts/beregn_salgstempo.py, før scriptet blev slettet.
+// Ændres reglerne med vilje, skal facit rettes i hånden. Kørsel: node --test "tests/*.test.mjs"
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beregnAlle, normaliser, tilKlient } from '../functions/_lib/salgstempo.js';
 import { ordrelinjeTilRaa } from '../functions/_lib/rackbeat.js';
 
 const ROD = fileURLToPath(new URL('..', import.meta.url));
-const CSV = ROD + 'data/eksempel_ordrehistorik.csv';
-const PYTHON = process.env.PYTHON || 'python3';
+const CSV = ROD + 'tests/fixtures/eksempel_ordrehistorik.csv';
+const FACIT = JSON.parse(readFileSync(ROD + 'tests/fixtures/salgstempo_facit.json', 'utf-8')).resultater;
 
-function pythonResultat(dato, medKanal) {
-  const kode = `
-import json, sys
-sys.path.insert(0, 'scripts')
-from datetime import date
-import beregn_salgstempo as bs, ordrekilder as ok
-kol = {"dato": "Ordredato", "sku": "Varenr.", "antal": "Antal", "kanal": ${medKanal ? '"Kanal"' : 'None'}, "ordre_id": "Ordrenr."}
-linjer = ok.fil_kilde(${JSON.stringify(CSV)}, kol).hent_ordrelinjer()
-print(json.dumps(bs.beregn_alle(linjer, date.fromisoformat("${dato}"), 52)))
-`;
-  const p = spawnSync(PYTHON, ['-c', kode], { cwd: ROD, encoding: 'utf-8' });
-  assert.equal(p.status, 0, p.stderr);
-  return JSON.parse(p.stdout);
+function facit(dato, medKanal) {
+  const r = FACIT[`${dato}/${medKanal ? 'med' : 'uden'}_kanal`];
+  assert.ok(r, `intet facit for ${dato}`);
+  return r;
 }
 
 function csvRaekker() {
@@ -61,8 +52,8 @@ function assertParitet(py, js) {
 
 for (const dato of ['2026-11-02', '2026-06-17']) {
   for (const medKanal of [true, false]) {
-    test(`samme resultat som Python (${dato}, ${medKanal ? 'med' : 'uden'} kanal)`, () => {
-      assertParitet(pythonResultat(dato, medKanal), jsResultat(dato, medKanal));
+    test(`samme resultat som facit fra Python (${dato}, ${medKanal ? 'med' : 'uden'} kanal)`, () => {
+      assertParitet(facit(dato, medKanal), jsResultat(dato, medKanal));
     });
   }
 }
@@ -84,7 +75,7 @@ test('samme resultat via Rackbeat-formatet (uden kanal, som i Rackbeat)', () => 
       status: { is_cancelled: false }, customer: { number: 1, name: 'Kunde A/S' } },
   })).filter(Boolean);
   const js = beregnAlle(normaliser(raa).linjer, '2026-11-02', 52);
-  assertParitet(pythonResultat('2026-11-02', false), js);
+  assertParitet(facit('2026-11-02', false), js);
   assert.ok(!JSON.stringify(raa).includes('Kunde'), 'kundenavnet må ikke komme med');
 });
 
