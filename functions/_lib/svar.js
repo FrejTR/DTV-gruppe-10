@@ -13,6 +13,8 @@ const TEKSTER = {
   mangler_adgang: 'Mangler adgang i Rackbeat',
   for_mange_kald: 'Rackbeat har for travlt',
   for_mange_sider: 'For mange data at hente',
+  afvist_af_rackbeat: 'Rackbeat afviste reguleringen',
+  ingen_forbindelse: 'Ingen forbindelse til Rackbeat',
 };
 
 export function fejlSvar(kode) {

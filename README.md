@@ -47,7 +47,7 @@ Scriptet henter alle ordrelinjer fra `GET /orders/lines` og skriver `output/salg
 - Antal er det bestilte antal, og datoen er ordredatoen.
 
 ### Rackbeat live
-Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat. Der er kun læseadgang. Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
+Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat, og godkendte batches lægges på Hovedlager i Rackbeat, når de markeres som pakket (lagerregulering, se vejledningens afsnit 7). Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
 
 - `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`) og salg de seneste 7 dage pr. varenummer og dag. Serveren gemmer svaret i 20 sekunder. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
 - `GET /api/salgstempo` (ved start og hvert 10. minut): salgstempo beregnet efter samme regler som `scripts/beregn_salgstempo.py` (testet mod scriptet på eksempeldata). Serveren gemmer resultatet i en time og beregner det nye i baggrunden.

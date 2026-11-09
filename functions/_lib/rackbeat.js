@@ -1,6 +1,7 @@
-// Læseadgang til Rackbeat. Kun GET, kun faste endpoints, og kun de felter, kalenderen bruger.
-// Kilde: developer.rackbeat.com (Authentication, Pagination, Errors & Rate Limits,
-// "List Lines for all Orders" og "List Products"), slået op november 2026.
+// Adgang til Rackbeat. Læsning (lavKlient) er kun GET. Skrivning (lavSkriveKlient) er kun lagerreguleringer,
+// der lægger et antal til beholdningen. Kun faste endpoints, og kun de felter, kalenderen bruger.
+// Kilde: developer.rackbeat.com (Authentication, Pagination, Errors & Rate Limits, "List Lines for all Orders",
+// "List Products" og "Create Inventory Adjustment"), slået op november 2026.
 
 const BASIS_URL = 'https://app.rackbeat.com/api';
 const PR_SIDE = 100;           // Dokumentationen nævner ingen øvre grænse; sidetallet læses fra svaret
@@ -15,7 +16,11 @@ export class RackbeatFejl extends Error {
   }
 }
 
-const KODER = { 401: 'noegle_afvist', 403: 'mangler_adgang', 404: 'ikke_fundet', 429: 'for_mange_kald' };
+const KODER = { 401: 'noegle_afvist', 403: 'mangler_adgang', 404: 'ikke_fundet', 422: 'afvist_af_rackbeat', 429: 'for_mange_kald' };
+
+// Lagerregulering ved godkendt batch. Afklaret med Kystnær og ud fra deres egne reguleringer i Rackbeat:
+export const HOVEDLAGER = 1001;           // Lokation "Hovedlager" (Rackbeats standardlokation)
+export const KATEGORI_PRODUKTION = 1004;  // Reguleringskategori "Produktion"
 
 export function lavKlient({ noegle, fetch: hent = globalThis.fetch, vent = ms => new Promise(r => setTimeout(r, ms)), basisUrl = BASIS_URL, pause = PAUSE_MELLEM_SIDER }) {
   if (!noegle) throw new RackbeatFejl('ikke_sat_op');
@@ -78,6 +83,55 @@ export function lavKlient({ noegle, fetch: hent = globalThis.fetch, vent = ms =>
         if (typeof p.stock_quantity === 'number' && Number.isFinite(p.stock_quantity)) lager[p.number] = p.stock_quantity;
       }
       return lager;
+    },
+  };
+}
+
+/** Skriveadgang: opretter lagerreguleringer, der lægger et antal til beholdningen. Ingen genforsøg ved fejl,
+ *  for et POST, der måske er gået igennem, må ikke sendes igen. Dobbelt-registrering forhindres med referencen. */
+export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisUrl = BASIS_URL }) {
+  if (!noegle) throw new RackbeatFejl('ikke_sat_op');
+  const hoveder = { Authorization: `Bearer ${noegle}`, Accept: 'application/json', 'Content-Type': 'application/json' };
+
+  async function kald(metode, sti, krop) {
+    let svar;
+    try {
+      svar = await hent(`${basisUrl}${sti}`, { method: metode, headers: hoveder, ...(krop ? { body: JSON.stringify(krop) } : {}) });
+    } catch {
+      throw new RackbeatFejl('ingen_forbindelse');
+    }
+    if (svar.status < 200 || svar.status > 299) throw new RackbeatFejl(KODER[svar.status] || 'rackbeat_fejl', svar.status);
+    try {
+      return await svar.json();
+    } catch {
+      throw new RackbeatFejl('uventet_svar', svar.status);
+    }
+  }
+
+  return {
+    /** Finder en regulering med referencen i beskrivelsen blandt de nyeste (Rackbeat viser nyeste først). */
+    async findRegulering(reference) {
+      const data = await kald('GET', `/inventory-adjustments?${new URLSearchParams({ limit: 100, page: 1 })}`);
+      const liste = data && data.inventory_regulations;
+      if (!Array.isArray(liste)) throw new RackbeatFejl('uventet_svar');
+      const fundet = liste.find(r => r && typeof r.description === 'string' && r.description.includes(reference));
+      return fundet ? { id: fundet.id } : null;
+    },
+    /** Lægger antal stk. af varen til på Hovedlager. regulate_diff: false betyder "læg til", ikke "sæt til". */
+    async lagerregulering({ sku, antal, dato, aarsag, beskrivelse }) {
+      const data = await kald('POST', '/inventory-adjustments', {
+        regulated_at: dato,
+        reason: aarsag,
+        description: beskrivelse,
+        adjustment_type: 'quantity',
+        item_id: sku,
+        location: HOVEDLAGER,
+        quantity: String(antal),
+        regulation_type: KATEGORI_PRODUKTION,
+        regulate_diff: false,
+      });
+      const r = data && (data.inventory_regulation || data.inventory_adjustment || data);
+      return { id: r && r.id != null ? r.id : null };
     },
   };
 }
