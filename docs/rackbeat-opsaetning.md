@@ -109,7 +109,7 @@ Når en batch markeres som *Pakket* i kalenderen på Vercel, spørger kalenderen
 | Læg til eller sæt til | **Læg til** (`regulate_diff: false`) | "Sæt til indtastede antal" ville overskrive beholdningen |
 | Kategori | 1004 (Produktion) | |
 | Årsag og beskrivelse | "Batch #32 godkendt" og en reference | Referencen forhindrer, at samme batch registreres to gange |
-| Bogføring | Sendes ikke (`book` udelades) | Som Kystnærs egne reguleringer, der heller ikke er bogført |
+| Bogføring | Ja, straks efter oprettelsen (`POST /inventory-adjustments/{id}/book`) | En regulering er en kladde, indtil den er bogført, og ændrer først beholdningen derefter |
 
 Batchen markeres først som pakket, når Rackbeat har bekræftet. En batch, der er lagt på lager, kan ikke fortrydes i kalenderen. Er antallet forkert, rettes det i Rackbeat. Uden server (fil, `npm start`, GitHub Pages) pakkes kun i kalenderen som før.
 

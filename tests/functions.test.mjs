@@ -335,33 +335,37 @@ function regAnmodning(krop = GYLDIG, { origin = 'https://kalender.example.com', 
   return new Request(URL_REG, { method: 'POST', headers: hoveder, body: typeof krop === 'string' ? krop : JSON.stringify(krop) });
 }
 
-/** Falsk Rackbeat til skrivning. eksisterende: reguleringer, der allerede findes. postStatus: svar på POST. */
-function falskSkriv({ eksisterende = [], postStatus = 201, netvaerk = false } = {}) {
+/** Falsk Rackbeat til skrivning. eksisterende: reguleringer, der allerede findes. postStatus: svar på oprettelse.
+ *  bogStatus: svar på bogføring. bogfoertVed422: om GET af reguleringen viser den som bogført. */
+function falskSkriv({ eksisterende = [], postStatus = 201, bogStatus = 200, bogfoertVed422 = false, netvaerk = false } = {}) {
   const kald = [];
   const hent = async (url, init = {}) => {
-    kald.push({ url, metode: init.method || 'GET', auth: init.headers && init.headers.Authorization, krop: init.body ? JSON.parse(init.body) : null });
+    const metode = init.method || 'GET', sti = new URL(url).pathname;
+    kald.push({ url, sti, metode, auth: init.headers && init.headers.Authorization, krop: init.body ? JSON.parse(init.body) : null });
     if (netvaerk) throw new TypeError('fetch failed');
-    if ((init.method || 'GET') === 'GET') return new Response(JSON.stringify({ inventory_regulations: eksisterende, total: eksisterende.length, pages: 1, limit: 100, page: 1 }), { status: 206 });
-    if (postStatus !== 201) return new Response(JSON.stringify({ errors: { item_id: ['invalid ' + NOEGLE] } }), { status: postStatus });
-    return new Response(JSON.stringify({ inventory_regulation: { id: 4711 } }), { status: 201 });
+    const fejl = status => new Response(JSON.stringify({ errors: { item_id: ['invalid ' + NOEGLE] } }), { status });
+    if (metode === 'GET' && sti.endsWith('/inventory-adjustments')) return new Response(JSON.stringify({ inventory_regulations: eksisterende, total: eksisterende.length, pages: 1, limit: 100, page: 1 }), { status: 206 });
+    if (metode === 'GET') return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: bogfoertVed422 } }), { status: 200 });
+    if (sti.endsWith('/book')) return bogStatus === 200 ? new Response('', { status: 200 }) : fejl(bogStatus);
+    if (postStatus !== 201) return fejl(postStatus);
+    return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: false } }), { status: 201 });
   };
   return { hent, kald };
 }
 const poster = kald => kald.filter(k => k.metode === 'POST');
+const OPRET = '/api/inventory-adjustments', BOG = id => `/api/inventory-adjustments/${id}/book`;
 
-test('lagerregulering: lægger antallet til på Hovedlager i kategorien Produktion', async () => {
+test('lagerregulering: opretter og bogfører, så antallet lægges til på Hovedlager i kategorien Produktion', async () => {
   const rb = falskSkriv();
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
   assert.equal(svar.status, 201);
   const b = await krop(svar);
   assert.deepEqual(b.data, { id: 4711, sku: 'HAT003', antal: 63, lokation: 1001, dato: '2026-11-03', allerede: false });
-  assert.equal(poster(rb.kald).length, 1);
+  assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET, BOG(4711)], 'først oprettes kladden, så bogføres den');
   const p = poster(rb.kald)[0];
   assert.equal(p.url, 'https://app.rackbeat.com/api/inventory-adjustments');
   assert.deepEqual(p.krop, { regulated_at: '2026-11-03', reason: 'Batch #43 godkendt', description: 'Produktionskalender, ref. b43-1a2b3c4d',
     adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '63', regulation_type: 1004, regulate_diff: false });
-  // "Læg til", aldrig "sæt til", og aldrig bogføring
-  assert.ok(!('book' in p.krop) && !('booked' in p.krop));
   assert.ok(rb.kald.every(k => k.auth === `Bearer ${NOEGLE}`));
   await ingenHemmeligheder(svar);
 });
@@ -396,8 +400,8 @@ test('lagerregulering: ugyldige data afvises uden kald til Rackbeat', async () =
   }
 });
 
-test('lagerregulering: en batch, der allerede er registreret, sendes ikke igen', async () => {
-  const rb = falskSkriv({ eksisterende: [{ id: 999, description: 'Produktionskalender, ref. b43-1a2b3c4d' }] });
+test('lagerregulering: en batch, der allerede er bogført, sendes ikke igen', async () => {
+  const rb = falskSkriv({ eksisterende: [{ id: 999, is_booked: true, description: 'Produktionskalender, ref. b43-1a2b3c4d' }] });
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
   assert.equal(svar.status, 200);
   const b = await krop(svar);
@@ -405,15 +409,39 @@ test('lagerregulering: en batch, der allerede er registreret, sendes ikke igen',
   assert.equal(poster(rb.kald).length, 0);
 });
 
-test('lagerregulering: afvisning fra Rackbeat giver fejl uden genforsøg og uden nøgle i svaret', async () => {
+test('lagerregulering: en oprettet, men ikke bogført regulering bogføres uden at blive oprettet igen', async () => {
+  const rb = falskSkriv({ eksisterende: [{ id: 2796, is_booked: false, description: 'Produktionskalender, ref. b43-1a2b3c4d' }] });
+  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+  assert.equal(svar.status, 200);
+  assert.equal((await krop(svar)).data.id, 2796);
+  assert.deepEqual(poster(rb.kald).map(k => k.sti), [BOG(2796)]);
+});
+
+test('lagerregulering: afvisning af oprettelsen giver fejl uden genforsøg og uden nøgle i svaret', async () => {
   for (const [postStatus, kode] of [[422, 'afvist_af_rackbeat'], [403, 'mangler_adgang'], [429, 'for_mange_kald'], [500, 'rackbeat_fejl']]) {
     const rb = falskSkriv({ postStatus });
     const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
     assert.equal(svar.status, 502);
     assert.equal((await krop(svar)).kode, kode);
-    assert.equal(poster(rb.kald).length, 1, 'et POST må aldrig sendes to gange');
+    assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET], 'et POST må aldrig sendes to gange, og en afvist kladde bogføres ikke');
     await ingenHemmeligheder(svar);
   }
+});
+
+test('lagerregulering: fejlet bogføring giver fejl, så batchen ikke markeres som pakket', async () => {
+  for (const [bogStatus, kode] of [[403, 'mangler_adgang'], [500, 'rackbeat_fejl'], [422, 'afvist_af_rackbeat']]) {
+    const rb = falskSkriv({ bogStatus });
+    const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+    assert.equal(svar.status, 502, String(bogStatus));
+    assert.equal((await krop(svar)).kode, kode);
+    assert.equal(poster(rb.kald).length, 2);
+  }
+});
+
+test('lagerregulering: 422 ved bogføring er i orden, hvis reguleringen allerede er bogført', async () => {
+  const rb = falskSkriv({ bogStatus: 422, bogfoertVed422: true });
+  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+  assert.equal(svar.status, 201);
 });
 
 test('lagerregulering: netværksfejl giver fejl uden POST', async () => {
@@ -429,6 +457,7 @@ test('ruter: POST /api/lagerregulering bruger Rackbeats adresse og nøglen fra m
   const original = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     kald.push({ url: String(url), metode: init.method, auth: init.headers && init.headers.Authorization });
+    if (String(url).endsWith('/book')) return new Response('', { status: 200 });
     return init.method === 'POST' ? new Response(JSON.stringify({ inventory_regulation: { id: 1 } }), { status: 201 })
       : new Response(JSON.stringify({ inventory_regulations: [] }), { status: 206 });
   };
@@ -437,5 +466,5 @@ test('ruter: POST /api/lagerregulering bruger Rackbeats adresse og nøglen fra m
       () => reguleringRute.POST(regAnmodning()));
     assert.equal(svar.status, 201);
   } finally { globalThis.fetch = original; }
-  assert.ok(kald.length === 2 && kald.every(k => k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/inventory-adjustments')));
+  assert.ok(kald.length === 3 && kald.every(k => k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/inventory-adjustments')));
 });

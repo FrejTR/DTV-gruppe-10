@@ -125,11 +125,13 @@ export async function lagerregulering({ request, env }, deps = {}) {
   try {
     const klient = lavSkriveKlient({ noegle: env.RACKBEAT_API_KEY, ...deps });
     const beskrivelse = `Produktionskalender, ref. ${r.reference}`;
-    // Er batchen allerede registreret (fx netværksfejl efter et vellykket kald), sendes den ikke igen
+    // Er batchen allerede registreret (fx netværksfejl efter et vellykket kald), oprettes den ikke igen.
+    // Er den oprettet, men ikke bogført, bogføres den nu.
     const fundet = await klient.findRegulering(r.reference);
     const dato = iDagIDanmark(deps.nu ? new Date(deps.nu()) : new Date());
     const { id } = fundet || await klient.lagerregulering({ sku: r.sku, antal: r.antal, dato, aarsag: `Batch #${r.batch} godkendt`, beskrivelse });
-    log('lagerregulering', fundet ? 'allerede_registreret' : 'oprettet');
+    if (!fundet || !fundet.bogfoert) await klient.bogfoer(id);
+    log('lagerregulering', fundet ? (fundet.bogfoert ? 'allerede_bogfoert' : 'bogfoert_senere') : 'oprettet_og_bogfoert');
     return json({ data: { id, sku: r.sku, antal: r.antal, lokation: HOVEDLAGER, dato, allerede: !!fundet }, kilde: 'rackbeat' }, fundet ? 200 : 201);
   } catch (e) {
     const kode = fejlkode(e);
