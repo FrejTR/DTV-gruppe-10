@@ -19,7 +19,7 @@ async function ventPaa(fn, ms = 8000) {
 }
 
 // Mocken og den lokale server får kun falske nøgler. Tomme værdier forhindrer, at .env's rigtige nøgle læses.
-const ENV = { ...process.env, RACKBEAT_API_KEY: NOEGLE, RACKBEAT_SKRIV_KEY: NOEGLE,
+const ENV = { ...process.env, RACKBEAT_API_KEY: NOEGLE,
   RACKBEAT_BASE_URL: MOCK, MOCK_NOEGLE: NOEGLE, MOCK_LAGER_STATUS: '' };
 delete ENV.VERCEL;
 const start = (fil, port) => spawn(process.execPath, [path.join(__dirname, fil), String(port)], { env: ENV, stdio: 'ignore' });

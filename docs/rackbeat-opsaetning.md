@@ -17,11 +17,10 @@ Rackbeat: *Firmaindstillinger > API > Opret nøgle*. Fjern fluebenet ved *Alle r
 
 | Variabel | Rettighed i Rackbeat | Bruges til |
 |---|---|---|
-| `RACKBEAT_API_KEY` | *Tilgå ordrer* (access orders) | Læsning: ordrelinjer (salgstempo, `GET /orders/lines`) og produkter (lager, `GET /products`, feltet `stock_quantity`) |
-| `RACKBEAT_SKRIV_KEY` (valgfri) | Oprette og se lagerreguleringer | Lægge godkendte batches på lager (`POST /inventory-adjustments`). Uden den kan kalenderen ikke skrive til Rackbeat |
+| `RACKBEAT_API_KEY` | *Tilgå ordrer* (access orders) og ret til lagerreguleringer | Læsning: ordrelinjer (salgstempo, `GET /orders/lines`) og produkter (lager, `GET /products`, feltet `stock_quantity`). Skrivning: godkendte batches lægges på lager (`POST /inventory-adjustments`, se afsnit 7) |
 
 - Rackbeats dokumentation nævner ingen særskilt rettighed til produkter. Jeres nøgle med *Tilgå ordrer* kunne læse lager i produktionen 9. november 2026 (grøn pille). Mangler en nøgle adgang, svarer Rackbeat 403, og V2 viser rød pille ("mangler adgang til lager"), mens salgstempo stadig virker.
-- Brug ikke *Alle rettigheder* uden at have overvejet det. Kun `RACKBEAT_SKRIV_KEY` bruges til at skrive, og kun til lagerreguleringer. En lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
+- Brug ikke *Alle rettigheder* uden at have overvejet det. Koden skriver kun lagerreguleringer. En lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
 
 ## 2. Vercel-projekt
 
@@ -47,7 +46,6 @@ Projektet: *Settings > Environment Variables > Add*. Vælg typen **Secret** til 
 | Navn | Type | Værdi |
 |---|---|---|
 | `RACKBEAT_API_KEY` | Secret | Nøglen med *Tilgå ordrer* |
-| `RACKBEAT_SKRIV_KEY` | Secret (valgfri) | Nøglen til lagerreguleringer. Læs afsnit 7, før den sættes |
 | `SALGSTEMPO_MAX_SIDER` | Config (valgfri) | Højeste antal sider ordrelinjer (standard 200, ca. 20.000 linjer) |
 
 Sæt **aldrig** `RACKBEAT_BASE_URL`. Den er kun til lokal udvikling og ignoreres på Vercel.
@@ -116,15 +114,14 @@ Når en batch markeres som *Pakket* i kalenderen på Vercel, spørger kalenderen
 Batchen markeres først som pakket, når Rackbeat har bekræftet. En batch, der er lagt på lager, kan ikke fortrydes i kalenderen. Er antallet forkert, rettes det i Rackbeat. Uden server (fil, `npm start`, GitHub Pages) pakkes kun i kalenderen som før.
 
 Sikring:
-- Uden `RACKBEAT_SKRIV_KEY` kan intet skrives. Læsenøglerne bruges aldrig til at skrive.
+- Der bruges én nøgle, `RACKBEAT_API_KEY`, til både læsning og skrivning.
 - Funktionen godtager kun kald fra kalenderen selv (samme `Origin`, JSON). En anden side kan ikke få en indlogget brugers browser til at oprette reguleringer.
 - Antal skal være et helt tal fra 1 til 10.000, og varenummeret må kun indeholde bogstaver, tal og `._:-`.
 - Et POST sendes aldrig igen automatisk. Prøver brugeren igen, finder serveren den første regulering ud fra referencen.
 
 **Første gang med rigtig nøgle (uafprøvet mod Rackbeat):** Feltnavnene er fra Rackbeats dokumentation og Kystnærs egne reguleringer, men skrivning er kun afprøvet mod mocken. Rackbeat har ikke et testmiljø.
-1. Lav en nøgle med kun ret til lagerreguleringer, og sæt den som `RACKBEAT_SKRIV_KEY`.
-2. Pak en lille batch af én vare. Tjek i Rackbeat under *Beholdning > Reguleringer*, at beholdningen er steget med antallet (ikke sat til det), at lokationen er Hovedlager, og at kategorien er Produktion.
-3. Gik noget galt, så ret beholdningen i Rackbeat, og fjern `RACKBEAT_SKRIV_KEY` igen, indtil fejlen er fundet.
+1. Pak en lille batch af én vare. Tjek i Rackbeat under *Beholdning > Reguleringer*, at beholdningen er steget med antallet (ikke sat til det), at lokationen er Hovedlager, og at kategorien er Produktion.
+2. Gik noget galt, så ret beholdningen i Rackbeat, og pak ikke flere batches på Vercel, indtil fejlen er fundet.
 
 ## Kilder
 

@@ -115,7 +115,7 @@ function fraKalenderen(request) {
 }
 
 /** POST /api/lagerregulering: lægger en godkendt batch på Hovedlager i Rackbeat.
- *  Kræver RACKBEAT_SKRIV_KEY. Uden den kan intet skrives, heller ikke med læsenøglerne. */
+ *  Bruger samme nøgle som læsningen (RACKBEAT_API_KEY). */
 export async function lagerregulering({ request, env }, deps = {}) {
   if (!fraKalenderen(request)) return json({ fejl: 'Ugyldigt kald', kode: 'ugyldigt_kald' }, 403);
   let krop = null;
@@ -123,7 +123,7 @@ export async function lagerregulering({ request, env }, deps = {}) {
   const r = laesRegulering(krop);
   if (!r) return json({ fejl: 'Ugyldige data', kode: 'ugyldige_data' }, 400);
   try {
-    const klient = lavSkriveKlient({ noegle: env.RACKBEAT_SKRIV_KEY, ...deps });
+    const klient = lavSkriveKlient({ noegle: env.RACKBEAT_API_KEY, ...deps });
     const beskrivelse = `Produktionskalender, ref. ${r.reference}`;
     // Er batchen allerede registreret (fx netværksfejl efter et vellykket kald), sendes den ikke igen
     const fundet = await klient.findRegulering(r.reference);
