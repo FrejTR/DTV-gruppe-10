@@ -1,6 +1,7 @@
 // Lokal mock af Rackbeat til udvikling og test uden rigtig nøgle.
 // Leverer GET /orders/lines og GET /products i samme format som Rackbeat ud fra tests/fixtures/eksempel_ordrehistorik.csv,
-// og GET/POST /inventory-adjustments. En regulering ændrer mockens lager, så den ses i næste GET /products.
+// og GET/POST /inventory-adjustments samt POST /inventory-adjustments/{id}/book. Som hos Rackbeat ændrer en regulering
+// først mockens lager, når den er bogført.
 // Kørsel: node tests/mock_rackbeat.js [port]   (standard 8790)
 // MOCK_NOEGLE (standard "lokal-test") er den nøgle, mocken godtager. MOCK_LAGER_STATUS=403 efterligner en nøgle uden lageradgang.
 const http = require('http');
@@ -43,19 +44,35 @@ function opretRegulering(k) {
   const vare = lager.find(v => v.number === k.item_id);
   if (k.item_id && !vare) fejl.item_id = ['The selected item id is invalid.'];
   if (Object.keys(fejl).length) return [422, { errors: fejl }];
-  const antal = Number(k.quantity);
-  vare.stock_quantity = k.regulate_diff ? antal : vare.stock_quantity + antal;
+  // Som hos Rackbeat er en ny regulering en kladde. Beholdningen ændres først ved bogføring.
   const r = { id: 2000 + reguleringer.length, reason: k.reason, description: k.description || '', regulated_value: k.adjustment_type,
     regulate_difference: !!k.regulate_diff, is_booked: false, regulation_type: { number: k.regulation_type },
-    lines: [{ child_id: k.item_id, quantity: antal, location_id: k.location }], regulated_at: k.regulated_at };
+    lines: [{ child_id: k.item_id, quantity: Number(k.quantity), location_id: k.location }], regulated_at: k.regulated_at };
   reguleringer.unshift(r);
   return [201, { inventory_regulation: r }];
+}
+
+function bogfoer(id) {
+  const r = reguleringer.find(x => x.id === id);
+  if (!r) return [404, { errors: { message: 'Not found' } }];
+  if (r.is_booked) return [422, { errors: { message: 'This regulation has already been booked.' } }];
+  const l = r.lines[0], vare = lager.find(v => v.number === l.child_id);
+  vare.stock_quantity = r.regulate_difference ? l.quantity : vare.stock_quantity + l.quantity;
+  r.is_booked = true;
+  return [200, { inventory_regulation: r }];
 }
 
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const svar = (status, krop) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(krop)); };
   if (req.headers.authorization !== `Bearer ${NOEGLE}`) return svar(401, { errors: { message: 'Unauthenticated.' } });
+  const bog = /^\/inventory-adjustments\/(\d+)\/book$/.exec(u.pathname);
+  if (bog && req.method === 'POST') return svar(...bogfoer(Number(bog[1])));
+  const en = /^\/inventory-adjustments\/(\d+)$/.exec(u.pathname);
+  if (en && req.method === 'GET') {
+    const r = reguleringer.find(x => x.id === Number(en[1]));
+    return r ? svar(200, { inventory_regulation: r }) : svar(404, { errors: { message: 'Not found' } });
+  }
   if (u.pathname === '/inventory-adjustments') {
     if (req.method === 'GET') return svar(206, side('inventory_regulations', reguleringer, u.searchParams));
     if (req.method !== 'POST') return svar(405, { errors: { message: 'Metode ikke tilladt' } });

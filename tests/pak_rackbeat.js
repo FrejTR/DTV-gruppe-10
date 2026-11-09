@@ -71,9 +71,12 @@ const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&p
     check('batch er pakket med Rackbeat-id', b32.packed && b32.rackbeat && b32.rackbeat.id != null && b32.rackbeat.antal === 53, JSON.stringify(b32));
     check('lageret i Rackbeat er steget med 53', (await lagerI('TAN001')) === foer + 53, `${foer} → ${await lagerI('TAN001')}`);
     const [r] = await reguleringer();
-    check('reguleringen lægger til på Hovedlager i Produktion', r && r.regulate_difference === false && r.lines[0].location_id === 1001
+    check('reguleringen er bogført, lægger til og ligger på Hovedlager i Produktion', r && r.is_booked === true && r.regulate_difference === false && r.lines[0].location_id === 1001
       && r.regulation_type.number === 1004 && r.reason === 'Batch #32 godkendt' && r.description.includes(b32.rbRef), JSON.stringify(r));
-    check('kalenderen viser det nye lager', await ventPaa(() => p.evaluate(n => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-j')).products.find(x => x.sku === 'TAN001').count === n, foer + 53), 30000));
+    // Lageret hentes straks uden om serverens cache, så det nye tal skal vises længe før næste opdatering (20 sek.)
+    check('kalenderen viser det nye lager med det samme (under 5 sek.)', await ventPaa(() => p.evaluate(n => JSON.parse(localStorage.getItem('kystnaer-produktionskalender-v2-onepager-j')).products.find(x => x.sku === 'TAN001').count === n
+      && document.getElementById('lager-tang-shampoo').textContent.trim() === String(n), foer + 53), 5000),
+      await p.evaluate(() => document.getElementById('lager-tang-shampoo') && document.getElementById('lager-tang-shampoo').textContent));
 
     // Samme batch sendt igen (fx efter netværksfejl) registreres ikke to gange
     const igen = await p.evaluate(async ref => (await fetch('/api/lagerregulering', { method: 'POST', headers: { 'Content-Type': 'application/json' },

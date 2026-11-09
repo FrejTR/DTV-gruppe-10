@@ -87,13 +87,15 @@ export function lavKlient({ noegle, fetch: hent = globalThis.fetch, vent = ms =>
   };
 }
 
-/** Skriveadgang: opretter lagerreguleringer, der lægger et antal til beholdningen. Ingen genforsøg ved fejl,
- *  for et POST, der måske er gået igennem, må ikke sendes igen. Dobbelt-registrering forhindres med referencen. */
+/** Skriveadgang: opretter og bogfører lagerreguleringer, der lægger et antal til beholdningen. En regulering er
+ *  en kladde, indtil den er bogført, og først da ændres beholdningen (afprøvet mod Rackbeat 9. november 2026).
+ *  Ingen genforsøg ved fejl, for et POST, der måske er gået igennem, må ikke sendes igen.
+ *  Dobbelt-registrering forhindres med referencen. */
 export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisUrl = BASIS_URL }) {
   if (!noegle) throw new RackbeatFejl('ikke_sat_op');
   const hoveder = { Authorization: `Bearer ${noegle}`, Accept: 'application/json', 'Content-Type': 'application/json' };
 
-  async function kald(metode, sti, krop) {
+  async function kald(metode, sti, krop, { tomtSvarOk = false } = {}) {
     let svar;
     try {
       svar = await hent(`${basisUrl}${sti}`, { method: metode, headers: hoveder, ...(krop ? { body: JSON.stringify(krop) } : {}) });
@@ -104,6 +106,7 @@ export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisU
     try {
       return await svar.json();
     } catch {
+      if (tomtSvarOk) return null;
       throw new RackbeatFejl('uventet_svar', svar.status);
     }
   }
@@ -115,7 +118,7 @@ export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisU
       const liste = data && data.inventory_regulations;
       if (!Array.isArray(liste)) throw new RackbeatFejl('uventet_svar');
       const fundet = liste.find(r => r && typeof r.description === 'string' && r.description.includes(reference));
-      return fundet ? { id: fundet.id } : null;
+      return fundet ? { id: fundet.id, bogfoert: fundet.is_booked === true } : null;
     },
     /** Lægger antal stk. af varen til på Hovedlager. regulate_diff: false betyder "læg til", ikke "sæt til". */
     async lagerregulering({ sku, antal, dato, aarsag, beskrivelse }) {
@@ -131,7 +134,19 @@ export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisU
         regulate_diff: false,
       });
       const r = data && (data.inventory_regulation || data.inventory_adjustment || data);
-      return { id: r && r.id != null ? r.id : null };
+      if (!r || r.id == null) throw new RackbeatFejl('uventet_svar');
+      return { id: r.id };
+    },
+    /** Bogfører reguleringen, så beholdningen ændres. 422 betyder måske "allerede bogført", så det tjekkes. */
+    async bogfoer(id) {
+      try {
+        await kald('POST', `/inventory-adjustments/${encodeURIComponent(id)}/book`, null, { tomtSvarOk: true });
+      } catch (e) {
+        if (!(e instanceof RackbeatFejl) || e.kode !== 'afvist_af_rackbeat') throw e;
+        const data = await kald('GET', `/inventory-adjustments/${encodeURIComponent(id)}`);
+        const r = data && (data.inventory_regulation || data);
+        if (!r || r.is_booked !== true) throw e;
+      }
     },
   };
 }
