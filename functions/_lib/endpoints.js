@@ -1,8 +1,8 @@
 // Logikken bag /api/status og /api/salgstempo, adskilt fra routing, så den kan testes.
 import { enAdGangen, gem, laes } from './cache.js';
-import { lavKlient, RackbeatFejl } from './rackbeat.js';
+import { HOVEDLAGER, lavKlient, lavSkriveKlient, RackbeatFejl } from './rackbeat.js';
 import { beregnAlle, isoDato, normaliser, tilKlient, vindue } from './salgstempo.js';
-import { dataSvar, fejlSvar, iDagIDanmark, log } from './svar.js';
+import { dataSvar, fejlSvar, iDagIDanmark, json, log } from './svar.js';
 
 export const STATUS_TTL_MS = 20 * 1000;
 export const SALGSTEMPO_TTL_MS = 3600 * 1000;
@@ -86,6 +86,54 @@ export async function salgstempo({ request, env, waitUntil }, deps = {}) {
   } catch (e) {
     const kode = fejlkode(e);
     log('salgstempo', kode, e && e.status);
+    return fejlSvar(kode);
+  }
+}
+
+// ---------- POST /api/lagerregulering ----------
+const SKU = /^[A-Za-z0-9ÆØÅæøå._:-]{1,40}$/;
+const REFERENCE = /^[a-z0-9-]{8,64}$/;
+const MAX_ANTAL = 10000;   // Sikring mod tastefejl. En batch er typisk 40 til 65 stk.
+
+/** Læser og tjekker kroppen. Returnerer null ved alt, der ikke er præcis det forventede. */
+function laesRegulering(k) {
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return null;
+  const { sku, antal, batch, reference } = k;
+  if (typeof sku !== 'string' || !SKU.test(sku)) return null;
+  if (!Number.isInteger(antal) || antal < 1 || antal > MAX_ANTAL) return null;
+  if (!Number.isInteger(batch) || batch < 1 || batch > 1e6) return null;
+  if (typeof reference !== 'string' || !REFERENCE.test(reference)) return null;
+  return { sku, antal, batch, reference };
+}
+
+/** Kun kald fra kalenderen selv. Vercel Authentication sender login-cookien med, så et kald fra
+ *  en anden side skal afvises her (CSRF). Origin skal matche, og kroppen skal være JSON. */
+function fraKalenderen(request) {
+  const origin = request.headers.get('origin');
+  const type = request.headers.get('content-type') || '';
+  return origin === new URL(request.url).origin && type.split(';')[0].trim() === 'application/json';
+}
+
+/** POST /api/lagerregulering: lægger en godkendt batch på Hovedlager i Rackbeat.
+ *  Kræver RACKBEAT_SKRIV_KEY. Uden den kan intet skrives, heller ikke med læsenøglerne. */
+export async function lagerregulering({ request, env }, deps = {}) {
+  if (!fraKalenderen(request)) return json({ fejl: 'Ugyldigt kald', kode: 'ugyldigt_kald' }, 403);
+  let krop = null;
+  try { krop = await request.json(); } catch { /* håndteres herunder */ }
+  const r = laesRegulering(krop);
+  if (!r) return json({ fejl: 'Ugyldige data', kode: 'ugyldige_data' }, 400);
+  try {
+    const klient = lavSkriveKlient({ noegle: env.RACKBEAT_SKRIV_KEY, ...deps });
+    const beskrivelse = `Produktionskalender, ref. ${r.reference}`;
+    // Er batchen allerede registreret (fx netværksfejl efter et vellykket kald), sendes den ikke igen
+    const fundet = await klient.findRegulering(r.reference);
+    const dato = iDagIDanmark(deps.nu ? new Date(deps.nu()) : new Date());
+    const { id } = fundet || await klient.lagerregulering({ sku: r.sku, antal: r.antal, dato, aarsag: `Batch #${r.batch} godkendt`, beskrivelse });
+    log('lagerregulering', fundet ? 'allerede_registreret' : 'oprettet');
+    return json({ data: { id, sku: r.sku, antal: r.antal, lokation: HOVEDLAGER, dato, allerede: !!fundet }, kilde: 'rackbeat' }, fundet ? 200 : 201);
+  } catch (e) {
+    const kode = fejlkode(e);
+    log('lagerregulering', kode, e && e.status);
     return fejlSvar(kode);
   }
 }

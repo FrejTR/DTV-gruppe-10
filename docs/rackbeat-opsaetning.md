@@ -1,6 +1,6 @@
 # Rackbeat live: opsætning på Vercel
 
-Denne vejledning sætter V2 op på Vercel, så kalenderen viser aktuelt lager og salgstempo fra Rackbeat. Der er kun læseadgang. Antagelser og begrænsninger står i README under *Rackbeat live*.
+Denne vejledning sætter V2 op på Vercel, så kalenderen viser aktuelt lager og salgstempo fra Rackbeat. Når en batch markeres som pakket, lægges det godkendte antal på Hovedlager i Rackbeat som en lagerregulering (afsnit 7). Ellers er der kun læseadgang. Antagelser og begrænsninger står i README under *Rackbeat live*.
 
 Sådan hænger det sammen:
 
@@ -15,10 +15,13 @@ Repoet er offentligt. Derfor ligger nøglen aldrig i koden. Funktionerne tjekker
 
 Rackbeat: *Firmaindstillinger > API > Opret nøgle*. Fjern fluebenet ved *Alle rettigheder*, og vælg kun det nødvendige.
 
-Der bruges én nøgle, `RACKBEAT_API_KEY`. Den bruges til ordrelinjer (salgstempo, `GET /orders/lines`) og produkter (lager, `GET /products`, feltet `stock_quantity`).
+| Variabel | Rettighed i Rackbeat | Bruges til |
+|---|---|---|
+| `RACKBEAT_API_KEY` | *Tilgå ordrer* (access orders) | Læsning: ordrelinjer (salgstempo, `GET /orders/lines`) og produkter (lager, `GET /products`, feltet `stock_quantity`) |
+| `RACKBEAT_SKRIV_KEY` (valgfri) | Oprette og se lagerreguleringer | Lægge godkendte batches på lager (`POST /inventory-adjustments`). Uden den kan kalenderen ikke skrive til Rackbeat |
 
 - Rackbeats dokumentation nævner ingen særskilt rettighed til produkter. Jeres nøgle med *Tilgå ordrer* kunne læse lager i produktionen 9. november 2026 (grøn pille). Mangler en nøgle adgang, svarer Rackbeat 403, og V2 viser rød pille ("mangler adgang til lager"), mens salgstempo stadig virker.
-- Brug ikke *Alle rettigheder* uden at have overvejet det. Koden laver kun GET-kald, men en lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
+- Brug ikke *Alle rettigheder* uden at have overvejet det. Kun `RACKBEAT_SKRIV_KEY` bruges til at skrive, og kun til lagerreguleringer. En lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
 
 ## 2. Vercel-projekt
 
@@ -44,6 +47,7 @@ Projektet: *Settings > Environment Variables > Add*. Vælg typen **Secret** til 
 | Navn | Type | Værdi |
 |---|---|---|
 | `RACKBEAT_API_KEY` | Secret | Nøglen med *Tilgå ordrer* |
+| `RACKBEAT_SKRIV_KEY` | Secret (valgfri) | Nøglen til lagerreguleringer. Læs afsnit 7, før den sættes |
 | `SALGSTEMPO_MAX_SIDER` | Config (valgfri) | Højeste antal sider ordrelinjer (standard 200, ca. 20.000 linjer) |
 
 Sæt **aldrig** `RACKBEAT_BASE_URL`. Den er kun til lokal udvikling og ignoreres på Vercel.
@@ -93,13 +97,40 @@ Den lokale server kører de samme funktioner som Vercel, men uden login, og lytt
 **Automatiske test (kræver ingen nøgle):** `npm test` kører
 - røgtest af V1 og V2,
 - serverfunktionerne og pariteten med facit fra det oprindelige Python-script (`node --test "tests/*.test.mjs"`),
-- V2 i browser: polling, backoff, dialoger, statuspille og starttilstand (`node tests/live_v2.js`).
+- V2 i browser: polling, backoff, dialoger, statuspille og starttilstand (`node tests/live_v2.js`),
+- pakning → lagerregulering, hele vejen mod mocken (`node tests/pak_rackbeat.js`).
+
+## 7. Godkendte batches lægges på lager
+
+Når en batch markeres som *Pakket* i kalenderen på Vercel, spørger kalenderen: "Læg 53 stk. på Hovedlager i Rackbeat?". Ved ja sender den `POST /api/lagerregulering`, og serveren opretter en lagerregulering i Rackbeat:
+
+| Felt i Rackbeat | Værdi | Hvorfor |
+|---|---|---|
+| Lokation | 1001 (Hovedlager) | Kystnærs standardlokation |
+| Antal | Godkendt antal (lavet minus kasseret) | |
+| Læg til eller sæt til | **Læg til** (`regulate_diff: false`) | "Sæt til indtastede antal" ville overskrive beholdningen |
+| Kategori | 1004 (Produktion) | |
+| Årsag og beskrivelse | "Batch #32 godkendt" og en reference | Referencen forhindrer, at samme batch registreres to gange |
+| Bogføring | Sendes ikke (`book` udelades) | Som Kystnærs egne reguleringer, der heller ikke er bogført |
+
+Batchen markeres først som pakket, når Rackbeat har bekræftet. En batch, der er lagt på lager, kan ikke fortrydes i kalenderen. Er antallet forkert, rettes det i Rackbeat. Uden server (fil, `npm start`, GitHub Pages) pakkes kun i kalenderen som før.
+
+Sikring:
+- Uden `RACKBEAT_SKRIV_KEY` kan intet skrives. Læsenøglerne bruges aldrig til at skrive.
+- Funktionen godtager kun kald fra kalenderen selv (samme `Origin`, JSON). En anden side kan ikke få en indlogget brugers browser til at oprette reguleringer.
+- Antal skal være et helt tal fra 1 til 10.000, og varenummeret må kun indeholde bogstaver, tal og `._:-`.
+- Et POST sendes aldrig igen automatisk. Prøver brugeren igen, finder serveren den første regulering ud fra referencen.
+
+**Første gang med rigtig nøgle (uafprøvet mod Rackbeat):** Feltnavnene er fra Rackbeats dokumentation og Kystnærs egne reguleringer, men skrivning er kun afprøvet mod mocken. Rackbeat har ikke et testmiljø.
+1. Lav en nøgle med kun ret til lagerreguleringer, og sæt den som `RACKBEAT_SKRIV_KEY`.
+2. Pak en lille batch af én vare. Tjek i Rackbeat under *Beholdning > Reguleringer*, at beholdningen er steget med antallet (ikke sat til det), at lokationen er Hovedlager, og at kategorien er Produktion.
+3. Gik noget galt, så ret beholdningen i Rackbeat, og fjern `RACKBEAT_SKRIV_KEY` igen, indtil fejlen er fundet.
 
 ## Kilder
 
 | Emne | Side |
 |---|---|
-| Rackbeat API | developer.rackbeat.com: Authentication, Pagination, Errors & Rate Limits (480 kald i minuttet pr. konto), Optimizing Queries (`fields`), List Lines for all Orders (`GET /orders/lines`), List Products (`GET /products`) |
+| Rackbeat API | developer.rackbeat.com: Authentication, Pagination, Errors & Rate Limits (480 kald i minuttet pr. konto), Optimizing Queries (`fields`), List Lines for all Orders (`GET /orders/lines`), List Products (`GET /products`), Create Inventory Adjustment (`POST /inventory-adjustments`) |
 | Beskyttelse | vercel.com/docs/deployment-protection, …/methods-to-protect-deployments/vercel-authentication, …/password-protection |
 | Funktioner | vercel.com/docs/functions/runtimes/node-js, vercel.com/docs/functions/limitations |
 | Variabler og planer | vercel.com/docs/environment-variables, vercel.com/docs/plans/hobby |

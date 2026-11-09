@@ -33,7 +33,7 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 - Batches, reservationer og personer starter tomme. De ligger indtil videre kun i den enkelte browser. Fælles data er næste fase.
 
 ### Rackbeat live
-Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat. Der er kun læseadgang. Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
+Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat, og godkendte batches lægges på Hovedlager i Rackbeat, når de markeres som pakket (lagerregulering, se vejledningens afsnit 7). Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
 
 - `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`). Serveren gemmer svaret i 20 sekunder. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
 - `GET /api/salgstempo` (ved start og hvert 10. minut): salgstempo beregnet af serveren efter reglerne nedenfor. Beregningen er testet mod facit fra det oprindelige Python-script (`tests/fixtures/salgstempo_facit.json`). Serveren gemmer resultatet i en time og beregner det nye i baggrunden.

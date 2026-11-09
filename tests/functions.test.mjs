@@ -3,11 +3,13 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as statusRute from '../api/status.mjs';
 import * as salgstempoRute from '../api/salgstempo.mjs';
-import { status, salgstempo, STATUS_TTL_MS, SALGSTEMPO_TTL_MS } from '../functions/_lib/endpoints.js';
+import * as reguleringRute from '../api/lagerregulering.mjs';
+import { status, salgstempo, lagerregulering, STATUS_TTL_MS, SALGSTEMPO_TTL_MS } from '../functions/_lib/endpoints.js';
 import { _nulstil as nulstilCache } from '../functions/_lib/cache.js';
 import { erLokalUdvikling, lokaleDeps } from '../functions/_lib/lokal.js';
 
 const NOEGLE = 'hemmelig-test-noegle-123';
+const SKRIV_NOEGLE = 'hemmelig-skrive-noegle-789';
 const ENV = { RACKBEAT_API_KEY: NOEGLE };
 const URL_PROD = 'https://kalender.example.com/api/status';
 
@@ -58,7 +60,7 @@ afterEach(() => { console.error = originalError; });
 const krop = async svar => JSON.parse(await svar.clone().text());
 async function ingenHemmeligheder(svar) {
   const tekst = await svar.clone().text();
-  for (const s of [NOEGLE, 'Hemmelig Kunde', 'Bearer']) {
+  for (const s of [NOEGLE, SKRIV_NOEGLE, 'Hemmelig Kunde', 'Bearer']) {
     assert.ok(!tekst.includes(s), `svaret indeholder ${s}`);
     assert.ok(!logs.join('\n').includes(s), `loggen indeholder ${s}`);
   }
@@ -266,6 +268,11 @@ test('ruter: kun GET er eksporteret, så Vercel afviser alt andet med 405', () =
   }
 });
 
+test('ruter: /api/lagerregulering eksporterer kun POST', () => {
+  assert.equal(typeof reguleringRute.POST, 'function');
+  for (const m of ['GET', 'PUT', 'PATCH', 'DELETE', 'default']) assert.equal(reguleringRute[m], undefined, m);
+});
+
 async function medMiljoe(vaerdier, opgave) {
   const gammel = {};
   for (const [k, v] of Object.entries(vaerdier)) { gammel[k] = process.env[k]; if (v === undefined) delete process.env[k]; else process.env[k] = v; }
@@ -315,4 +322,121 @@ test('lokal: RACKBEAT_BASE_URL virker kun uden for Vercel og kun fra localhost',
   const kald = await medFalskFetch(() => medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_BASE_URL: 'http://mock.local' },
     () => salgstempoRute.GET(lokal)));
   assert.ok(kald.every(k => k.url.startsWith('https://app.rackbeat.com/api/')), 'på Vercel ignoreres adressen: ' + kald.map(k => k.url));
+});
+
+// ---------- POST /api/lagerregulering ----------
+const URL_REG = 'https://kalender.example.com/api/lagerregulering';
+const REG_ENV = { RACKBEAT_API_KEY: NOEGLE, RACKBEAT_SKRIV_KEY: SKRIV_NOEGLE };
+const GYLDIG = { sku: 'HAT003', antal: 63, batch: 43, reference: 'b43-1a2b3c4d' };
+
+function regAnmodning(krop = GYLDIG, { origin = 'https://kalender.example.com', type = 'application/json' } = {}) {
+  const hoveder = {};
+  if (origin) hoveder.Origin = origin;
+  if (type) hoveder['Content-Type'] = type;
+  return new Request(URL_REG, { method: 'POST', headers: hoveder, body: typeof krop === 'string' ? krop : JSON.stringify(krop) });
+}
+
+/** Falsk Rackbeat til skrivning. eksisterende: reguleringer, der allerede findes. postStatus: svar på POST. */
+function falskSkriv({ eksisterende = [], postStatus = 201, netvaerk = false } = {}) {
+  const kald = [];
+  const hent = async (url, init = {}) => {
+    kald.push({ url, metode: init.method || 'GET', auth: init.headers && init.headers.Authorization, krop: init.body ? JSON.parse(init.body) : null });
+    if (netvaerk) throw new TypeError('fetch failed');
+    if ((init.method || 'GET') === 'GET') return new Response(JSON.stringify({ inventory_regulations: eksisterende, total: eksisterende.length, pages: 1, limit: 100, page: 1 }), { status: 206 });
+    if (postStatus !== 201) return new Response(JSON.stringify({ errors: { item_id: ['invalid ' + SKRIV_NOEGLE] } }), { status: postStatus });
+    return new Response(JSON.stringify({ inventory_regulation: { id: 4711 } }), { status: 201 });
+  };
+  return { hent, kald };
+}
+const poster = kald => kald.filter(k => k.metode === 'POST');
+
+test('lagerregulering: lægger antallet til på Hovedlager i kategorien Produktion med skrivenøglen', async () => {
+  const rb = falskSkriv();
+  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+  assert.equal(svar.status, 201);
+  const b = await krop(svar);
+  assert.deepEqual(b.data, { id: 4711, sku: 'HAT003', antal: 63, lokation: 1001, dato: '2026-11-03', allerede: false });
+  assert.equal(poster(rb.kald).length, 1);
+  const p = poster(rb.kald)[0];
+  assert.equal(p.url, 'https://app.rackbeat.com/api/inventory-adjustments');
+  assert.deepEqual(p.krop, { regulated_at: '2026-11-03', reason: 'Batch #43 godkendt', description: 'Produktionskalender, ref. b43-1a2b3c4d',
+    adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '63', regulation_type: 1004, regulate_diff: false });
+  // "Læg til", aldrig "sæt til", og aldrig bogføring
+  assert.ok(!('book' in p.krop) && !('booked' in p.krop));
+  assert.ok(rb.kald.every(k => k.auth === `Bearer ${SKRIV_NOEGLE}`));
+  await ingenHemmeligheder(svar);
+});
+
+test('lagerregulering: uden RACKBEAT_SKRIV_KEY skrives intet, heller ikke med læsenøglen', async () => {
+  const rb = falskSkriv();
+  const svar = await lagerregulering({ request: regAnmodning(), env: { RACKBEAT_API_KEY: NOEGLE } }, deps(rb));
+  assert.equal(svar.status, 503);
+  assert.equal(rb.kald.length, 0);
+});
+
+test('lagerregulering: kald fra en anden side eller uden JSON afvises (CSRF)', async () => {
+  for (const opt of [{ origin: 'https://ond.example.com' }, { origin: null }, { type: 'text/plain' }, { type: 'application/x-www-form-urlencoded' }]) {
+    const rb = falskSkriv();
+    const svar = await lagerregulering({ request: regAnmodning(GYLDIG, opt), env: REG_ENV }, deps(rb));
+    assert.equal(svar.status, 403, JSON.stringify(opt));
+    assert.equal(rb.kald.length, 0);
+  }
+});
+
+test('lagerregulering: ugyldige data afvises uden kald til Rackbeat', async () => {
+  const forkerte = [
+    { ...GYLDIG, antal: 0 }, { ...GYLDIG, antal: -5 }, { ...GYLDIG, antal: 2.5 }, { ...GYLDIG, antal: '63' }, { ...GYLDIG, antal: 10001 },
+    { ...GYLDIG, sku: '' }, { ...GYLDIG, sku: '../products' }, { ...GYLDIG, sku: 'HAT003?x=1' }, { ...GYLDIG, batch: 0 },
+    { ...GYLDIG, reference: 'kort' }, { ...GYLDIG, reference: 'HAR STORE BOGSTAVER' }, { sku: 'HAT003', antal: 63 }, [GYLDIG], '{ups',
+  ];
+  for (const k of forkerte) {
+    const rb = falskSkriv();
+    const svar = await lagerregulering({ request: regAnmodning(k), env: REG_ENV }, deps(rb));
+    assert.equal(svar.status, 400, JSON.stringify(k));
+    assert.equal(rb.kald.length, 0);
+  }
+});
+
+test('lagerregulering: en batch, der allerede er registreret, sendes ikke igen', async () => {
+  const rb = falskSkriv({ eksisterende: [{ id: 999, description: 'Produktionskalender, ref. b43-1a2b3c4d' }] });
+  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+  assert.equal(svar.status, 200);
+  const b = await krop(svar);
+  assert.equal(b.data.id, 999); assert.equal(b.data.allerede, true);
+  assert.equal(poster(rb.kald).length, 0);
+});
+
+test('lagerregulering: afvisning fra Rackbeat giver fejl uden genforsøg og uden nøgle i svaret', async () => {
+  for (const [postStatus, kode] of [[422, 'afvist_af_rackbeat'], [403, 'mangler_adgang'], [429, 'for_mange_kald'], [500, 'rackbeat_fejl']]) {
+    const rb = falskSkriv({ postStatus });
+    const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+    assert.equal(svar.status, 502);
+    assert.equal((await krop(svar)).kode, kode);
+    assert.equal(poster(rb.kald).length, 1, 'et POST må aldrig sendes to gange');
+    await ingenHemmeligheder(svar);
+  }
+});
+
+test('lagerregulering: netværksfejl giver fejl uden POST', async () => {
+  const rb = falskSkriv({ netvaerk: true });
+  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+  assert.equal(svar.status, 502);
+  assert.equal((await krop(svar)).kode, 'ingen_forbindelse');
+  assert.equal(poster(rb.kald).length, 0);
+});
+
+test('ruter: POST /api/lagerregulering bruger Rackbeats adresse og skrivenøglen fra miljøet', async () => {
+  const kald = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    kald.push({ url: String(url), metode: init.method, auth: init.headers && init.headers.Authorization });
+    return init.method === 'POST' ? new Response(JSON.stringify({ inventory_regulation: { id: 1 } }), { status: 201 })
+      : new Response(JSON.stringify({ inventory_regulations: [] }), { status: 206 });
+  };
+  try {
+    const svar = await medMiljoe({ VERCEL: '1', RACKBEAT_SKRIV_KEY: SKRIV_NOEGLE, RACKBEAT_BASE_URL: 'http://127.0.0.1:8790' },
+      () => reguleringRute.POST(regAnmodning()));
+    assert.equal(svar.status, 201);
+  } finally { globalThis.fetch = original; }
+  assert.ok(kald.length === 2 && kald.every(k => k.auth === `Bearer ${SKRIV_NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/inventory-adjustments')));
 });
