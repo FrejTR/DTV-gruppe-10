@@ -1,6 +1,6 @@
 // Lokal server til udvikling: serverer src/ og kører de rigtige handlers i api/ uden Vercel-konto.
 // Kørsel: node tests/dev_server.mjs [port]   (standard 8788)
-// Variabler læses fra .env i projektroden (eller fra miljøet): RACKBEAT_API_KEY, RACKBEAT_LAGER_KEY,
+// Variabler læses fra .env i projektroden (eller fra miljøet): RACKBEAT_API_KEY, RACKBEAT_LAGER_KEY, RACKBEAT_SKRIV_KEY,
 // RACKBEAT_BASE_URL (peg på mocken: node tests/mock_rackbeat.js) og SALGSTEMPO_MAX_SIDER.
 // Serveren lytter kun på 127.0.0.1 og har ingen login. Brug den kun lokalt.
 import http from 'node:http';
@@ -21,7 +21,7 @@ try {
 } catch { /* ingen .env */ }
 
 const TYPER = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.svg': 'image/svg+xml' };
-const RUTER = { '/api/status': '../api/status.mjs', '/api/salgstempo': '../api/salgstempo.mjs' };
+const RUTER = { '/api/status': '../api/status.mjs', '/api/salgstempo': '../api/salgstempo.mjs', '/api/lagerregulering': '../api/lagerregulering.mjs' };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
@@ -30,7 +30,10 @@ http.createServer(async (req, res) => {
     const rute = fil && await import(pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), fil)).href);
     const handler = rute && rute[req.method];
     if (!handler) { res.writeHead(fil ? 405 : 404); return res.end(); }
-    const svar = await handler(new Request(url, { method: req.method }));
+    const dele = [];
+    for await (const del of req) dele.push(del);
+    const hoveder = Object.entries(req.headers).filter(([, v]) => typeof v === 'string');
+    const svar = await handler(new Request(url, { method: req.method, headers: hoveder, ...(dele.length ? { body: Buffer.concat(dele) } : {}) }));
     res.writeHead(svar.status, Object.fromEntries(svar.headers));
     return res.end(Buffer.from(await svar.arrayBuffer()));
   }

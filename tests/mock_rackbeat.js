@@ -1,5 +1,6 @@
 // Lokal mock af Rackbeat til udvikling og test uden rigtig nøgle.
-// Leverer GET /orders/lines og GET /products i samme format som Rackbeat ud fra data/eksempel_ordrehistorik.csv.
+// Leverer GET /orders/lines og GET /products i samme format som Rackbeat ud fra data/eksempel_ordrehistorik.csv,
+// og GET/POST /inventory-adjustments. En regulering ændrer mockens lager, så den ses i næste GET /products.
 // Kørsel: node tests/mock_rackbeat.js [port]   (standard 8790)
 // MOCK_NOEGLE (standard "lokal-test") er den nøgle, mocken godtager. MOCK_LAGER_STATUS=403 efterligner en nøgle uden lageradgang.
 const http = require('http');
@@ -31,11 +32,39 @@ const side = (felt, alle, q) => {
   return { [felt]: alle.slice((page - 1) * limit, page * limit), total: alle.length, pages: Math.ceil(alle.length / limit), limit, page };
 };
 
-http.createServer((req, res) => {
+const reguleringer = [];   // Nyeste først, som hos Rackbeat
+
+// Samme påkrævede felter som Rackbeats "Create Inventory Adjustment". Ukendt vare giver 422.
+function opretRegulering(k) {
+  const fejl = {};
+  for (const f of ['regulated_at', 'reason', 'adjustment_type', 'item_id']) if (!k[f]) fejl[f] = [`The ${f} field is required.`];
+  if (k.adjustment_type === 'quantity' && !k.location) fejl.location = ['The location field is required.'];
+  if (k.quantity === undefined && k.value === undefined) fejl.quantity = ['The Quantity field is required when Value is not present.'];
+  const vare = lager.find(v => v.number === k.item_id);
+  if (k.item_id && !vare) fejl.item_id = ['The selected item id is invalid.'];
+  if (Object.keys(fejl).length) return [422, { errors: fejl }];
+  const antal = Number(k.quantity);
+  vare.stock_quantity = k.regulate_diff ? antal : vare.stock_quantity + antal;
+  const r = { id: 2000 + reguleringer.length, reason: k.reason, description: k.description || '', regulated_value: k.adjustment_type,
+    regulate_difference: !!k.regulate_diff, is_booked: false, regulation_type: { number: k.regulation_type },
+    lines: [{ child_id: k.item_id, quantity: antal, location_id: k.location }], regulated_at: k.regulated_at };
+  reguleringer.unshift(r);
+  return [201, { inventory_regulation: r }];
+}
+
+http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const svar = (status, krop) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(krop)); };
-  if (req.method !== 'GET') return svar(405, { errors: { message: 'Kun GET' } });
   if (req.headers.authorization !== `Bearer ${NOEGLE}`) return svar(401, { errors: { message: 'Unauthenticated.' } });
+  if (u.pathname === '/inventory-adjustments') {
+    if (req.method === 'GET') return svar(206, side('inventory_regulations', reguleringer, u.searchParams));
+    if (req.method !== 'POST') return svar(405, { errors: { message: 'Metode ikke tilladt' } });
+    let tekst = '';
+    for await (const del of req) tekst += del;
+    let k; try { k = JSON.parse(tekst); } catch { return svar(400, { errors: { message: 'Ugyldig JSON' } }); }
+    return svar(...opretRegulering(k));
+  }
+  if (req.method !== 'GET') return svar(405, { errors: { message: 'Kun GET' } });
   if (u.pathname === '/orders/lines') {
     const fra = (u.searchParams.get('order_date_from') || '0000').slice(0, 10), til = (u.searchParams.get('order_date_to') || '9999').slice(0, 10);
     return svar(206, side('order_lines', linjer.filter(l => l.order.order_date.slice(0, 10) >= fra && l.order.order_date.slice(0, 10) <= til), u.searchParams));
