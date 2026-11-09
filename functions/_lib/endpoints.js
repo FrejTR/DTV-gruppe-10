@@ -10,8 +10,9 @@ const SALG_DAGE = 7;
 const STATUS_MAX_SIDER = 10;
 const SALGSTEMPO_UGER = 52;
 const HISTORIK_FOER_VINDUE_UGER = 26;   // Kun til at afgøre, om et produkt er nyt (kort_historik)
-// Under Free-planens 50 kald pr. forespørgsel. På Workers Paid kan grænsen hæves med SALGSTEMPO_MAX_SIDER.
-const maxSiderSalgstempo = env => Math.min(500, Math.max(1, parseInt(env.SALGSTEMPO_MAX_SIDER, 10) || 40));
+// Sikring mod en løbsk hentning: stop med fejl i stedet for at regne på en halv historik.
+// 200 sider er ca. 20.000 ordrelinjer. Grænsen kan ændres med SALGSTEMPO_MAX_SIDER.
+const maxSiderSalgstempo = env => Math.min(1000, Math.max(1, parseInt(env.SALGSTEMPO_MAX_SIDER, 10) || 200));
 
 /** Fejl i opsætningen skal ikke dækkes af gamle data: dem skal man se med det samme. */
 const vigtigt = kode => kode === 'ikke_sat_op';
@@ -105,9 +106,4 @@ export async function salgstempo({ request, env, waitUntil }, deps = {}) {
     log('salgstempo', kode, e && e.status);
     return fejlSvar(kode);
   }
-}
-
-/** Lokal udvikling må pege på en mock af Rackbeat. I produktion bruges altid Rackbeats egen adresse. */
-export function lokaleDeps(request, env, erLokal) {
-  return erLokal && env.RACKBEAT_BASE_URL ? { basisUrl: env.RACKBEAT_BASE_URL } : {};
 }

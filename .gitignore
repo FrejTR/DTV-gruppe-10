@@ -3,9 +3,9 @@ node_modules/
 .DS_Store
 tests/out/
 .env
-# Cloudflare: lokale nøgler og wranglers lokale data
-.dev.vars
-.wrangler/
+# Vercel: lokale indstillinger og byggeoutput
+.vercel
+.env*.local
 .Rhistory
 __pycache__/
 .pytest_cache/

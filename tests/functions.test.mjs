@@ -1,18 +1,15 @@
-// Test af serverfunktionerne mod en falsk Rackbeat. Ingen rigtig nøgle. Kørsel: node --test tests/
+// Test af serverfunktionerne (Vercel) mod en falsk Rackbeat. Ingen rigtig nøgle. Kørsel: node --test "tests/*.test.mjs"
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { onRequest as middleware } from '../functions/api/_middleware.js';
-import { onRequestGet as statusGet } from '../functions/api/status.js';
-import { onRequestGet as salgstempoGet } from '../functions/api/salgstempo.js';
+import * as statusRute from '../api/status.mjs';
+import * as salgstempoRute from '../api/salgstempo.mjs';
 import { status, salgstempo, STATUS_TTL_MS, SALGSTEMPO_TTL_MS } from '../functions/_lib/endpoints.js';
 import { _nulstil as nulstilCache } from '../functions/_lib/cache.js';
-import { _nulstil as nulstilAccess, verificerToken } from '../functions/_lib/access.js';
+import { erLokalUdvikling, lokaleDeps } from '../functions/_lib/lokal.js';
 
 const NOEGLE = 'hemmelig-test-noegle-123';
 const LAGER_NOEGLE = 'hemmelig-lager-noegle-456';
-const TEAM = 'https://kystnaer.cloudflareaccess.com';
-const AUD = 'aud-tag-123';
-const ENV = { RACKBEAT_API_KEY: NOEGLE, CF_ACCESS_TEAM_DOMAIN: TEAM, CF_ACCESS_AUD: AUD };
+const ENV = { RACKBEAT_API_KEY: NOEGLE };
 const URL_PROD = 'https://kalender.example.com/api/status';
 
 // ---------- falsk Rackbeat ----------
@@ -54,10 +51,10 @@ const deps = (rb, ekstra = {}) => ({ fetch: rb.hent, vent: async () => {}, nu: (
 let logs;
 const originalError = console.error;
 beforeEach(() => {
-  nulstilCache(); nulstilAccess(); ur = NU; logs = [];
+  nulstilCache(); ur = NU; logs = [];
   console.error = (...a) => logs.push(a.join(' '));
 });
-afterEach(() => { console.error = originalError; delete globalThis.caches; });
+afterEach(() => { console.error = originalError; });
 
 const krop = async svar => JSON.parse(await svar.clone().text());
 async function ingenHemmeligheder(svar) {
@@ -136,21 +133,6 @@ test('status: samtidige kald giver kun én hentning', async () => {
   const rb = falskRackbeat();
   await Promise.all([1, 2, 3, 4, 5].map(() => status(ctx(), deps(rb))));
   assert.equal(rb.kald.length, 2);   // én side ordrelinjer og én side produkter
-});
-
-test('status: Cache API deles mellem isolater i samme datacenter', async () => {
-  const lager = new Map();
-  globalThis.caches = { default: {
-    match: async u => lager.has(String(u)) ? new Response(lager.get(String(u))) : undefined,
-    put: async (u, r) => { lager.set(String(u), await r.text()); },
-  } };
-  const rb = falskRackbeat();
-  await status(ctx(), deps(rb));
-  nulstilCache();   // nyt isolat: tom hukommelse
-  const foer = rb.kald.length;
-  await status(ctx(), deps(rb));
-  assert.equal(rb.kald.length, foer);
-  assert.ok([...lager.keys()].every(k => k.startsWith('https://kalender.example.com/api/__cache/')));
 });
 
 for (const kode of [401, 403, 404, 429, 500, 502, 503]) {
@@ -283,12 +265,15 @@ test('salgstempo: fejlet genberegning markeres forældet efter 2 timer', async (
 
 test('salgstempo: for mange sider giver fejl frem for halv historik', async () => {
   const sider = Array.from({ length: 41 }, (_, i) => [linje('A', 1, '2026-01-05', i)]);
-  const svar = await salgstempo(ctx(), deps(falskRackbeat({ order_lines: sider })));
+  const svar = await salgstempo(ctx({ ...ENV, SALGSTEMPO_MAX_SIDER: '40' }), deps(falskRackbeat({ order_lines: sider })));
   assert.equal(svar.status, 502);
   assert.equal((await krop(svar)).kode, 'for_mange_sider');
   nulstilCache();
   const hoejere = await salgstempo(ctx({ ...ENV, SALGSTEMPO_MAX_SIDER: '60' }), deps(falskRackbeat({ order_lines: sider })));
-  assert.equal(hoejere.status, 200, 'grænsen kan hæves på Workers Paid');
+  assert.equal(hoejere.status, 200, 'grænsen kan ændres');
+  nulstilCache();
+  const standard = await salgstempo(ctx(), deps(falskRackbeat({ order_lines: sider })));
+  assert.equal(standard.status, 200, 'standardgrænsen er 200 sider');
 });
 
 test('salgstempo: manglende nøgle giver 503 og 429 uden gemt version giver 502', async () => {
@@ -298,140 +283,61 @@ test('salgstempo: manglende nøgle giver 503 og 429 uden gemt version giver 502'
   await ingenHemmeligheder(svar);
 });
 
-// ---------- Cloudflare Access ----------
-const enc = o => Buffer.from(JSON.stringify(o)).toString('base64url');
-async function noeglepar(kid) {
-  const par = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
-  return { kid, privat: par.privateKey, jwk: { ...(await crypto.subtle.exportKey('jwk', par.publicKey)), kid, alg: 'RS256', use: 'sig' } };
-}
-async function token(par, krop = {}, hoved = {}) {
-  const sek = Math.floor(Date.now() / 1000);
-  const del = `${enc({ alg: 'RS256', kid: par.kid, typ: 'JWT', ...hoved })}.${enc({ iss: TEAM, aud: [AUD], exp: sek + 600, iat: sek, sub: 'u', ...krop })}`;
-  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', par.privat, new TextEncoder().encode(del));
-  return `${del}.${Buffer.from(sig).toString('base64url')}`;
-}
-
-const PAR = await noeglepar('k1');
-const ANDET = await noeglepar('k2');
-let certsKald;
-function medCerts(noegler) {
-  certsKald = 0;
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    assert.equal(url, `${TEAM}/cdn-cgi/access/certs`);
-    certsKald++;
-    return new Response(JSON.stringify({ keys: noegler.map(p => p.jwk), public_certs: [] }));
-  };
-  return () => { globalThis.fetch = original; };
-}
-async function gennemMiddleware({ jwt, env = ENV, url = URL_PROD }) {
-  const headers = jwt ? { 'Cf-Access-Jwt-Assertion': jwt } : {};
-  let videre = false;
-  const svar = await middleware({ request: new Request(url, { headers }), env, next: async () => { videre = true; return new Response('ok'); } });
-  return { svar, videre };
-}
-
-test('access: afviser kald uden token', async () => {
-  const slut = medCerts([PAR]);
-  try {
-    const { svar, videre } = await gennemMiddleware({});
-    assert.equal(svar.status, 403); assert.equal(videre, false);
-  } finally { slut(); }
-});
-
-test('access: gyldigt token slipper igennem', async () => {
-  const slut = medCerts([PAR]);
-  try {
-    const { svar, videre } = await gennemMiddleware({ jwt: await token(PAR) });
-    assert.equal(videre, true); assert.equal(await svar.text(), 'ok');
-  } finally { slut(); }
-});
-
-for (const [navn, lav] of [
-  ['forkert signatur', async () => (await token(PAR)).slice(0, -6) + 'AAAAAA'],
-  ['signeret med ukendt nøgle', () => token(ANDET)],
-  ['forkert audience', () => token(PAR, { aud: ['andet'] })],
-  ['forkert udsteder', () => token(PAR, { iss: 'https://ondt.cloudflareaccess.com' })],
-  ['udløbet', () => token(PAR, { exp: Math.floor(Date.now() / 1000) - 3600 })],
-  ['ikke gyldigt endnu', () => token(PAR, { nbf: Math.floor(Date.now() / 1000) + 3600 })],
-  ['alg none', async () => { const t = (await token(PAR, {}, { alg: 'none' })).split('.'); return `${t[0]}.${t[1]}.`; }],
-  ['HS256', () => token(PAR, {}, { alg: 'HS256' })],
-  ['ikke et JWT', async () => 'abc.def'],
-  ['skrald', async () => '...'],
-]) {
-  test(`access: afviser ${navn}`, async () => {
-    const slut = medCerts([PAR]);
-    try {
-      const { svar, videre } = await gennemMiddleware({ jwt: await lav() });
-      assert.equal(svar.status, 403); assert.equal(videre, false);
-    } finally { slut(); }
-  });
-}
-
-test('access: nye nøgler hentes ved ukendt kid (rotation), højst én gang i minuttet', async () => {
-  let slut = medCerts([PAR]);
-  await gennemMiddleware({ jwt: await token(PAR) });
-  slut();
-  slut = medCerts([PAR, ANDET]);
-  try {
-    const { videre } = await gennemMiddleware({ jwt: await token(ANDET) });
-    assert.equal(videre, true);
-    assert.equal(certsKald, 1);
-  } finally { slut(); }
-  // En tredje ukendt nøgle inden for samme minut giver ikke et nyt opslag
-  const TREDJE = await noeglepar('k3');
-  slut = medCerts([PAR, ANDET, TREDJE]);
-  try {
-    assert.equal((await gennemMiddleware({ jwt: await token(TREDJE) })).videre, false);
-    assert.equal(certsKald, 0);
-  } finally { slut(); }
-});
-
-test('access: manglende opsætning afviser (503), aldrig åbent', async () => {
-  for (const env of [{ ...ENV, CF_ACCESS_AUD: '' }, { ...ENV, CF_ACCESS_TEAM_DOMAIN: undefined }]) {
-    const { svar, videre } = await gennemMiddleware({ jwt: 'x.y.z', env });
-    assert.equal(svar.status, 503); assert.equal(videre, false);
+// ---------- Vercel-ruter ----------
+test('ruter: kun GET er eksporteret, så Vercel afviser alt andet med 405', () => {
+  for (const rute of [statusRute, salgstempoRute]) {
+    assert.equal(typeof rute.GET, 'function');
+    for (const m of ['POST', 'PUT', 'PATCH', 'DELETE', 'default']) assert.equal(rute[m], undefined, m);
   }
 });
 
-test('access: utilgængelige nøgler afviser', async () => {
-  const original = globalThis.fetch;
-  globalThis.fetch = async () => new Response('nej', { status: 500 });
-  try {
-    const { svar, videre } = await gennemMiddleware({ jwt: await token(PAR) });
-    assert.equal(svar.status, 503); assert.equal(videre, false);
-  } finally { globalThis.fetch = original; }
-});
-
-test('access: lokal udvikling kræver både variabel og lokal adresse', async () => {
-  const lokal = { ...ENV, LOKAL_UDVIKLING_UDEN_ACCESS: 'ja' };
-  assert.equal((await gennemMiddleware({ env: lokal, url: 'http://localhost:8788/api/status' })).videre, true);
-  assert.equal((await gennemMiddleware({ env: lokal, url: 'http://127.0.0.1:8788/api/status' })).videre, true);
-  const slut = medCerts([PAR]);
-  try {
-    assert.equal((await gennemMiddleware({ env: lokal, url: URL_PROD })).videre, false, 'ikke i produktion');
-    assert.equal((await gennemMiddleware({ env: { ...ENV, LOKAL_UDVIKLING_UDEN_ACCESS: 'true' }, url: 'http://localhost:8788/api/status' })).videre, false, 'kun præcis "ja"');
-    assert.equal((await gennemMiddleware({ env: ENV, url: 'http://localhost:8788/api/status' })).videre, false, 'ikke som standard');
-  } finally { slut(); }
-});
-
-test('access: verificerToken tjekker audience som streng og liste', async () => {
-  const slut = medCerts([PAR]);
-  try {
-    assert.equal(await verificerToken(await token(PAR, { aud: AUD }), { team: TEAM, aud: AUD }), true);
-  } finally { slut(); }
-});
-
-// ---------- routing ----------
-test('routes: RACKBEAT_BASE_URL bruges kun i lokal udvikling', async () => {
+async function medMiljoe(vaerdier, opgave) {
+  const gammel = {};
+  for (const [k, v] of Object.entries(vaerdier)) { gammel[k] = process.env[k]; if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  try { return await opgave(); }
+  finally { for (const [k, v] of Object.entries(gammel)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+}
+async function medFalskFetch(opgave) {
   const kald = [];
   const original = globalThis.fetch;
-  globalThis.fetch = async url => { kald.push(String(url)); return side('order_lines', [], 1, 0); };
-  try {
-    await statusGet({ request: new Request(URL_PROD), env: { ...ENV, RACKBEAT_BASE_URL: 'http://mock.local', LOKAL_UDVIKLING_UDEN_ACCESS: 'ja' }, waitUntil() {} });
-    assert.ok(kald.length && kald.every(u => u.startsWith('https://app.rackbeat.com/api/')), kald.join());
-    nulstilCache(); kald.length = 0;
-    await salgstempoGet({ request: new Request('http://localhost:8788/api/salgstempo'), env: { ...ENV, RACKBEAT_BASE_URL: 'http://mock.local', LOKAL_UDVIKLING_UDEN_ACCESS: 'ja' }, waitUntil() {} });
-    assert.ok(kald.length && kald.every(u => u.startsWith('http://mock.local/')), kald.join());
-  } finally { globalThis.fetch = original; }
+  globalThis.fetch = async (url, init = {}) => { kald.push({ url: String(url), metode: init.method, auth: init.headers && init.headers.Authorization }); return side('order_lines', [], 1, 0); };
+  try { await opgave(); } finally { globalThis.fetch = original; }
+  return kald;
+}
+
+test('ruter: GET /api/status henter fra Rackbeat med nøglen fra miljøet', async () => {
+  const kald = await medFalskFetch(() => medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_LAGER_KEY: undefined, RACKBEAT_BASE_URL: undefined },
+    () => statusRute.GET(new Request('https://kalender.example.com/api/status'))));
+  assert.ok(kald.length > 0);
+  assert.ok(kald.every(k => k.metode === 'GET' && k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/')));
+});
+
+test('ruter: GET /api/salgstempo bruger samme kilde', async () => {
+  const kald = await medFalskFetch(() => medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_BASE_URL: undefined },
+    () => salgstempoRute.GET(new Request('https://kalender.example.com/api/salgstempo'))));
+  assert.ok(kald.length > 0 && kald.every(k => k.url.startsWith('https://app.rackbeat.com/api/orders/lines?')));
+});
+
+test('ruter: manglende nøgle giver 503 uden kald til Rackbeat', async () => {
+  let svar;
+  const kald = await medFalskFetch(async () => {
+    svar = await medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: undefined }, () => statusRute.GET(new Request('https://kalender.example.com/api/status')));
+  });
+  assert.equal(svar.status, 503);
+  assert.equal(kald.length, 0);
+});
+
+test('lokal: RACKBEAT_BASE_URL virker kun uden for Vercel og kun fra localhost', async () => {
+  const lokal = new Request('http://localhost:8788/api/status');
+  const prod = new Request('https://kalender.example.com/api/status');
+  assert.deepEqual(lokaleDeps(lokal, { RACKBEAT_BASE_URL: 'http://mock.local' }), { basisUrl: 'http://mock.local' });
+  assert.deepEqual(lokaleDeps(new Request('http://127.0.0.1:8788/x'), { RACKBEAT_BASE_URL: 'http://mock.local' }), { basisUrl: 'http://mock.local' });
+  assert.deepEqual(lokaleDeps(prod, { RACKBEAT_BASE_URL: 'http://mock.local' }), {}, 'ikke fra et rigtigt domæne');
+  assert.deepEqual(lokaleDeps(lokal, { RACKBEAT_BASE_URL: 'http://mock.local', VERCEL: '1' }), {}, 'aldrig på Vercel');
+  assert.deepEqual(lokaleDeps(lokal, {}), {}, 'ikke som standard');
+  assert.equal(erLokalUdvikling(new Request('http://localhost.evil.example/'), {}), false);
+
+  const kald = await medFalskFetch(() => medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_BASE_URL: 'http://mock.local' },
+    () => salgstempoRute.GET(lokal)));
+  assert.ok(kald.every(k => k.url.startsWith('https://app.rackbeat.com/api/')), 'på Vercel ignoreres adressen: ' + kald.map(k => k.url));
 });

@@ -1631,7 +1631,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     let r;
     try { r = await fetch(sti, {cache: 'no-store', credentials: 'same-origin', redirect: 'manual', headers: {Accept: 'application/json'}}); }
     catch(e) { throw {kode: 'fejl'}; }
-    // Udløbet Cloudflare Access-login: siden skal genindlæses
+    // Udløbet login (Vercel Authentication): siden skal genindlæses
     if (r.type === 'opaqueredirect' || r.status === 401 || r.status === 403) throw {kode: 'login'};
     if (r.status === 404 && !live.svaret) throw {kode: 'ingen_server'};
     let b = null; try { b = await r.json(); } catch(e) {}

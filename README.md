@@ -17,7 +17,8 @@ Eller åbn `src/v2/produktionskalender-v2.html` direkte i browseren (ingen serve
 |---|---|
 | `src/v1/` | Iteration 1 (frosset) |
 | `src/v2/` | Aktuel version, her arbejder vi |
-| `functions/` | Serverfunktioner til Rackbeat live (Cloudflare Pages Functions) |
+| `api/` | Vercel-funktioner til Rackbeat live (`/api/status`, `/api/salgstempo`, kun GET) |
+| `functions/_lib/` | Delt kode til funktionerne (Rackbeat-klient, beregning, cache) |
 | `assets/` | Kystnær-logo (sort PNG) |
 | `docs/` | Skærmbilleder og noter |
 | `report/` | Indholdsfortegnelse (PPTX/PDF) |
@@ -46,7 +47,7 @@ Scriptet henter alle ordrelinjer fra `GET /orders/lines` og skriver `output/salg
 - Antal er det bestilte antal, og datoen er ordredatoen.
 
 ### Rackbeat live
-Når V2 kører på Cloudflare Pages (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat. Der er kun læseadgang. Rackbeat-nøglen ligger kun som secret hos Cloudflare, og alle kald kræver login via Cloudflare Access.
+Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat. Der er kun læseadgang. Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
 
 - `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`) og salg de seneste 7 dage pr. varenummer og dag. Serveren gemmer svaret i 20 sekunder. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
 - `GET /api/salgstempo` (ved start og hvert 10. minut): salgstempo beregnet efter samme regler som `scripts/beregn_salgstempo.py` (testet mod scriptet på eksempeldata). Serveren gemmer resultatet i en time og beregner det nye i baggrunden.
@@ -64,13 +65,14 @@ Antagelser, der skal afklares med ejeren:
 5. **Dansk tid:** dagens dato og ugerne regnes i dansk tid. Ordredatoen bruges uden klokkeslæt.
 
 Kendte begrænsninger:
+- **Adgangen styres kun af Vercel.** Funktionerne tjekker ikke selv, hvem der kalder. Er *Vercel Authentication* ikke slået til på niveauet *All Deployments*, er `/api` åben for alle på nettet. Kontrollér det med `curl` efter hver ændring af indstillingerne (se vejledningen).
+- **Hobby-planen** er gratis, men kun til ikke-kommerciel, personlig brug, og kun én ekstern bruger kan få adgang udover ejeren. Drift hos Kystnær og flere brugere kræver Pro.
 - Rackbeat har ingen salgskanal på ordrelinjerne. Event- og b2b-ordrer fjernes kun, hvis de er over 3 × medianen.
-- Cloudflares Free-plan tillader 50 kald og 10 ms CPU pr. forespørgsel. Salgstempo bruger ét kald pr. 100 ordrelinjer og stopper med fejl ved over 40 sider (ca. 4.000 linjer), frem for at regne på en halv historik. Beregningen alene tager ca. 7 ms på eksempeldata. Salgstempo kræver derfor i praksis Workers Paid.
-- Cachen gælder pr. Cloudflare-datacenter. Brugere i forskellige datacentre giver hver deres kald til Rackbeat.
+- Cachen ligger i den enkelte serverinstans. Flere samtidige instanser giver hver deres kald til Rackbeat (grænse: 480 kald i minuttet). Salgstempo bruger ét kald pr. 100 ordrelinjer og stopper med fejl ved over 200 sider (ca. 20.000 linjer), frem for at regne på en halv historik.
 - Om nøglen må læse lager (`GET /products`) afhænger af nøglens rettigheder. Rackbeats dokumentation nævner ingen rettighed til produkter. Uden adgang viser V2 rød pille og bruger estimeret lager.
 - Kopien på GitHub Pages har ingen server og viser kun eksempeldata.
 
-Test uden nøgle: `node --test "tests/*.test.mjs"` (server og paritet med Python) og `node tests/live_v2.js` (V2 i browser).
+Test uden nøgle: `node --test "tests/*.test.mjs"` (server og paritet med Python) og `node tests/live_v2.js` (V2 i browser). Lokal server med mock af Rackbeat: `node tests/mock_rackbeat.js` og `node tests/dev_server.mjs`.
 
 ### Salgstempo: hvad beregningen bygger på
 Scriptet `scripts/beregn_salgstempo.py` beregner et gennemsnitligt ugentligt salg pr. produkt (`rate`), som kalenderen bruger til at forudsige lagerets udvikling. Tallet er et estimat og bygger på disse antagelser:

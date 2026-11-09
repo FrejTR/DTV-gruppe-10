@@ -162,7 +162,7 @@ async function ventPaa(fn, ms = 3000) {
   check('mangler adgang til lager: rød pille', s.cls === 'err' && s.text === 'Rackbeat: mangler adgang til lager', JSON.stringify(s));
   check('mangler adgang: lageret beholdes', await lager(p, 'havtorn-saebe') === lagerFoer);
 
-  api.status = () => ({ redirect: 'https://kystnaer.cloudflareaccess.com/cdn-cgi/access/login' });
+  api.status = () => ({ redirect: 'https://vercel.com/login' });
   await spol(p, 20000); await ventPaa(async () => (await pill(p)).text.includes('log ind'));
   s = await pill(p);
   check('udløbet login: rød pille', s.cls === 'err' && s.text === 'Rackbeat: log ind igen', JSON.stringify(s));

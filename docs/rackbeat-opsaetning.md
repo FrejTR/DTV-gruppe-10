@@ -1,21 +1,21 @@
-# Rackbeat live: opsætning
+# Rackbeat live: opsætning på Vercel
 
-Denne vejledning sætter V2 op på Cloudflare Pages, så kalenderen viser aktuelt lager og salgstempo fra Rackbeat. Der er kun læseadgang. Antagelser og begrænsninger står i README under *Rackbeat live*.
+Denne vejledning sætter V2 op på Vercel, så kalenderen viser aktuelt lager og salgstempo fra Rackbeat. Der er kun læseadgang. Antagelser og begrænsninger står i README under *Rackbeat live*.
 
 Sådan hænger det sammen:
 
 ```
-Browser (V2) ──login──▶ Cloudflare Access ──▶ Pages Functions (/api/status, /api/salgstempo) ──GET──▶ Rackbeat
-                                                  nøglen ligger kun her, som secret
+Browser (V2) ──▶ Vercel Deployment Protection (login) ──▶ /api/status, /api/salgstempo ──GET──▶ Rackbeat
+                                                              nøglen ligger kun her, som Secret
 ```
 
-Repoet og GitHub Pages er offentlige. Derfor ligger nøglen aldrig i koden, og `/api` afviser alt uden gyldigt Access-login.
+Repoet og GitHub Pages-kopien er offentlige. Derfor ligger nøglen aldrig i koden. Funktionerne tjekker ikke selv, hvem der kalder: det gør Vercel, før kaldet når funktionen. **Er beskyttelsen slået fra eller sat forkert, er `/api` åben for alle.** Afsnit 3 og 5 er derfor vigtigst.
 
 ## 1. Rackbeat: nøgler
 
 Rackbeat: *Firmaindstillinger > API > Opret nøgle*. Fjern fluebenet ved *Alle rettigheder*, og vælg kun det nødvendige.
 
-| Secret | Rettighed i Rackbeat | Bruges til |
+| Variabel | Rettighed i Rackbeat | Bruges til |
 |---|---|---|
 | `RACKBEAT_API_KEY` | *Tilgå ordrer* (access orders) | Ordrelinjer: salg de seneste 7 dage og salgstempo |
 | `RACKBEAT_LAGER_KEY` (valgfri) | Adgang til produkter, se nedenfor | Lager (`GET /products`, feltet `stock_quantity`) |
@@ -24,93 +24,80 @@ Rackbeat: *Firmaindstillinger > API > Opret nøgle*. Fjern fluebenet ved *Alle r
 - Undersøg hos Rackbeat, hvilken rettighed der giver læseadgang til produkter. Lav en separat nøgle med kun den, og sæt den som `RACKBEAT_LAGER_KEY`.
 - Brug ikke *Alle rettigheder* uden at have overvejet det. Koden laver kun GET-kald, men en lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
 
-## 2. Cloudflare Pages-projekt
+## 2. Vercel-projekt
 
-1. Cloudflare-dashboardet: *Workers & Pages > Create > Pages > Connect to Git*. Vælg repoet `FrejTR/DTV-gruppe-10`.
-2. Byggeindstillinger:
-   - **Production branch:** `main`
-   - **Framework preset:** None
-   - **Build command:** tom
-   - **Build output directory:** `src`
-   - **Root directory:** tom (repoets rod, hvor mappen `functions/` ligger)
-3. Gem og byg. Mappen `functions/` bliver automatisk til `/api/status` og `/api/salgstempo`. Statiske filer går ikke gennem funktionerne.
-4. Plan: Workers Free tillader 50 kald og 10 ms CPU pr. forespørgsel. `/api/status` holder sig under det. `/api/salgstempo` henter én side pr. 100 ordrelinjer og bruger ca. 7 ms CPU alene på beregningen (eksempeldata), så det kræver i praksis **Workers Paid**. På Paid kan sidegrænsen hæves med variablen `SALGSTEMPO_MAX_SIDER` (standard 40).
+1. Log ind på vercel.com med GitHub. *Add New > Project*, og vælg repoet `FrejTR/DTV-gruppe-10`.
+2. Indstillingerne kommer fra `vercel.json` i repoet og skal ikke ændres: *Framework Preset* Other, ingen build-kommando, *Output Directory* `src`. Mappen `api/` bliver til funktionerne `/api/status` og `/api/salgstempo`. Rod-mappen er repoets rod.
+3. **Production Branch** er `main`. Indtil grenen er merget, findes koden kun i preview-udgaver. Hver gren får sin egen adresse med formen `<projekt>-git-<gren>-<konto>.vercel.app`, og den vises i Vercel under *Deployments*.
+4. **Plan:** Hobby er gratis, men kun til ikke-kommerciel, personlig brug (Vercels *fair use guidelines*), og der kan kun gives adgang til én ekstern bruger udover dig selv. Skal flere medarbejdere bruge kalenderen, eller skal den bruges i driften hos Kystnær, kræver det Pro.
 
-## 3. Cloudflare Access (login)
+## 3. Beskyttelse (Deployment Protection)
 
-Access skal beskytte både `<projekt>.pages.dev` og preview-adresserne.
+Projektet: *Settings > Deployment Protection*.
 
-1. Pages-projektet: *Settings > General > Enable access policy*. Det beskytter preview-adresserne.
-2. Beskyt også `<projekt>.pages.dev` efter Cloudflares vejledning *Enable access on your pages.dev domain* (developers.cloudflare.com/pages/platform/known-issues/):
-   1. Vælg *Manage* på den Access-politik, der lige er oprettet.
-   2. Vælg projektet under *Access > Applications* og *Configure*.
-   3. Fjern stjernen (wildcard) i feltet *Subdomain* under *Public hostname*, og gem. Ret evt. *Application name*.
-   4. Gå tilbage til *Settings > General*, og vælg *Enable access policy* igen, så preview-adresserne også er beskyttet.
-   5. Kontrollér, at der nu er to Access-applikationer: én for `<projekt>.pages.dev` og én for preview-adresserne.
-3. Politik: *Allow* med *Include > Emails* for de medarbejdere, der skal bruge kalenderen. Login med engangskode (One-time PIN) til e-mail kræver ingen andre konti.
-4. Find to værdier, som funktionerne skal bruge til at tjekke tokenet:
-   - **Team domain:** `https://<team>.cloudflareaccess.com` (Zero Trust: *Settings*, team-navnet).
-   - **AUD-tag:** *Zero Trust > Access controls > Applications*. Vælg *Edit* på applikationen for `<projekt>.pages.dev`, og kopiér *Application Audience (AUD) Tag* under *Additional settings*.
+1. Slå **Vercel Authentication** til.
+2. Vælg beskyttelsesniveauet **All Deployments**, og gem. Det er afgørende: standardniveauet *Standard Protection* beskytter ikke produktions-adressen. Så ville `https://<projekt>.vercel.app/api/status` være åben for alle, også selv om forhåndsvisninger er beskyttet.
+3. Du har selv adgang som ejer af kontoen. Andre skal logge ind med en Vercel-konto og bede om adgang. Du godkender det under *Settings > Deployment Protection > Requests*. På Hobby kan det kun være én person.
 
-Funktionerne tjekker selv tokenet i headeren `Cf-Access-Jwt-Assertion`: signatur (RS256 mod Cloudflares offentlige nøgler), udsteder (team-domænet), audience (AUD-tagget) og udløb. Mangler opsætningen, afviser de alle kald.
+Vercel Authentication er gratis på alle planer. Password Protection (fælles adgangskode) kræver Pro og koster 20 USD om måneden pr. projekt.
 
-## 4. Variabler og secrets i Pages
+## 4. Miljøvariabler
 
-Pages-projektet: *Settings > Variables and Secrets > Add*. Vælg *Encrypt* ved nøglerne. Sæt dem for **Production** (og Preview, hvis previews skal kunne hente data).
+Projektet: *Settings > Environment Variables > Add*. Vælg typen **Secret** til nøglerne (skrivebeskyttet efter gem). Sæt dem for **Production** og **Preview**.
 
 | Navn | Type | Værdi |
 |---|---|---|
 | `RACKBEAT_API_KEY` | Secret | Nøglen med *Tilgå ordrer* |
 | `RACKBEAT_LAGER_KEY` | Secret (valgfri) | Nøglen til lager |
-| `CF_ACCESS_TEAM_DOMAIN` | Variabel | `https://<team>.cloudflareaccess.com` |
-| `CF_ACCESS_AUD` | Variabel | AUD-tagget |
-| `SALGSTEMPO_MAX_SIDER` | Variabel (valgfri) | Fx `200` på Workers Paid |
+| `SALGSTEMPO_MAX_SIDER` | Config (valgfri) | Højeste antal sider ordrelinjer (standard 200, ca. 20.000 linjer) |
 
-Sæt **aldrig** `LOKAL_UDVIKLING_UDEN_ACCESS` eller `RACKBEAT_BASE_URL` i Cloudflare. De er kun til lokal udvikling og virker kun på `localhost` og `127.0.0.1`.
+Sæt **aldrig** `RACKBEAT_BASE_URL`. Den er kun til lokal udvikling og ignoreres på Vercel.
 
-Byg projektet igen efter ændringer (*Deployments > Retry deployment*), så de nye værdier tages i brug.
+Ændringer gælder kun nye udrulninger. Brug *Deployments > Redeploy* efter ændringer.
 
 ## 5. Kontrol efter udrulning
 
-1. Åbn `https://<projekt>.pages.dev/v2/produktionskalender-v2.html` i et privat vindue. Du skal først møde Access-login.
-2. Efter login skal pillen i sidefoden blive grøn: "Rackbeat: opdateret hh:mm:ss". Under *Produkter og minimum* står "Rackbeat, hh:mm:ss" ved lager og salgstempo.
-3. Hvis pillen er rød:
+1. Åbn `https://<projekt>.vercel.app/v2/produktionskalender-v2.html` i et privat vindue. Du skal først møde Vercels login.
+2. **Kontrollér, at API'et er lukket.** I terminalen, uden login:
+   ```
+   curl -i https://<projekt>.vercel.app/api/status
+   ```
+   Du skal få `401` eller en omdirigering til Vercels login, aldrig data. Får du JSON med `lager` eller `salg`, er beskyttelsen ikke slået til på det niveau. Slå *All Deployments* til med det samme, og tjek også adressen til den enkelte udrulning (`<projekt>-<hash>-<konto>.vercel.app`) og grenens adresse.
+3. Efter login skal pillen i sidefoden blive grøn: "Rackbeat: opdateret hh:mm:ss". Under *Produkter og minimum* står "Rackbeat, hh:mm:ss" ved lager og salgstempo.
+4. Hvis pillen er rød:
 
    | Pillen viser | Årsag |
    |---|---|
    | "mangler adgang til lager" | Nøglen kan ikke læse produkter (afsnit 1) |
-   | "fejl" | Se *Deployments > Functions*-loggen for koden, fx `noegle_afvist` eller `ikke_sat_op` |
-   | "log ind igen" | Access-sessionen er udløbet. Genindlæs siden |
-
-4. Uden login skal `curl https://<projekt>.pages.dev/api/status` give en omdirigering til Access-login, ikke data.
+   | "fejl" | Se *Logs* i Vercel for koden, fx `noegle_afvist` eller `ikke_sat_op` (nøglen mangler, eller udrulningen er ikke bygget igen efter at den blev sat) |
+   | "log ind igen" | Login til Vercel er udløbet. Genindlæs siden |
 
 Loggen indeholder kun korte koder og HTTP-status, aldrig nøgler, headers eller svar fra Rackbeat.
 
 ## 6. Lokal udvikling og test
 
-Kræver Node 18 eller nyere. Wrangler hentes med `npx` og skal ikke installeres i projektet.
+Kræver Node 18 eller nyere. Der skal ikke bruges Vercel-konto lokalt.
 
 **Uden nøgle, med mock af Rackbeat:**
-1. Kopiér `.dev.vars.example` til `.dev.vars`, og udfyld:
+1. Opret `.env` ud fra `.env.example`, og udfyld (en mock-nøgle, ikke en rigtig):
    ```
    RACKBEAT_API_KEY=lokal-test
-   LOKAL_UDVIKLING_UDEN_ACCESS=ja
    RACKBEAT_BASE_URL=http://127.0.0.1:8790
    ```
-2. Start mocken og serveren i hver sin terminal:
+2. Start mocken og den lokale server i hver sin terminal:
    ```
    node tests/mock_rackbeat.js
-   npx wrangler pages dev src
+   node tests/dev_server.mjs
    ```
-3. Åbn `http://localhost:8788/v2/produktionskalender-v2.html`.
+3. Åbn `http://127.0.0.1:8788/v2/produktionskalender-v2.html`.
 
-Mocken leverer eksempeldata i Rackbeats format. `MOCK_LAGER_STATUS=403 node tests/mock_rackbeat.js` efterligner en nøgle uden lageradgang.
+Den lokale server kører de samme funktioner som Vercel, men uden login, og lytter kun på `127.0.0.1`. `MOCK_LAGER_STATUS=403 node tests/mock_rackbeat.js` efterligner en nøgle uden lageradgang.
 
-**Med rigtig nøgle:** skriv nøglen i `.dev.vars`, og fjern linjen `RACKBEAT_BASE_URL`. `.dev.vars` er i `.gitignore`. Kontrollér alligevel med `git status`, før du committer.
+**Med rigtig nøgle:** skriv nøglen i `.env`, og fjern linjen `RACKBEAT_BASE_URL`. `.env` er i `.gitignore`. Kontrollér alligevel med `git status`, før du committer. Samme `.env` bruges af Python-scripts.
 
 **Automatiske test (kræver ingen nøgle):**
 ```
-node --test "tests/*.test.mjs"   # serverfunktioner, Access-tjek og paritet med Python-scriptet
+node --test "tests/*.test.mjs"   # serverfunktioner og paritet med Python-scriptet
 node tests/live_v2.js            # V2 i browser: polling, backoff, dialoger, statuspille
 npm test                         # røgtest af V1 og V2
 python -m pytest tests/          # Python-scriptet
@@ -121,6 +108,6 @@ python -m pytest tests/          # Python-scriptet
 | Emne | Side |
 |---|---|
 | Rackbeat API | developer.rackbeat.com: Authentication, Pagination, Errors & Rate Limits (480 kald i minuttet pr. konto), Optimizing Queries (`fields`), List Lines for all Orders (`GET /orders/lines`), List Products (`GET /products`) |
-| Access-token | developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/ |
-| Pages | developers.cloudflare.com/pages/functions/bindings/, …/configuration/preview-deployments/, …/platform/known-issues/ |
-| Grænser | developers.cloudflare.com/workers/platform/limits/ |
+| Beskyttelse | vercel.com/docs/deployment-protection, …/methods-to-protect-deployments/vercel-authentication, …/password-protection |
+| Funktioner | vercel.com/docs/functions/runtimes/node-js, vercel.com/docs/functions/limitations |
+| Variabler og planer | vercel.com/docs/environment-variables, vercel.com/docs/plans/hobby |
