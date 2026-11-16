@@ -1009,7 +1009,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       else if (b.status === 'aktiv' && b.packed) actions = `<button class="btn small ghost" type="button" data-unpack="${b.no}">Fortryd pakket</button>`;
       else if (b.status === 'aktiv' && fuldtPakket(b)) actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}`;
       else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${klarTilPak(b) ? `<button class="btn small primary" type="button" data-pakprod="${b.pid}">Pak</button>` : ''}${pakketFra(b) ? '' : `<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`}`;
-      else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button><button class="btn small ghost" type="button" data-delplan="${b.no}">Slet</button>`;
+      else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button>`;
       else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
       actions += `<span class="edit-btns"><button class="btn small" type="button" data-edit="${b.no}">Rediger</button><button class="btn small danger" type="button" data-del="${b.no}">Slet</button></span>`;
       return `<tr class="${b.status==='kasseret'?'dead':''}">
@@ -1497,7 +1497,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     else if (b.status === 'aktiv' && !fuldtPakket(b)) actions = `${klarTilPak(b) ? `<button class="btn primary" type="button" data-pakprod="${b.pid}">Pak</button>` : ''}${pakketFra(b) ? '' : `<button class="btn danger" type="button" id="dDiscard">Marker som fejlet</button>`}`;
     if (b.status === 'planlagt') actions = `<button class="btn primary" type="button" id="dMade">Registrér batch</button>`;
     if (b.status === 'kasseret') actions = `<button class="btn" type="button" id="dRestore">Gendan</button>`;
-    if (b.status !== 'kasseret' && !b.rackbeat && !pakketFra(b)) actions += `<button class="btn" type="button" id="dEdit">Ret batch</button>`;
+    actions += `<button class="btn" type="button" id="dEdit">Rediger</button><button class="btn danger" type="button" id="dDelete">Slet</button>`;
     document.getElementById('detailBody').innerHTML = `
       <h2>Batch ${esc(bl(b))}</h2>
       <span class="chip st-${st.cls}" style="align-self:flex-start">${st.label}</span>
@@ -1505,7 +1505,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       ${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(aarsag(b.discardReason))}</dd>` : ''}
       ${b.status === 'aktiv' ? `<dt><label for="dRej">Kasserede</label></dt><dd>${canEditRej(b) ? `<input id="dRej" class="d-rej" type="number" min="0" max="${b.qty}" step="1" inputmode="numeric" value="${b.rejected || 0}"> stk.` : `${b.rejected || 0} stk.`}</dd><dt>Godkendt</dt><dd class="num"><strong id="dNet">${net(b)} stk.</strong></dd>` : ''}
       <dt>Oprettet af</dt><dd>${esc(b.by || '–')}</dd>${b.madeBy ? `<dt>Lavet af</dt><dd>${esc(b.madeBy)}</dd>` : ''}
-      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}${pakketFra(b) ? `<dt>Pakket</dt><dd>${pakketFra(b)} stk.${kasseretVedPak(b) ? `, heraf ${kasseretVedPak(b)} kasseret` : ''}. ${rest(b)} stk. tilbage på produktionslageret.</dd>` : ''}${b.rackbeat ? `<dt>Rackbeat</dt><dd>${esc(b.rackbeat.antal)} stk. lagt på Hovedlager ${esc(fmtW(b.rackbeat.dato))}${b.rackbeat.id != null ? ` (regulering ${esc(b.rackbeat.id)})` : ''}. Skal det rettes, så gør det i Rackbeat.</dd>` : ''}</dl>
+      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(b.discardReason.kategori)}${b.discardReason.tekst ? ': ' + esc(b.discardReason.tekst) : ''}</dd>` : ''}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}${pakketFra(b) ? `<dt>Pakket</dt><dd>${pakketFra(b)} stk.${kasseretVedPak(b) ? `, heraf ${kasseretVedPak(b)} kasseret` : ''}. ${rest(b)} stk. tilbage på produktionslageret.</dd>` : ''}${b.rackbeat ? `<dt>Rackbeat</dt><dd>${esc(b.rackbeat.antal)} stk. lagt på Hovedlager ${esc(fmtW(b.rackbeat.dato))}${b.rackbeat.id != null ? ` (regulering ${esc(b.rackbeat.id)})` : ''}. Skal det rettes, så gør det i Rackbeat.</dd>` : ''}</dl>
       <div class="dlg-actions">${actions}<button class="btn" type="button" id="dClose">Luk</button></div>`;
     document.getElementById('dClose').onclick = () => dlgD.close();
     const dis = document.getElementById('dDiscard');
@@ -1778,7 +1778,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b) openBatchFromPlanned(b); return; }
     if (ds.del){ const b = S.batches.find(x => x.no === Number(ds.del)); if (b) askDelete(b); return; }
     if (ds.edit){ const b = S.batches.find(x => x.no === Number(ds.edit)); if (b) openEdit(b); return; }
-    if (ds.delplan){ S.batches = S.batches.filter(x => x.no !== Number(ds.delplan)); save(); renderAll(); toast('Planlagt batch slettet'); return; }
     if (ds.askDelres){ pendingRow = {type:'res', id:ds.askDelres}; renderRes(); return; }
     if (ds.delres){ S.res = S.res.filter(x => x.id !== ds.delres); pendingRow=null; save(); renderAll(); toast('Slettet'); return; }
     if ('cancel' in ds){ pendingRow = null; renderBatches(); renderRes(); return; }
