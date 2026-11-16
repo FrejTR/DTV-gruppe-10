@@ -26,7 +26,9 @@ const start = (fil, port) => spawn(process.execPath, [path.join(__dirname, fil),
 
 const mock = async (sti, init) => (await fetch(MOCK + sti, { ...init, headers: { Authorization: `Bearer ${NOEGLE}`, ...(init && init.headers) } })).json();
 const lagerI = async sku => (await mock('/products?limit=1000&page=1')).products.find(p => p.number === sku).stock_quantity;
-const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&page=1')).inventory_regulations;
+// Rackbeats liste viser kun kladder, medmindre is_booked=true, så begge hentes
+const reguleringer = async () => [...(await mock('/inventory-adjustments?is_booked=true&limit=100&page=1')).inventory_regulations,
+  ...(await mock('/inventory-adjustments?is_booked=false&limit=100&page=1')).inventory_regulations];
 
 (async () => {
   const boerne = [start('mock_rackbeat.js', MOCK_PORT), start('dev_server.mjs', DEV_PORT)];
@@ -96,7 +98,7 @@ const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&p
     await klik('[data-pack="41"]');
     await p.waitForSelector('#rbYes');
     await p.click('#rbYes');
-    check('afvisning vises', await ventPaa(() => p.$eval('#rbErr', el => !el.hidden && el.textContent.includes('afviste'))), await p.$eval('#rbErr', el => el.textContent));
+    check('ukendt varenummer vises', await ventPaa(() => p.$eval('#rbErr', el => !el.hidden && el.textContent.includes('findes ikke i Rackbeat'))), await p.$eval('#rbErr', el => el.textContent));
     check('afvist batch er ikke pakket', !(await batch(41)).packed && (await reguleringer()).length === 1);
     check('knappen hedder nu Prøv igen', (await p.$eval('#rbYes', el => el.textContent)) === 'Prøv igen');
     await p.click('#rbNo');

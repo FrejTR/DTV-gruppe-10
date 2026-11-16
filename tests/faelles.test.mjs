@@ -34,36 +34,43 @@ function anmodning(sti, k, { origin = ORIGIN, type = 'application/json', metode 
   return new Request(ORIGIN + sti, { method: metode, headers: hoveder, ...(metode === 'POST' ? { body: typeof k === 'string' ? k : JSON.stringify(k) } : {}) });
 }
 
-/** Falsk Rackbeat til skrivning, med hukommelse, så et nyt forsøg kan se, hvad der skete første gang.
- *  fejl: {find, opret, hent, bogfoer} = HTTP-status eller 'net'. tabtSvar: bogføringen sker, men svaret går tabt.
- *  saetTil: Rackbeat gemmer reguleringer som "sæt til" i stedet for "læg til". */
-function falskRackbeat({ fejl = {}, tabtSvar = false, saetTil = false } = {}) {
-  const kald = [], reguleringer = [];
+/** Falsk Rackbeat til skrivning med lager, der opfører sig som den rigtige Rackbeat (afprøvet 16. november 2026):
+ *  regulate_difference false SÆTTER beholdningen til antallet ved bogføring, og linjen viser derefter ændringen.
+ *  Listen viser kun kladder, medmindre is_booked=true. Hukommelse, så et nyt forsøg kan se, hvad der skete første gang.
+ *  fejl: {find, lager, opret, hent, slet, bogfoer} = HTTP-status eller 'net'. tabtSvar: bogføringen sker, men svaret går tabt.
+ *  fejlFra: alle kald fra og med dette nummer (1, 2, ...) giver netværksfejl. salgUndervejs: solgt mellem læsning og bogføring. */
+function falskRackbeat({ fejl = {}, tabtSvar = false, fejlFra = Infinity, salgUndervejs = 0, lager = { HAT003: 24 } } = {}) {
+  const kald = [], reguleringer = [], beholdning = { ...lager };
   let id = 5000;
   const svar = (krop, status) => new Response(JSON.stringify(krop), { status });
   const hent = async (url, init = {}) => {
-    const metode = init.method || 'GET', sti = new URL(url).pathname;
+    const u = new URL(url), metode = init.method || 'GET', sti = u.pathname;
     const k = init.body ? JSON.parse(init.body) : null;
-    const en = /\/inventory-adjustments\/(\d+)$/.exec(sti);
-    const hvad = metode === 'DELETE' ? 'slet' : metode === 'GET' ? (en ? 'hent' : 'find') : sti.endsWith('/book') ? 'bogfoer' : 'opret';
+    const en = /\/inventory-adjustments\/(\d+)/.exec(sti);
+    const hvad = sti.endsWith('/locations') ? 'lager' : metode === 'DELETE' ? 'slet' : metode === 'GET' ? (en ? 'hent' : 'find') : sti.endsWith('/book') ? 'bogfoer' : 'opret';
     kald.push({ hvad, sti, krop: k, auth: init.headers && init.headers.Authorization });
-    const f = fejl[hvad];
+    const f = kald.length >= fejlFra ? 'net' : fejl[hvad];
     if (f === 'net') throw new TypeError('fetch failed');
     if (f) return svar({ errors: { message: 'nej ' + RB_NOEGLE } }, f);
-    if (hvad === 'find') return svar({ inventory_regulations: [...reguleringer].reverse() }, 206);
-    if (hvad === 'hent') return svar({ inventory_regulation: reguleringer.find(x => x.id === Number(en[1])) }, 200);
-    if (hvad === 'slet') { reguleringer.splice(reguleringer.findIndex(x => x.id === Number(en[1])), 1); return new Response('', { status: 200 }); }
+    const r = en && reguleringer.find(x => x.id === Number(en[1]));
+    if (hvad === 'lager') return svar({ product_locations: [{ number: 1001, stock_quantity: beholdning[decodeURIComponent(sti.split('/')[3])] ?? 0 }, { number: 1002, stock_quantity: 7 }] }, 200);
+    if (hvad === 'find') return svar({ inventory_regulations: reguleringer.filter(x => x.is_booked === (u.searchParams.get('is_booked') === 'true')).reverse() }, 206);
+    if (hvad === 'hent') return svar({ inventory_regulation: r }, 200);
+    if (hvad === 'slet') { reguleringer.splice(reguleringer.indexOf(r), 1); return new Response('', { status: 200 }); }
     if (hvad === 'opret') {
-      const r = { id: ++id, is_booked: false, regulate_difference: saetTil || k.regulate_diff !== false, description: k.description, krop: k };
-      reguleringer.push(r);
-      return svar({ inventory_regulation: { id: r.id, is_booked: false } }, 201);
+      const ny = { id: ++id, is_booked: false, regulate_difference: !!k.regulate_diff, description: k.description, krop: k,
+        lines: [{ child_id: k.item_id, quantity: Number(k.quantity) }] };
+      reguleringer.push(ny);
+      return svar({ inventory_regulation: { id: ny.id, is_booked: false } }, 201);
     }
-    const r = reguleringer.find(x => sti.endsWith(`/${x.id}/book`));
-    r.is_booked = true;
+    const l = r.lines[0];
+    beholdning[l.child_id] = (beholdning[l.child_id] ?? 0) - salgUndervejs;
+    const aendring = r.regulate_difference ? l.quantity : l.quantity - beholdning[l.child_id];
+    beholdning[l.child_id] += aendring; l.quantity = aendring; r.is_booked = true;
     if (tabtSvar) throw new TypeError('fetch failed');
     return new Response('', { status: 200 });
   };
-  return { hent, kald, reguleringer };
+  return { hent, kald, reguleringer, beholdning };
 }
 
 async function opsaet(rbValg) {
@@ -164,9 +171,13 @@ test('pak: 22 stk. med 2 kasseret tages fra ældste batch, og 20 lægges på Hov
   assert.equal(b.pakning.status, 'bogfoert');
   assert.deepEqual(b.pakning.linjer, [{ batch: 1, label: '1', antal: 22, kasseret: 2 }]);
   assert.deepEqual(b.rackbeat, { id: 5001, antal: 20, lokation: 1001, dato: '2026-11-16' });
-  assert.deepEqual(rb.kald.map(k => k.hvad), ['find', 'opret', 'hent', 'bogfoer'], 'tjekker "læg til" i Rackbeat før bogføring');
-  assert.deepEqual(rb.kald[1].krop, { regulated_at: '2026-11-16', reason: 'Pakket fra batch #1', description: 'Produktionskalender, ref. pak-aaaaaaaa',
-    adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '20', regulation_type: 1004, regulate_diff: false });
+  assert.equal(rb.beholdning.HAT003, 44, '24 på lager + 20 godkendt = 44. Lageret må aldrig blive sat til 20');
+  assert.equal(rb.reguleringer[0].lines[0].quantity, 20, 'den bogførte ændring er +20');
+  assert.deepEqual(rb.kald.map(k => k.hvad), ['find', 'find', 'lager', 'opret', 'bogfoer', 'hent'],
+    'søger bogførte og kladder, læser lageret, opretter, bogfører og kontrollerer');
+  const opret = rb.kald.find(k => k.hvad === 'opret');
+  assert.deepEqual(opret.krop, { regulated_at: '2026-11-16', reason: 'Pakket fra batch #1', description: 'Produktionskalender, ref. pak-aaaaaaaa',
+    adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '44', regulation_type: 1004, regulate_diff: false });
   assert.ok(rb.kald.every(k => k.auth === `Bearer ${RB_NOEGLE}`));
   const d = await lager(deps);
   assert.deepEqual(d.pakninger.map(p => [p.ref, p.status, p.rackbeatId, p.antal, p.kasseret]), [['pak-aaaaaaaa', 'bogfoert', 5001, 22, 2]]);
@@ -179,12 +190,13 @@ test('pak: over flere batches, ældste først. Kun hærdede batches kan pakkes',
   let svar = await pak({ request: anmodning('/api/pak', PAK(50)), env: ENV }, deps);
   assert.equal(svar.status, 201);
   assert.deepEqual((await krop(svar)).data.pakning.linjer.map(l => [l.batch, l.antal]), [[1, 40], [2, 10]]);
-  assert.equal(rb.kald[1].krop.reason, 'Pakket fra batch #1, #2');
+  assert.equal(rb.kald.find(k => k.hvad === 'opret').krop.reason, 'Pakket fra batch #1, #2');
+  assert.equal(rb.beholdning.HAT003, 74, '24 + 50');
   svar = await pak({ request: anmodning('/api/pak', PAK(16, 0, 'pak-bbbbbbbb')), env: ENV }, deps);
   assert.equal(svar.status, 409, 'batch #3 hærder stadig, så der er kun 15 klar');
   const b = await krop(svar);
   assert.equal(b.kode, 'ikke_nok_klar'); assert.equal(b.klar, 15);
-  assert.equal(rb.kald.length, 4, 'intet sendt til Rackbeat');
+  assert.equal(rb.kald.length, 6, 'intet sendt til Rackbeat');
 });
 
 test('pak: samme ref igen tager ikke stk. ud to gange og sender intet til Rackbeat', async () => {
@@ -194,7 +206,8 @@ test('pak: samme ref igen tager ikke stk. ud to gange og sender intet til Rackbe
   const svar = await pak({ request: anmodning('/api/pak', PAK(22, 2)), env: ENV }, deps);
   assert.equal(svar.status, 200);
   assert.equal((await krop(svar)).data.allerede, true);
-  assert.equal(rb.kald.length, 4);
+  assert.equal(rb.kald.length, 6);
+  assert.equal(rb.beholdning.HAT003, 44, 'kun lagt til én gang');
   assert.equal((await lager(deps)).pakninger.length, 1);
 });
 
@@ -209,7 +222,7 @@ test('pak: alle kasseret giver ingen regulering i Rackbeat', async () => {
 });
 
 test('pak: afvist i Rackbeat giver stk. tilbage til produktionslageret', async () => {
-  for (const fejl of [{ opret: 422 }, { opret: 403 }, { find: 401 }, { find: 'net' }]) {
+  for (const fejl of [{ opret: 422 }, { opret: 403 }, { find: 401 }, { find: 'net' }, { lager: 404 }, { bogfoer: 500 }, { bogfoer: 422 }]) {
     const { rb, deps } = await opsaet({ fejl });
     await medData(deps);
     const svar = await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, deps);
@@ -217,45 +230,46 @@ test('pak: afvist i Rackbeat giver stk. tilbage til produktionslageret', async (
     assert.equal((await krop(svar)).pakning, 'annulleret', JSON.stringify(fejl));
     assert.deepEqual((await lager(deps)).pakninger, []);
     assert.ok(rb.kald.filter(k => k.hvad === 'opret').length <= 1, 'et POST sendes aldrig to gange');
+    assert.equal(rb.beholdning.HAT003, 24, 'lageret i Rackbeat er urørt');
+    assert.equal(rb.reguleringer.length, 0, 'en kladde, der ikke blev bogført, er slettet');
     await ingenHemmeligheder(svar);
   }
 });
 
-test('pak: ville Rackbeat sætte lageret i stedet for at lægge til, bogføres intet, og stk. gives tilbage', async () => {
-  const { rb, deps } = await opsaet({ saetTil: true });
+test('pak: et salg i samme sekund giver en advarsel, så beholdningen kan tjekkes', async () => {
+  const { rb, deps } = await opsaet({ salgUndervejs: 1 });
   await medData(deps);
-  const svar = await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, deps);
-  assert.equal(svar.status, 502);
-  const b = await krop(svar);
-  assert.equal(b.kode, 'ville_saette_lager'); assert.equal(b.pakning, 'annulleret');
-  assert.ok(!rb.kald.some(k => k.hvad === 'bogfoer'), 'ingen bogføring');
-  assert.equal(rb.reguleringer.length, 0, 'kladden er slettet, så ingen bogfører den i hånden');
-  assert.deepEqual((await lager(deps)).pakninger, []);
+  const svar = await pak({ request: anmodning('/api/pak', PAK(22, 2)), env: ENV }, deps);
+  assert.equal(svar.status, 201);
+  const r = (await krop(svar)).data.rackbeat;
+  assert.equal(r.advarsel, true); assert.equal(r.aendring, 21);
 });
 
-test('pak: fejlet bogføring venter, og samme ref bogfører kladden uden at oprette en ny', async () => {
-  const { rb, deps } = await opsaet({ fejl: { bogfoer: 500 } });
+test('pak: svarer Rackbeat ikke efter oprettelsen, venter pakningen. Et nyt forsøg laver kladden om ud fra lageret nu', async () => {
+  // Kald 5 er bogføringen: den og alt derefter fejler
+  const { rb, deps } = await opsaet({ fejlFra: 5 });
   await medData(deps);
   let svar = await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, deps);
   assert.equal(svar.status, 502);
   assert.equal((await krop(svar)).pakning, 'venter');
   let d = await lager(deps);
   assert.equal(d.pakninger[0].status, 'reserveret', 'stk. er stadig taget ud, så de ikke kan pakkes to gange');
-  // Rackbeat virker igen
-  const igen = { ...deps, rackbeat: { fetch: falskRackbeatMed(rb) } };
-  svar = await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, igen);
-  assert.equal(svar.status, 201);
-  assert.equal(rb.reguleringer.length, 1, 'kun én regulering i Rackbeat');
-  assert.equal(rb.reguleringer[0].is_booked, true);
+  // Rackbeat virker igen, og der er solgt 4 i mellemtiden. Den gamle kladde (sæt til 46) må ikke bogføres.
+  const igen = falskRackbeatMed(rb, { HAT003: 20 });
+  svar = await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, { ...deps, rackbeat: { fetch: igen.hent } });
+  assert.equal(svar.status, 201, await svar.clone().text());
+  assert.equal(igen.beholdning.HAT003, 42, '20 på lager nu + 22');
+  assert.equal(igen.reguleringer.length, 1, 'den gamle kladde er slettet, kun én regulering');
+  assert.equal(igen.reguleringer[0].is_booked, true);
   d = await lager(deps);
   assert.equal(d.pakninger[0].status, 'bogfoert');
 });
 
-/** Samme reguleringer som rb, men uden fejl */
-function falskRackbeatMed(rb) {
-  const ny = falskRackbeat();
+/** Samme reguleringer som rb, men uden fejl, og med et nyt lager */
+function falskRackbeatMed(rb, lager) {
+  const ny = falskRackbeat({ lager });
   ny.reguleringer.push(...rb.reguleringer);
-  return ny.hent;
+  return ny;
 }
 
 test('pak: bogført, men svaret gik tabt, tæller som pakket', async () => {
@@ -265,6 +279,7 @@ test('pak: bogført, men svaret gik tabt, tæller som pakket', async () => {
   assert.equal(svar.status, 201, await svar.clone().text());
   assert.equal((await krop(svar)).data.pakning.status, 'bogfoert');
   assert.equal(rb.reguleringer.length, 1);
+  assert.equal(rb.beholdning.HAT003, 46, 'lagt til én gang');
 });
 
 test('pak: to samtidige pakninger kan ikke tage de samme stk.', async () => {

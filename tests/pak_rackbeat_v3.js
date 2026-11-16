@@ -27,7 +27,9 @@ const start = (fil, port) => spawn(process.execPath, [path.join(__dirname, fil),
 
 const mock = async (sti, init) => (await fetch(MOCK + sti, { ...init, headers: { Authorization: `Bearer ${NOEGLE}`, ...(init && init.headers) } })).json();
 const lagerI = async sku => (await mock('/products?limit=1000&page=1')).products.find(p => p.number === sku).stock_quantity;
-const reguleringer = async () => (await mock('/inventory-adjustments?limit=100&page=1')).inventory_regulations;
+// Rackbeats liste viser kun kladder, medmindre is_booked=true, så begge hentes
+const reguleringer = async () => [...(await mock('/inventory-adjustments?is_booked=true&limit=100&page=1')).inventory_regulations,
+  ...(await mock('/inventory-adjustments?is_booked=false&limit=100&page=1')).inventory_regulations];
 const database = async () => (await fetch(DB + '/rest/v1/rpc/hent_data', { method: 'POST', body: '{}',
   headers: { apikey: DB_NOEGLE, Authorization: `Bearer ${DB_NOEGLE}`, 'Content-Type': 'application/json' } })).json();
 
@@ -133,7 +135,7 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     await klik(a, '[data-pakprod="havtorn-balsam"]');
     await a.waitForSelector('#pkYes');
     await a.click('#pkYes');
-    check('afvisning vises', await ventPaa(() => a.$eval('#pkErr', el => !el.hidden && el.textContent.includes('afviste'))), await a.$eval('#pkErr', el => el.textContent));
+    check('ukendt varenummer vises', await ventPaa(() => a.$eval('#pkErr', el => !el.hidden && el.textContent.includes('findes ikke i Rackbeat'))), await a.$eval('#pkErr', el => el.textContent));
     check('afvist pakning er ikke gemt, og intet er sendt til Rackbeat', (await database()).pakninger.length === 1 && (await reguleringer()).length === 1);
     check('knappen hedder nu Prøv igen', (await a.$eval('#pkYes', el => el.textContent)) === 'Prøv igen');
     await a.click('#pkNo');

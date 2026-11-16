@@ -112,7 +112,7 @@ Når en batch markeres som *Pakket* i kalenderen på Vercel, spørger kalenderen
 |---|---|---|
 | Lokation | 1001 (Hovedlager) | Kystnærs standardlokation |
 | Antal | Godkendt antal (lavet minus kasseret) | |
-| Læg til eller sæt til | **Læg til** (`regulate_diff: false`) | "Sæt til indtastede antal" ville overskrive beholdningen |
+| Antal | **Nuværende beholdning på Hovedlager + godkendt antal** (`regulate_diff: false`) | Rackbeat *sætter* beholdningen til det sendte antal (se herunder). Derfor læses beholdningen først, så resultatet er "læg til" |
 | Kategori | 1004 (Produktion) | |
 | Årsag og beskrivelse | "Batch #32 godkendt" og en reference | Referencen forhindrer, at samme batch registreres to gange |
 | Bogføring | Ja, straks efter oprettelsen (`POST /inventory-adjustments/{id}/book`) | En regulering er en kladde, indtil den er bogført, og ændrer først beholdningen derefter |
@@ -124,7 +124,9 @@ Sikring:
 - Funktionen godtager kun kald fra kalenderen selv (samme `Origin`, JSON). En anden side kan ikke få en indlogget brugers browser til at oprette reguleringer.
 - Antal skal være et helt tal fra 1 til 10.000, og varenummeret må kun indeholde bogstaver, tal og `._:-`.
 - Et POST sendes aldrig igen automatisk. Prøver brugeren igen, finder serveren den første regulering ud fra referencen.
-- **Kun læg til, aldrig sæt til.** Lige før bogføringen henter serveren reguleringen fra Rackbeat og tjekker, at den lægger antallet til (`regulate_difference: false`). Ville den i stedet sætte beholdningen til antallet, bogføres den ikke, kladden slettes, og kalenderen viser en fejl. Rackbeats dokumentation beskriver ikke feltet, så det tjekkes hver gang.
+- **Læg til, aldrig overskriv.** Med `regulate_diff: false` sætter Rackbeat beholdningen til det sendte antal, når reguleringen bogføres. Det viste de første rigtige pakninger 16. november 2026: 22, 10 og 5 stk. sendt ved 24 på lager blev bogført som −2, −14 og −19. Rackbeats dokumentation beskriver ikke feltet. Derfor læser serveren beholdningen på Hovedlager (`GET /products/{varenr}/locations`) lige før, sender nuværende + godkendt, bogfører straks og kontrollerer bagefter, at den bogførte ændring blev præcis +godkendt. Afviger den (fx et salg i samme sekund), viser kalenderen en advarsel om at tjekke beholdningen.
+- **En gammel kladde bogføres aldrig.** Den sætter beholdningen ud fra lageret dengang. Findes en kladde fra et tidligere forsøg, slettes den, og der laves en ny ud fra lageret nu. Fejler bogføringen, slettes kladden, og stk. gives tilbage til produktionslageret.
+- Rackbeats liste over reguleringer viser som standard kun kladder. Serveren søger derfor efter referencen i både bogførte (`is_booked=true`) og kladder, for varen og fra pakkedagen.
 
 **Første gang med rigtig nøgle (uafprøvet mod Rackbeat):** Feltnavnene er fra Rackbeats dokumentation og Kystnærs egne reguleringer, men skrivning er kun afprøvet mod mocken. Rackbeat har ikke et testmiljø.
 1. Pak en lille batch af én vare. Tjek i Rackbeat under *Beholdning > Reguleringer*, at beholdningen er steget med antallet (ikke sat til det), at lokationen er Hovedlager, og at kategorien er Produktion.
