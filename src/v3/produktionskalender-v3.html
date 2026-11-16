@@ -386,7 +386,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       <div class="legend">
         <span class="chip st-amber">Hærder</span>
         <span class="chip st-green">Klar til pakning</span>
-        <span class="chip st-packed">Pakket</span>
+        <span class="chip st-packed">Pakket og lagt i Rackbeat</span>
         <span class="chip st-trim">⇡ ✂&#xFE0E; Opgave</span>
         <span class="chip st-red">Under minimum</span>
         <span class="chip st-plan">Planlagt</span>
@@ -701,7 +701,17 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const kasseretVedPak = b => linjerFor(b).reduce((s, l) => s + (l.kasseret || 0), 0);
   // b.packed: hele batchen pakket på én gang (før produktionslageret)
   const rest = b => b.status === 'kasseret' || b.packed ? 0 : Math.max(0, net(b) - pakketFra(b));
-  const fuldtPakket = b => b.status === 'aktiv' && (!!b.packed || (pakketFra(b) > 0 && rest(b) === 0));
+  // Færdig: alle stk. er pakket eller kasseret. Indtil da er batchen "Klar til pakning" fra pakkedagen.
+  const fuldtPakket = b => b.status === 'aktiv' && (!!b.packed || rest(b) === 0);
+  const pakningerFor = b => S.pakninger.filter(k => k.linjer.some(l => l.batch === b.no));
+  // Sidste dag på bjælken: pakkedagen. Er der stk. tilbage, fortsætter den til i dag. Er batchen færdig, slutter den den dag, den sidste pakning skete.
+  function slutDag(b){
+    const r = ready(b);
+    if (b.status !== 'aktiv') return r;
+    if (!fuldtPakket(b)) return r < TODAY ? TODAY : r;
+    const sidst = [b.packedOn, ...pakningerFor(b).map(k => k.dato)].filter(Boolean).sort().pop();
+    return sidst && sidst > r ? sidst : r;
+  }
   const klarTilPak = b => b.status === 'aktiv' && ready(b) <= TODAY && rest(b) > 0;
   const klarBatches = pid => S.batches.filter(b => b.pid === pid && klarTilPak(b)).sort((a, c) => a.made.localeCompare(c.made) || a.no - c.no);
   function prodLager(pid){
@@ -755,7 +765,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   function batchState(b){
     if (b.status === 'kasseret') return {cls:'dead', label:'Kasseret'};
     if (b.status === 'planlagt') return {cls:'plan', label:'Planlagt'};
-    if (fuldtPakket(b)) return {cls:'packed', label:'Pakket'};
+    if (fuldtPakket(b)){
+      const pk = pakningerFor(b);
+      if (!b.packed && !pk.length) return {cls:'dead', label:'Kasseret'};   // Alle stk. kasseret på batchen
+      if (pk.some(k => k.status === 'reserveret')) return {cls:'green', label:'Venter på Rackbeat'};
+      // Pakket uden server (eller før produktionslageret) er ikke lagt i Rackbeat
+      return {cls:'packed', label: b.rackbeat || pk.some(k => k.status === 'bogfoert') ? 'Pakket og lagt i Rackbeat' : 'Pakket'};
+    }
     const left = diff(TODAY, ready(b));
     if (left <= 0) return {cls:'green', label:'Klar til pakning'};
     const p = prod(b.pid);
@@ -950,7 +966,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       if (confirming) actions = `<span class="small">Kassér ${esc(bl(b))}?</span><button class="btn small danger" type="button" data-discard="${b.no}">Ja, kassér</button><button class="btn small" type="button" data-cancel>Fortryd</button>`;
       else if (b.status === 'aktiv' && b.packed && b.rackbeat) actions = `<span class="muted small">På lager i Rackbeat</span>`;
       else if (b.status === 'aktiv' && b.packed) actions = `<button class="btn small ghost" type="button" data-unpack="${b.no}">Fortryd pakket</button>`;
-      else if (b.status === 'aktiv' && fuldtPakket(b)) actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<span class="muted small">Pakket</span>`;
+      else if (b.status === 'aktiv' && fuldtPakket(b)) actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}`;
       else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${klarTilPak(b) ? `<button class="btn small primary" type="button" data-pakprod="${b.pid}">Pak</button>` : ''}${pakketFra(b) ? '' : `<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`}`;
       else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button><button class="btn small ghost" type="button" data-delplan="${b.no}">Slet</button>`;
       else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
@@ -997,21 +1013,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (d < b.made) return null;
     if (b.status === 'kasseret') return d < r ? 'dead' : null;
     if (b.status === 'planlagt') return d < r ? 'plan' : null;
-    if (d > r) return null;
+    if (d > slutDag(b)) return null;
     if (fuldtPakket(b)) return 'packed';     // hele bjælken bliver mørkere grøn
-    return d < r ? 'amber' : 'green';        // gul mens den hærder, lys grøn den dag den kan pakkes
+    return d < r ? 'amber' : 'green';        // gul mens den hærder, lys grøn fra pakkedagen, til alt er pakket eller kasseret
   }
 
   // Hvor i processen er produktet: næste batch, der bliver klar, ellers næste planlagte
   function processStatus(p){
-    const active = S.batches.filter(b => b.pid === p.id && b.status === 'aktiv' && ready(b) >= TODAY)
+    const active = S.batches.filter(b => b.pid === p.id && b.status === 'aktiv' && (ready(b) >= TODAY || !fuldtPakket(b)))
       .sort((a,b) => ready(a).localeCompare(ready(b)));
     const planned = S.batches.filter(b => b.pid === p.id && b.status === 'planlagt')
       .sort((a,b) => a.made.localeCompare(b.made));
     let chip;
     if (active.length){
       const b = active[0], st = batchState(b), left = diff(TODAY, ready(b));
-      const when = fuldtPakket(b) ? (b.packedOn ? `pakket ${fmt(b.packedOn)}` : 'pakket') : left <= 0 ? 'kan pakkes i dag' : `pakkes ${fmt(ready(b))} (${left} ${left === 1 ? 'dag' : 'dage'})`;
+      const when = fuldtPakket(b) ? (b.packedOn ? `pakket ${fmt(b.packedOn)}` : 'pakket') : left < 0 ? `klar siden ${fmt(ready(b))}` : left === 0 ? 'kan pakkes i dag' : `pakkes ${fmt(ready(b))} (${left} ${left === 1 ? 'dag' : 'dage'})`;
       const more = active.length > 1 ? ` · +${active.length - 1} batch` : '';
       chip = `<span class="chip st-${st.cls}" title="Batch ${esc(bl(b))}, ${net(b)} stk.">${st.label} · ${esc(bl(b))}</span><span class="wk-proc">${esc(when)}${more}</span>`;
     } else if (planned.length){
@@ -1071,7 +1087,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       html += `</div>`;
     }
     for (const p of weekProducts()){
-      const bs = S.batches.filter(b => b.pid === p.id && b.made <= end && ready(b) >= weekStart)
+      const bs = S.batches.filter(b => b.pid === p.id && b.made <= end && slutDag(b) >= weekStart)
         .sort((a,b) => a.made.localeCompare(b.made));
       const rs = S.res.filter(r => r.pid === p.id && r.date >= weekStart && r.date <= end);
       const lanes = Math.max(1, bs.length) + 1 + (rs.length ? 1 : 0);
