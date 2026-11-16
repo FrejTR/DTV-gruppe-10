@@ -145,6 +145,7 @@ button{cursor:pointer}
 .wk-h{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-left:1px solid var(--line);min-width:0}
 .wk-h small{display:block;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);white-space:nowrap}
 .wk-h.now{background:var(--sand-dark)}
+.wk-now{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:var(--pill);background:var(--btn);color:var(--btn-ink);font-size:.68rem;letter-spacing:.04em;vertical-align:1px}
 .wk-days{background:var(--sand-light)}
 .wk-day{padding:4px 6px;font-size:.72rem;color:var(--muted);border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .wk-day.now{color:var(--ink);font-weight:700}
@@ -957,7 +958,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
   let NW = 4; // antal uger, der vises frem (3–6)
   try { const v = parseInt(localStorage.getItem('kystnaer-uger'), 10); if (v >= 1 && v <= 6) NW = v; } catch(e) {}
-  let weekStart = monday(TODAY);
+  // Visningen starter i ugen før den nuværende, så det seneste er med. Den nuværende uge er markeret.
+  const startUge = () => add(monday(TODAY), -7);
+  let weekStart = startUge();
 
   function dayStatus(b, d){
     const r = ready(b);
@@ -1026,7 +1029,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     let html = `<div class="wk-row head"><div class="wk-corner">Produkt</div>`;
     for (let w = 0; w < NW; w++){
       const ws = add(weekStart, w*7);
-      html += `<div class="wk-h${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7">Uge ${isoWeek(ws)}<small>${esc(fmt(ws))}–${esc(fmt(add(ws,6)))}</small></div>`;
+      html += `<div class="wk-h${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7">Uge ${isoWeek(ws)}${ws===curW?' <span class="wk-now">Nu</span>':''}<small>${esc(fmt(ws))}–${esc(fmt(add(ws,6)))}</small></div>`;
     }
     html += `</div>`;
     if (NW <= 2){
@@ -1621,7 +1624,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   document.getElementById('nextM').addEventListener('click', () => { const [y,m] = month.split('-').map(Number); month = iso(new Date(Date.UTC(y, m, 1))).slice(0,7); renderCalendar(); });
   document.getElementById('prevW').addEventListener('click', () => { weekStart = add(weekStart, -7*NW); renderWeeks(); });
   document.getElementById('nextW').addEventListener('click', () => { weekStart = add(weekStart, 7*NW); renderWeeks(); });
-  document.getElementById('todayW').addEventListener('click', () => { weekStart = monday(TODAY); renderWeeks(); });
+  document.getElementById('todayW').addEventListener('click', () => { weekStart = startUge(); renderWeeks(); });
   document.getElementById('wkc'+NW).checked = true;
   document.querySelectorAll('input[name="wkcount"]').forEach(r => r.addEventListener('change', () => {
     NW = Math.min(6, Math.max(1, parseInt(r.value, 10) || 4));

@@ -121,6 +121,12 @@ const server = http.createServer((req, res) => {
   await p.evaluate(() => document.querySelector('#p-batches [data-del="1"]').click());
   check('Rackbeat-batch: sletning advarer om Rackbeat', (await p.textContent('#delText')).includes('Rackbeat'));
 
+  // Ugevisningen starter i ugen før den nuværende, og den nuværende er markeret
+  await p.reload();
+  const uger = await p.evaluate(() => [...document.querySelectorAll('#weekGrid .wk-h, .wk-h')].map(e => ({ nu: e.classList.contains('now'), tekst: e.textContent })));
+  check('ugevisningen starter en uge før nu', uger.length >= 2 && !uger[0].nu && uger[1].nu, JSON.stringify(uger));
+  check('den nuværende uge er mærket "Nu"', uger[1].tekst.includes('Nu') && !uger[0].tekst.includes('Nu'));
+
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
   process.exit(failed ? 1 : 0);
