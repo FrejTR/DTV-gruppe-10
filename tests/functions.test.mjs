@@ -368,17 +368,20 @@ function regAnmodning(krop = GYLDIG, { origin = 'https://kalender.example.com', 
 }
 
 /** Falsk Rackbeat til skrivning. eksisterende: reguleringer, der allerede findes. postStatus: svar på oprettelse.
- *  bogStatus: svar på bogføring. bogfoertVed422: om GET af reguleringen viser den som bogført. */
-function falskSkriv({ eksisterende = [], postStatus = 201, bogStatus = 200, bogfoertVed422 = false, netvaerk = false } = {}) {
+ *  bogStatus: svar på bogføring. bogfoertVed422: om GET af reguleringen viser den som bogført efter et forsøg.
+ *  saetTil: Rackbeat har gemt reguleringen som "sæt til" i stedet for "læg til". */
+function falskSkriv({ eksisterende = [], postStatus = 201, bogStatus = 200, bogfoertVed422 = false, netvaerk = false, saetTil = false } = {}) {
   const kald = [];
+  let bogForsoegt = false;
   const hent = async (url, init = {}) => {
     const metode = init.method || 'GET', sti = new URL(url).pathname;
     kald.push({ url, sti, metode, auth: init.headers && init.headers.Authorization, krop: init.body ? JSON.parse(init.body) : null });
     if (netvaerk) throw new TypeError('fetch failed');
     const fejl = status => new Response(JSON.stringify({ errors: { item_id: ['invalid ' + NOEGLE] } }), { status });
     if (metode === 'GET' && sti.endsWith('/inventory-adjustments')) return new Response(JSON.stringify({ inventory_regulations: eksisterende, total: eksisterende.length, pages: 1, limit: 100, page: 1 }), { status: 206 });
-    if (metode === 'GET') return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: bogfoertVed422 } }), { status: 200 });
-    if (sti.endsWith('/book')) return bogStatus === 200 ? new Response('', { status: 200 }) : fejl(bogStatus);
+    if (metode === 'GET') return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: bogForsoegt && bogfoertVed422, regulate_difference: saetTil } }), { status: 200 });
+    if (metode === 'DELETE') return new Response('', { status: 200 });
+    if (sti.endsWith('/book')) { bogForsoegt = true; return bogStatus === 200 ? new Response('', { status: 200 }) : fejl(bogStatus); }
     if (postStatus !== 201) return fejl(postStatus);
     return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: false } }), { status: 201 });
   };
@@ -470,6 +473,15 @@ test('lagerregulering: fejlet bogføring giver fejl, så batchen ikke markeres s
   }
 });
 
+test('lagerregulering: bogfører aldrig en regulering, der ville sætte lageret i stedet for at lægge til', async () => {
+  const rb = falskSkriv({ saetTil: true });
+  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
+  assert.equal(svar.status, 502);
+  assert.equal((await krop(svar)).kode, 'ville_saette_lager');
+  assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET], 'ingen bogføring');
+  assert.deepEqual(rb.kald.filter(k => k.metode === 'DELETE').map(k => k.sti), ['/api/inventory-adjustments/4711'], 'kladden slettes');
+});
+
 test('lagerregulering: 422 ved bogføring er i orden, hvis reguleringen allerede er bogført', async () => {
   const rb = falskSkriv({ bogStatus: 422, bogfoertVed422: true });
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
@@ -490,6 +502,7 @@ test('ruter: POST /api/lagerregulering bruger Rackbeats adresse og nøglen fra m
   globalThis.fetch = async (url, init = {}) => {
     kald.push({ url: String(url), metode: init.method, auth: init.headers && init.headers.Authorization });
     if (String(url).endsWith('/book')) return new Response('', { status: 200 });
+    if (String(url).endsWith('/inventory-adjustments/1')) return new Response(JSON.stringify({ inventory_regulation: { id: 1, is_booked: false, regulate_difference: false } }), { status: 200 });
     return init.method === 'POST' ? new Response(JSON.stringify({ inventory_regulation: { id: 1 } }), { status: 201 })
       : new Response(JSON.stringify({ inventory_regulations: [] }), { status: 206 });
   };
@@ -498,5 +511,5 @@ test('ruter: POST /api/lagerregulering bruger Rackbeats adresse og nøglen fra m
       () => reguleringRute.POST(regAnmodning()));
     assert.equal(svar.status, 201);
   } finally { globalThis.fetch = original; }
-  assert.ok(kald.length === 3 && kald.every(k => k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/inventory-adjustments')));
+  assert.ok(kald.length === 4 && kald.every(k => k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/inventory-adjustments')));
 });

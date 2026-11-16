@@ -124,6 +124,7 @@ Sikring:
 - Funktionen godtager kun kald fra kalenderen selv (samme `Origin`, JSON). En anden side kan ikke få en indlogget brugers browser til at oprette reguleringer.
 - Antal skal være et helt tal fra 1 til 10.000, og varenummeret må kun indeholde bogstaver, tal og `._:-`.
 - Et POST sendes aldrig igen automatisk. Prøver brugeren igen, finder serveren den første regulering ud fra referencen.
+- **Kun læg til, aldrig sæt til.** Lige før bogføringen henter serveren reguleringen fra Rackbeat og tjekker, at den lægger antallet til (`regulate_difference: false`). Ville den i stedet sætte beholdningen til antallet, bogføres den ikke, kladden slettes, og kalenderen viser en fejl. Rackbeats dokumentation beskriver ikke feltet, så det tjekkes hver gang.
 
 **Første gang med rigtig nøgle (uafprøvet mod Rackbeat):** Feltnavnene er fra Rackbeats dokumentation og Kystnærs egne reguleringer, men skrivning er kun afprøvet mod mocken. Rackbeat har ikke et testmiljø.
 1. Pak en lille batch af én vare. Tjek i Rackbeat under *Beholdning > Reguleringer*, at beholdningen er steget med antallet (ikke sat til det), at lokationen er Hovedlager, og at kategorien er Produktion.

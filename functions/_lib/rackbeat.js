@@ -137,13 +137,24 @@ export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisU
       if (!r || r.id == null) throw new RackbeatFejl('uventet_svar');
       return { id: r.id };
     },
-    /** Bogfører reguleringen, så beholdningen ændres. 422 betyder måske "allerede bogført", så det tjekkes. */
+    /** Bogfører reguleringen, så beholdningen ændres. 422 betyder måske "allerede bogført", så det tjekkes.
+     *  Først tjekkes det i Rackbeat, at reguleringen lægger antallet til (regulate_difference: false). Ville den
+     *  i stedet sætte beholdningen til antallet, bogføres den ikke, og kladden slettes, så ingen bogfører den i hånden. */
     async bogfoer(id) {
+      const sti = `/inventory-adjustments/${encodeURIComponent(id)}`;
+      const foer = await kald('GET', sti);
+      const r0 = foer && (foer.inventory_regulation || foer);
+      if (!r0 || typeof r0 !== 'object') throw new RackbeatFejl('uventet_svar');
+      if (r0.is_booked === true) return;
+      if (r0.regulate_difference !== false) {
+        try { await kald('DELETE', sti, null, { tomtSvarOk: true }); } catch { /* fejlen herunder er det vigtige */ }
+        throw new RackbeatFejl('ville_saette_lager');
+      }
       try {
         await kald('POST', `/inventory-adjustments/${encodeURIComponent(id)}/book`, null, { tomtSvarOk: true });
       } catch (e) {
         if (!(e instanceof RackbeatFejl) || e.kode !== 'afvist_af_rackbeat') throw e;
-        const data = await kald('GET', `/inventory-adjustments/${encodeURIComponent(id)}`);
+        const data = await kald('GET', sti);
         const r = data && (data.inventory_regulation || data);
         if (!r || r.is_booked !== true) throw e;
       }

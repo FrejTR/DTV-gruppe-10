@@ -69,6 +69,12 @@ http.createServer(async (req, res) => {
   const bog = /^\/inventory-adjustments\/(\d+)\/book$/.exec(u.pathname);
   if (bog && req.method === 'POST') return svar(...bogfoer(Number(bog[1])));
   const en = /^\/inventory-adjustments\/(\d+)$/.exec(u.pathname);
+  if (en && req.method === 'DELETE') {
+    const i = reguleringer.findIndex(x => x.id === Number(en[1]) && !x.is_booked);
+    if (i < 0) return svar(404, { errors: { message: 'Not found' } });
+    reguleringer.splice(i, 1);
+    return svar(200, {});
+  }
   if (en && req.method === 'GET') {
     const r = reguleringer.find(x => x.id === Number(en[1]));
     return r ? svar(200, { inventory_regulation: r }) : svar(404, { errors: { message: 'Not found' } });
