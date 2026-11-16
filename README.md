@@ -21,8 +21,9 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 | `src/v1/` | Iteration 1 (frosset) |
 | `src/v2/` | Iteration 2 (frosset, afleveret, tagget `iteration-2`) |
 | `src/v3/` | Aktuel version (iteration 3), her arbejder vi |
-| `api/` | Vercel-funktioner til Rackbeat live (`/api/status`, `/api/salgstempo`, kun GET) |
-| `functions/_lib/` | Delt kode til funktionerne (Rackbeat-klient, beregning af salgstempo, cache) |
+| `api/` | Vercel-funktioner: Rackbeat live (`/api/status`, `/api/salgstempo`), fælles data (`/api/data`) og pakning (`/api/pak`, `/api/lagerregulering` til V2) |
+| `functions/_lib/` | Delt kode til funktionerne (Rackbeat- og Supabase-klient, beregning af salgstempo, cache) |
+| `supabase/migrations/` | Databasen til fælles data og produktionslager (Supabase/Postgres) |
 | `assets/` | Kystnær-logo (sort PNG) |
 | `docs/` | Opsætning af Vercel og Rackbeat, noter |
 | `report/` | Indholdsfortegnelse (PPTX/PDF) |
@@ -37,7 +38,8 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 ## Status
 - V3 henter lager og salgstempo live fra Rackbeat (kun læsning) og kører på Vercel bag login.
 - Produkterne har Rackbeats varenumre og navne og tørretiderne fra produktionsoversigten. Minimum og typisk batch er foreløbige tal, som i næste fase bliver tomme, til ejeren udfylder dem.
-- Batches, reservationer og personer starter tomme. De ligger indtil videre kun i den enkelte browser. Fælles data er næste fase.
+- Batches, reservationer, personer og produktindstillinger er fælles for alle, der bruger kalenderen (Supabase via serveren, se vejledningens afsnit 8).
+- **Produktionslager:** det, der er lavet, men ikke pakket. Medarbejderen pakker et selvvalgt antal (ældste batch, der er klar, først), skriver hvor mange der er kasseret, og de godkendte lægges på Hovedlager i Rackbeat.
 
 ### Rackbeat live
 Når V3 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat, og godkendte batches lægges på Hovedlager i Rackbeat, når de markeres som pakket (lagerregulering, se vejledningens afsnit 7). Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
@@ -48,10 +50,10 @@ Når V3 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaet
 - Data ændres aldrig, mens en dialog er åben eller et felt har en ændring, der ikke er gemt. Opdateringen vises bagefter.
 - Uden server (fx åbnet direkte som fil) viser pillen "ingen forbindelse", og der er ingen data.
 
-**Batches og reservationer ligger stadig kun i den enkelte browser.** Det, én person registrerer, kan andre ikke se. Login og fælles database er næste fase.
+Batches og reservationer deles via `GET`/`POST /api/data` hvert 20. sekund. Pillen "Fælles data" i sidefoden viser, om alt er gemt.
 
 Antagelser, der skal afklares med ejeren:
-1. **Pakket betyder registreret i Rackbeat.** Med lager fra Rackbeat tæller et batch med i forventet lager, indtil det er markeret *Pakket*. Derefter antages det at være med i Rackbeats lagertal. Et batch, der aldrig bliver markeret pakket, bliver ved med at tælle med. Et produkt uden lager fra Rackbeat (fx uden varenummer) regnes fra 0.
+1. **Pakket betyder registreret i Rackbeat.** Med lager fra Rackbeat tæller det, der ligger på produktionslageret, med i forventet lager fra den dag, batchen er klar. Pakkede stk. er lagt på lager i Rackbeat og er med i Rackbeats lagertal. Stk., der aldrig bliver pakket, bliver ved med at tælle med. Et produkt uden lager fra Rackbeat (fx uden varenummer) regnes fra 0.
 2. **Lager er `stock_quantity`** (beholdningen), ikke disponibelt lager. Åbne ordrer trækkes kun fra via reservationerne i kalenderen.
 3. **Rackbeat vinder.** Lager og salgstempo overskrives ved næste opdatering, også hvis de er rettet i hånden.
 4. **Historik til salgstempo:** serveren henter de 52 uger plus 26 uger før, for at kunne se, om et produkt er nyt (`kort_historik`). Det oprindelige Python-script brugte al historik. Et produkt, der ikke er solgt i de 26 uger før vinduet, kan derfor fejlagtigt få flaget.

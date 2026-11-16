@@ -15,11 +15,24 @@ const TEKSTER = {
   for_mange_sider: 'For mange data at hente',
   afvist_af_rackbeat: 'Rackbeat afviste reguleringen',
   ingen_forbindelse: 'Ingen forbindelse til Rackbeat',
+  db_ikke_sat_op: 'Den fælles database er ikke sat op',
+  db_noegle_afvist: 'Databasen afviste nøglen',
+  db_ingen_forbindelse: 'Ingen forbindelse til databasen',
+  db_fejl: 'Databasen svarer ikke',
 };
 
-export function fejlSvar(kode) {
-  const status = kode === 'ikke_sat_op' ? 503 : 502;
-  return json({ data: null, hentet: null, forældet: true, kilde: 'rackbeat', fejl: TEKSTER[kode] || 'Rackbeat svarer ikke', kode }, status);
+export function fejlSvar(kode, kilde = 'rackbeat') {
+  const status = kode === 'ikke_sat_op' || kode === 'db_ikke_sat_op' ? 503 : 502;
+  const standard = kilde === 'rackbeat' ? 'Rackbeat svarer ikke' : 'Databasen svarer ikke';
+  return json({ data: null, hentet: null, forældet: true, kilde, fejl: TEKSTER[kode] || standard, kode }, status);
+}
+
+/** Kun kald fra kalenderen selv. Vercel Authentication sender login-cookien med, så et kald fra
+ *  en anden side skal afvises (CSRF). Origin skal matche, og kroppen skal være JSON. */
+export function fraKalenderen(request) {
+  const origin = request.headers.get('origin');
+  const type = request.headers.get('content-type') || '';
+  return origin === new URL(request.url).origin && type.split(';')[0].trim() === 'application/json';
 }
 
 /** Logger aldrig nøgler, headers eller svar fra Rackbeat, kun hvad der skete. */

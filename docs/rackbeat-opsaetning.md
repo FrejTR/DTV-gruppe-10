@@ -47,6 +47,8 @@ Projektet: *Settings > Environment Variables > Add*. Vælg typen **Secret** til 
 |---|---|---|
 | `RACKBEAT_API_KEY` | Secret | Nøglen med *Tilgå ordrer* |
 | `SALGSTEMPO_MAX_SIDER` | Config (valgfri) | Højeste antal sider ordrelinjer (standard 200, ca. 20.000 linjer) |
+| `SUPABASE_URL` | Config | `https://azfzbsfwbnwcjmkmzrxz.supabase.co` (afsnit 8) |
+| `SUPABASE_SECRET_KEY` | Secret | Den hemmelige nøgle fra Supabase, `sb_secret_...` (afsnit 8) |
 
 Sæt **aldrig** `RACKBEAT_BASE_URL`. Den er kun til lokal udvikling og ignoreres på Vercel.
 
@@ -90,15 +92,19 @@ Kræver Node 18 eller nyere. Der skal ikke bruges Vercel-konto lokalt.
 
 Den lokale server kører de samme funktioner som Vercel, men uden login, og lytter kun på `127.0.0.1`. `MOCK_LAGER_STATUS=403 npm run mock` efterligner en nøgle uden lageradgang.
 
+**Fælles data lokalt:** `node tests/supabase_pglite.mjs` starter en rigtig Postgres i hukommelsen (PGlite) med migrationerne fra `supabase/migrations/` og svarer som Supabase på `http://127.0.0.1:8792`. Skriv `SUPABASE_URL=http://127.0.0.1:8792` og `SUPABASE_SECRET_KEY=lokal-db` i `.env`. Data forsvinder, når den stoppes.
+
 **Med rigtig nøgle:** skriv nøglen i `.env`, og fjern linjen `RACKBEAT_BASE_URL`. `.env` er i `.gitignore`. Kontrollér alligevel med `git status`, før du committer.
 
 **Automatiske test (kræver ingen nøgle):** `npm test` kører
 - røgtest af V1, V2 og V3,
-- serverfunktionerne og pariteten med facit fra det oprindelige Python-script (`node --test "tests/*.test.mjs"`),
+- serverfunktionerne og pariteten med facit fra det oprindelige Python-script (`node --test "tests/*.test.mjs"`), herunder `/api/data` og `/api/pak` mod en rigtig Postgres (PGlite) med migrationerne,
 - kalenderen i browser, for både den frosne V2 og V3: polling, backoff, dialoger, statuspille og starttilstand (`node tests/live_v2.js` og `node tests/live_v3.js`),
-- pakning → lagerregulering, hele vejen mod mocken (`node tests/pak_rackbeat.js` og `node tests/pak_rackbeat_v3.js`).
+- pakning → lagerregulering, hele vejen mod mocken (`node tests/pak_rackbeat.js` for V2, og `node tests/pak_rackbeat_v3.js` for V3's produktionslager med to kalendere og lokal database).
 
 ## 7. Godkendte batches lægges på lager
+
+> Dette afsnit gælder den frosne V2 (`/api/lagerregulering`). V3 pakker fra produktionslageret med `/api/pak`, se afsnit 8. Reguleringen i Rackbeat er den samme.
 
 Når en batch markeres som *Pakket* i kalenderen på Vercel, spørger kalenderen: "Læg 53 stk. på Hovedlager i Rackbeat?". Ved ja sender den `POST /api/lagerregulering`, og serveren opretter en lagerregulering i Rackbeat:
 
@@ -122,6 +128,32 @@ Sikring:
 **Første gang med rigtig nøgle (uafprøvet mod Rackbeat):** Feltnavnene er fra Rackbeats dokumentation og Kystnærs egne reguleringer, men skrivning er kun afprøvet mod mocken. Rackbeat har ikke et testmiljø.
 1. Pak en lille batch af én vare. Tjek i Rackbeat under *Beholdning > Reguleringer*, at beholdningen er steget med antallet (ikke sat til det), at lokationen er Hovedlager, og at kategorien er Produktion.
 2. Gik noget galt, så ret beholdningen i Rackbeat, og pak ikke flere batches på Vercel, indtil fejlen er fundet.
+
+## 8. Fælles data og produktionslager (V3)
+
+Batches, bestillinger, personer og produktindstillinger (minimum, typisk batch, dage før pakning, trin) deles af alle, der bruger kalenderen. De ligger i Supabase-projektet `kystnaer-produktionskalender` (Frankfurt). Kun Vercel-serveren taler med databasen, med den hemmelige nøgle. Browseren har ingen nøgle.
+
+**Opsætning (én gang):**
+1. Databasen er oprettet med `supabase/migrations/20261116100000_faelles_data.sql` (kørt i Supabases *SQL Editor* 16. november 2026). Nye migrationer køres på samme måde.
+2. I Supabase: *Project Settings > API Keys*. Kopiér en **secret key** (`sb_secret_...`). Brug ikke den offentlige *publishable key*: den kan hverken læse eller skrive her.
+3. I Vercel-projektet (`dtv-gruppe-10-8u5t`): sæt `SUPABASE_URL` og `SUPABASE_SECRET_KEY` (afsnit 4), og vælg *Redeploy*.
+4. Åbn V3. Pillen i sidefoden skal vise "Fælles data: gemt". Den første kalender, der åbnes, sender sine data op, fordi databasen er tom. Alle andre henter derefter dataene fra databasen.
+
+| Pillen viser | Årsag |
+|---|---|
+| "Fælles data: ikke sat op" | `SUPABASE_URL` eller `SUPABASE_SECRET_KEY` mangler, eller udrulningen er ikke bygget igen. Data gemmes kun i browseren imens |
+| "Fælles data: fejl" | Se *Logs* i Vercel, fx `db_noegle_afvist`. Prøver igen hvert 20. sekund |
+
+**Sådan deles data:** Kalenderen henter alle data (`GET /api/data`) hvert 20. sekund og sender kun det, der er ændret (`POST /api/data`). Ændringer, der ikke er sendt endnu, vinder over det, serveren sender. Retter to personer det samme samtidig, gælder den sidste.
+
+**Produktionslager:** alt, der er lavet, men ikke pakket. Afsnittet *Produktionslager* viser pr. produkt, hvad der hærder, hvad der er klar til pakning, og i alt. *Pak* åbner en dialog, hvor medarbejderen skriver, hvor mange stk. der er taget ud, og hvor mange af dem der er kasseret. Ved *Pak og læg på lager* sender kalenderen `POST /api/pak`, og serveren
+1. tager stk. fra de batches, der er klar, ældste først (låst i databasen, så to kalendere ikke kan tage de samme stk.),
+2. opretter og bogfører en lagerregulering i Rackbeat med det godkendte antal (taget ud minus kasseret), som i afsnit 7, med årsagen "Pakket fra batch #32",
+3. markerer pakningen som bogført.
+
+Kun batches, der har hærdet færdigt, kan pakkes. Er der ikke nok klar, afvises pakningen med antallet, der er klar. Kasserede stk. tæller med på listen over sæbespåner. Afviser Rackbeat, gives stk. tilbage til produktionslageret. Svarer Rackbeat ikke, eller er reguleringen oprettet, men ikke bogført, bliver stk. stående som "venter på Rackbeat" med knappen *Prøv igen*. Et nyt forsøg bruger samme reference, så Rackbeat aldrig får reguleringen to gange.
+
+Sikring: tabellerne har række-sikkerhed (RLS) uden regler, og funktionerne kan kun kaldes med den hemmelige nøgle. Serveren godtager kun kald fra kalenderen selv og tjekker alle felter (fx at datoer er datoer og antal er hele tal), så produktionslageret altid kan regnes.
 
 ## Kilder
 
