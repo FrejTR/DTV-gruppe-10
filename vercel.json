@@ -4,6 +4,10 @@
   "buildCommand": null,
   "outputDirectory": "src",
   "functions": {
-    "api/*.mjs": { "maxDuration": 60 }
+    "api/status.mjs": { "maxDuration": 60 },
+    "api/data.mjs": { "maxDuration": 60 },
+    "api/pak.mjs": { "maxDuration": 60 },
+    "api/lagerregulering.mjs": { "maxDuration": 60 },
+    "api/salgstempo.mjs": { "maxDuration": 300 }
   }
 }

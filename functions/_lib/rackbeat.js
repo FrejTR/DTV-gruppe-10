@@ -5,7 +5,8 @@
 
 const BASIS_URL = 'https://app.rackbeat.com/api';
 const PR_SIDE = 100;           // Dokumentationen nævner ingen øvre grænse; sidetallet læses fra svaret
-const PAUSE_MELLEM_SIDER = 150; // ms. Holder os under 480 kald i minuttet pr. konto
+const PAUSE_MELLEM_SIDER = 150; // ms mellem starten af to kald. Holder os under 480 kald i minuttet pr. konto
+const SAMTIDIGE_KALD = 4;       // Så mange sider hentes samtidig, når en historik har mange sider
 
 export class RackbeatFejl extends Error {
   /** kode er kort og generisk, så den kan vises i appen uden at afsløre noget. */
@@ -46,22 +47,36 @@ export function lavKlient({ noegle, fetch: hent = globalThis.fetch, vent = ms =>
     }
   }
 
-  /** Henter alle sider. Stopper med fejl i stedet for at returnere en halv historik. */
+  /** Henter alle sider. Stopper med fejl i stedet for at returnere en halv historik.
+   *  Side 1 først (den fortæller, hvor mange sider der er). Resten hentes med få kald ad gangen, så en lang
+   *  historik når at blive hentet, før Vercel afbryder. Kaldene startes med `pause` imellem, så vi holder os
+   *  under grænsen på 480 kald i minuttet pr. konto, selvom flere er i gang samtidig. */
   async function alleSider(sti, felt, params, maxSider) {
-    const poster = [];
-    for (let nr = 1, sider = 1; nr <= sider; nr++) {
-      if (nr > 1) await vent(pause);
+    const hentSide = async nr => {
       const data = await side(sti, { ...params, limit: PR_SIDE, page: nr });
       if (!data || typeof data !== 'object' || (data[felt] !== undefined && !Array.isArray(data[felt]))) {
         throw new RackbeatFejl('uventet_svar');
       }
-      sider = Number.isInteger(data.pages) ? data.pages : 0;
-      if (sider > maxSider) throw new RackbeatFejl('for_mange_sider');
-      const del = data[felt] || [];
-      poster.push(...del);
-      if (!del.length) break;
+      return data;
+    };
+    const foerste = await hentSide(1);
+    const sider = Number.isInteger(foerste.pages) ? foerste.pages : 0;
+    if (sider > maxSider) throw new RackbeatFejl('for_mange_sider');
+    if (sider > 1) console.log(`[rackbeat] ${sti}: ${sider} sider`);   // Kun antal, så en timeout kan forklares
+    const svar = [foerste];
+    let fejl = null;
+    const igang = new Set();
+    for (let nr = 2; nr <= sider && !fejl; nr++) {
+      if (igang.size >= SAMTIDIGE_KALD) await Promise.race(igang);
+      if (fejl) break;
+      await vent(pause);
+      const i = nr - 2;
+      const p = hentSide(nr).then(d => { svar[i + 1] = d; }, e => { fejl = fejl || e; }).finally(() => igang.delete(p));
+      igang.add(p);
     }
-    return poster;
+    await Promise.all(igang);
+    if (fejl) throw fejl;
+    return svar.flatMap(d => d[felt] || []);
   }
 
   return {
