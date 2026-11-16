@@ -253,6 +253,7 @@ async function ventPaa(fn, ms = 3000) {
     d.batches = [
       { no: 1, by: 'Test', pid: 'tang-shampoo', qty: 55, rejected: 2, made: dag(-3), cure: 3, status: 'aktiv' },             // klar i dag, ikke pakket
       { no: 2, by: 'Test', pid: 'havtorn-shampoo', qty: 60, made: dag(-2), cure: 7, status: 'aktiv', packed: true },          // klar om 5 dage, men allerede pakket
+      { no: 3, by: 'Test', pid: 'havtorn-shampoo', qty: 40, made: dag(0), cure: 7, status: 'aktiv' },                          // hærder, klar om 7 dage
     ];
     d.nextNo = 3;
     localStorage.setItem(k, JSON.stringify(d));
@@ -263,9 +264,16 @@ async function ventPaa(fn, ms = 3000) {
   // Tang shampoo: lager 30 = minimum, salg 9/uge. Det upakkede batch (klar i dag, 53 stk.) lægges til, så lageret holder længere end et nyt batch tager: OK.
   // Hvis batchet ikke blev lagt til, ville lageret være under minimum fra i morgen: Start snart.
   check('upakket batch, der er klar, lægges til Rackbeats lager', await statusFor('tang-shampoo') === 'OK', await statusFor('tang-shampoo'));
-  // Havtorn shampoo: lager 50, minimum 40, salg 16/uge. Det pakkede batch (60 stk.) er allerede med i lageret og må ikke tælles igen.
-  // Uden det er lageret under minimum om 5 dage, og et nyt batch skulle være startet: Start snart. Tælles det to gange, står der OK.
+  // Havtorn shampoo: lager 50, minimum 40, salg 16/uge. Produktionslageret er 40 (batch #3 hærder), så ikke under minimum.
+  // Det pakkede batch (60 stk.) er allerede med i lageret og må ikke tælles igen i prognosen. Uden det er lageret under
+  // minimum om 5 dage, før #3 er klar, og et nyt batch skulle være startet: Start snart. Tælles det to gange, står der OK.
   check('pakket batch tælles ikke to gange', await statusFor('havtorn-shampoo') === 'Start snart', await statusFor('havtorn-shampoo'));
+  // Minimum måles mod produktionslageret (hærder + klar), ikke mod lageret i Rackbeat
+  const plFor = id => p.$eval('#pl-' + id, el => el.textContent.trim());
+  check('produktionslager vises pr. produkt (hærder + klar)', await plFor('tang-shampoo') === '53' && await plFor('havtorn-shampoo') === '40' && await plFor('hyben-saebe') === '0',
+    [await plFor('tang-shampoo'), await plFor('havtorn-shampoo'), await plFor('hyben-saebe')].join(','));
+  check('uden noget på produktionslageret er produktet under minimum', await statusFor('hyben-saebe') === 'Under minimum', await statusFor('hyben-saebe'));
+  check('advarslen nævner produktionslageret', await p.$eval('#alerts', el => el.textContent.includes('på produktionslageret')));
   check('kolonnen "Når ny batch er klar" er fjernet', !(await p.$$eval('#prodTbl thead th', ths => ths.map(th => th.textContent))).some(x => x.includes('Når ny batch er klar')));
   check('ingen JavaScript-fejl (dobbelttælling)', errs.length === 0, errs.join('; '));
   await ctx.close();

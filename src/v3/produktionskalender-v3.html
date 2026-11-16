@@ -9,7 +9,7 @@
   --ink:#212121; --muted:rgba(33,33,33,.68); --line:#e4ded4;
   --accent:#c69388; --accent-strong:#a8736a; --earth:#a38d69;
   --btn:#000000; --btn-ink:#ffffff;
-  --red:#b5382a; --amber:#b07d0c; --green:#4a9f53; --grey:#8b8b8b;
+  --red:#b5382a; --orange:#b85418; --amber:#b07d0c; --yellow:#f5d65c; --green:#4a9f53; --grey:#8b8b8b;
   --packed:#7fb987; --packed-ink:#173d1d;
   --font-display:"Lora", Georgia, "Times New Roman", serif;
   --font-body:"Karla", "Helvetica Neue", Arial, sans-serif;
@@ -20,13 +20,13 @@
   --ink:#ece6dc; --muted:rgba(236,230,220,.68); --line:#3a352e;
   --accent:#d9a89d; --accent-strong:#e6bdb3; --earth:#c9b28d;
   --btn:#ece6dc; --btn-ink:#1b1916;
-  --red:#ec7f6c; --amber:#e1b24f; --green:#79c383; --grey:#8f8a83; --packed:#3f7a48; --packed-ink:#e6f4e8; color-scheme:dark }}
+  --red:#ec7f6c; --orange:#f09a5b; --amber:#e1b24f; --yellow:#e9c84f; --green:#79c383; --grey:#8f8a83; --packed:#3f7a48; --packed-ink:#e6f4e8; color-scheme:dark }}
 :root[data-theme="dark"]{
   --bg:#1b1916; --surface:#221f1b; --sunk:#2a2621; --sand:#3a332a; --sand-light:#2f2a23; --sand-dark:#4a4236;
   --ink:#ece6dc; --muted:rgba(236,230,220,.68); --line:#3a352e;
   --accent:#d9a89d; --accent-strong:#e6bdb3; --earth:#c9b28d;
   --btn:#ece6dc; --btn-ink:#1b1916;
-  --red:#ec7f6c; --amber:#e1b24f; --green:#79c383; --grey:#8f8a83; --packed:#3f7a48; --packed-ink:#e6f4e8; color-scheme:dark }
+  --red:#ec7f6c; --orange:#f09a5b; --amber:#e1b24f; --yellow:#e9c84f; --green:#79c383; --grey:#8f8a83; --packed:#3f7a48; --packed-ink:#e6f4e8; color-scheme:dark }
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55}
@@ -66,18 +66,18 @@ button{cursor:pointer}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .logo{filter:invert(1)} }
 :root[data-theme="dark"] .logo{filter:invert(1)}
 @media (max-width:560px){.logo{height:44px}}
-.stats .stat-red,.stats .stat-red b{color:var(--red);font-weight:700}
+.stats .stat-red,.stats .stat-red b{color:var(--orange);font-weight:700}
 .stats .stat-amber,.stats .stat-amber b{color:var(--amber);font-weight:700}
 .sample-note{font-size:.8rem;color:var(--muted);background:var(--sand-light);border-radius:15px;padding:4px 12px}
 
 /* alerts */
 .alerts{display:flex;flex-direction:column;gap:8px}
 .alert{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--amber);padding:12px 16px}
-.alert.akut{border-left-color:var(--red);background:color-mix(in srgb,var(--red) 6%,var(--surface))}
-.alert.plan{background:color-mix(in srgb,var(--amber) 7%,var(--surface))}
+.alert.akut{border-left-color:var(--orange);background:color-mix(in srgb,var(--orange) 7%,var(--surface))}
+.alert.plan{border-left-color:var(--yellow);background:color-mix(in srgb,var(--yellow) 14%,var(--surface))}
 .alert .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:15px;white-space:nowrap}
-.alert.akut .tag{background:var(--red);color:var(--surface)}
-.alert.plan .tag{background:var(--amber);color:var(--surface)}
+.alert.akut .tag{background:var(--orange);color:var(--surface)}
+.alert.plan .tag{background:var(--yellow);color:#2b2400}
 .alert p{margin:2px 0 0;font-size:.9rem;color:var(--muted)}
 .alert .body{min-width:0}
 .alerts-more{align-self:flex-start}
@@ -96,14 +96,14 @@ button{cursor:pointer}
 /* status chips */
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:700;border-radius:15px;padding:2px 10px;white-space:nowrap}
 .chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
-.st-red{color:var(--red);background:color-mix(in srgb,var(--red) 12%,transparent)}
+.st-red{color:var(--orange);background:color-mix(in srgb,var(--orange) 13%,transparent)}
 .st-amber{color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
 .st-green{color:var(--green);background:color-mix(in srgb,var(--green) 12%,transparent)}
 .st-packed{color:var(--packed-ink);background:var(--packed)}
 .st-plan{color:var(--earth);background:transparent;border:1.5px dashed var(--earth)}
 .st-dead{color:var(--grey);background:color-mix(in srgb,var(--grey) 14%,transparent);text-decoration:line-through}
 .risk{font-size:.78rem;font-weight:700;padding:2px 10px;border-radius:15px;border:1px solid var(--line);white-space:nowrap}
-.risk.akut{border-color:var(--red);color:var(--red)}
+.risk.akut{border-color:var(--orange);color:var(--orange)}
 .risk.plan{border-color:var(--amber);color:var(--amber)}
 .risk.ok{color:var(--muted)}
 
@@ -164,7 +164,7 @@ button{cursor:pointer}
 .wk-status .chip{font-size:.7rem;padding:1px 8px}
 .wk-proc{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .wk-risk{font-size:.74rem;font-weight:700}
-.wk-risk.akut{color:var(--red)}
+.wk-risk.akut{color:var(--orange)}
 .wk-risk.plan{color:var(--amber)}
 .st-none{color:var(--muted);background:var(--sunk)}
 .st-trim{color:var(--ink);background:transparent;border:1.5px solid var(--ink)}
@@ -182,7 +182,7 @@ button{cursor:pointer}
 .bar.s-dead{background:var(--sunk);color:var(--grey);text-decoration:line-through}
 .wk-empty{font-size:.78rem;color:var(--muted);align-self:center;padding-left:6px;z-index:1}
 .wk-stock{font-size:.76rem;color:var(--muted);padding-left:6px;align-self:center;z-index:1;font-variant-numeric:tabular-nums;white-space:nowrap}
-.wk-stock.low{color:var(--red);font-weight:700}
+.wk-stock.low{color:var(--orange);font-weight:700}
 .wk-res{font-size:.72rem;align-self:center;z-index:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid var(--ink);padding-left:4px;background:none;border-top:0;border-right:0;border-bottom:0;text-align:left}
 @media (max-width:700px){.wk{--namew:120px}}
 
@@ -798,8 +798,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     return Math.floor(v);
   }
 
+  // Minimum måles mod produktionslageret: hærder + klar til pakning (lavet, men ikke pakket).
+  // Prognosen ("Start senest") bygger stadig på lager i Rackbeat, batches og salgstempo.
   function analyze(p){
-    const cur = proj(p, TODAY, {excludePlanned:true});
+    const pl = prodLager(p.id), cur = pl.haerder + pl.klar;
     const out = {p, cur, status:'ok', breach:null, latest:null};
     if (cur < p.min) { out.status = 'akut'; out.firstReady = add(TODAY, p.cure); return out; }
     const horizon = p.cure + 28;
@@ -862,20 +864,16 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       const p = x.p, mk = makeFor(p.id);
       if (mk.length){
         rows.push({o: x.status === 'akut' ? 0 : 1, d: '', html: `<div class="alert ${x.status === 'akut' ? 'akut' : 'plan'}">
-          <span class="tag">${x.status === 'akut' ? 'Akut' : 'Planlæg'}</span>
+          <span class="tag">${x.status === 'akut' ? 'Producér nu' : 'Planlæg'}</span>
           <div class="body"><strong>Lav ${esc(p.name)} i dag</strong> <span class="muted">${makeTxt(mk[0])}${x.status === 'akut' ? ' · under minimum' : ''}</span></div>
           ${makeBtn(mk[0].b)}</div>`});
         return;
       }
-      const coming = S.batches.filter(b => b.pid === p.id && b.status === 'aktiv' && !fuldtPakket(b) && ready(b) >= TODAY).sort((a,b) => ready(a).localeCompare(ready(b)))[0];
-      if (x.status === 'akut' && coming) rows.push({o:0, d:'', html: `<div class="alert akut">
-        <span class="tag">Akut</span>
-        <div class="body"><strong>${esc(p.name)} er under minimum</strong> <span class="muted">· batch #${esc(bn(coming))} er i gang og kan pakkes ${esc(fmt(ready(coming)))}</span></div>
-        <button class="btn small ghost" type="button" data-batch="${coming.no}">Se batch</button></div>`});
-      else if (x.status === 'akut') rows.push({o:0, d:'', html: `<div class="alert akut" role="alert">
-        <span class="tag">Akut</span>
+      // Batches i gang er allerede med i produktionslageret, så under minimum betyder, at der skal laves en ny batch
+      if (x.status === 'akut') rows.push({o:0, d:'', html: `<div class="alert akut" role="alert">
+        <span class="tag">Producér nu</span>
         <div class="body"><strong>${esc(p.name)} er under minimum</strong>
-        <p>Ca. <span class="num">${Math.max(0,x.cur)}</span> stk. på lager, minimum er <span class="num">${p.min}</span>. En batch startet i dag er tidligst klar ${esc(fmt(x.firstReady))}.</p></div>
+        <p><span class="num">${x.cur}</span> stk. på produktionslageret (hærder og klar til pakning), minimum er <span class="num">${p.min}</span>. En batch startet i dag er tidligst klar ${esc(fmt(x.firstReady))}.</p></div>
         <button class="btn small primary" type="button" data-plan="${p.id}">Registrér batch</button></div>`});
       else {
         const late = x.latest < TODAY;
@@ -963,7 +961,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   function renderProducts(){
     const list =[...activeProducts(), ...S.products.filter(p => p.archived)];
     const rows = list.map(p => {
-      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="8" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
+      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="9" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
       const x = analyze(p);
       const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
       const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
@@ -972,6 +970,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td><div class="pname"><span><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></span>
           <span class="mv"><button type="button" class="mv-btn" data-move="${p.id}|-1" aria-label="Flyt ${esc(p.name)} op"${pos === 0 ? ' disabled' : ''}>▲</button><button type="button" class="mv-btn" data-move="${p.id}|1" aria-label="Flyt ${esc(p.name)} ned"${pos === sidst ? ' disabled' : ''}>▼</button></span></div></td>
         <td class="n">${lagerCell(p)}</td>
+        <td class="n"><span id="pl-${p.id}">${x.cur}</span>${prodLager(p.id).klar ? `<div class="muted small">${prodLager(p.id).klar} klar til pakning</div>` : ''}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
@@ -982,7 +981,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td>${pendingProd === p.id ? `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button><button class="btn small" type="button" data-cancel-prod>Fortryd</button></div>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`}</td>
       </tr>`;
     }).join('');
-    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Minimum</th><th class="n">Salg/uge<span class="src">Rackbeat</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+    document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Produktionslager<span class="src">Hærder + klar</span></th><th class="n">Minimum<span class="src">Mod produktionslager</span></th><th class="n">Salg/uge<span class="src">Rackbeat</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
   }
 
   // Kasserede stk. kan rettes, indtil der er pakket fra batchen. Derefter skrives kasserede i pakkedialogen.
