@@ -1,7 +1,7 @@
 // Åbner begge versioner og fejler, hvis der er JavaScript-fejl, eller hvis overskrifterne ikke er fede.
 const { chromium } = require('playwright');
 const path = require('path');
-const files = ['src/v1/produktionskalender.html', 'src/v2/produktionskalender-v2.html'];
+const files = ['src/v1/produktionskalender.html', 'src/v2/produktionskalender-v2.html', 'src/v3/produktionskalender-v3.html'];
 (async () => {
   const b = await chromium.launch();
   let failed = false;
@@ -11,7 +11,7 @@ const files = ['src/v1/produktionskalender.html', 'src/v2/produktionskalender-v2
     p.on('pageerror', e => errs.push(e.message));
     await p.goto('file://' + path.resolve(f));
     await p.waitForTimeout(400);
-    if (f.includes('v2')) {
+    if (f.includes('v2') || f.includes('v3')) {
       const w = await p.$eval('h1', el => getComputedStyle(el).fontWeight);
       if (Number(w) < 700) { errs.push('h1 er ikke fed (' + w + ')'); }
     }
