@@ -145,12 +145,18 @@ button{cursor:pointer}
 .wk-h{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-left:1px solid var(--line);min-width:0}
 .wk-h small{display:block;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);white-space:nowrap}
 .wk-h.now{background:var(--sand-dark)}
+.wk-now{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:var(--pill);background:var(--btn);color:var(--btn-ink);font-size:.68rem;letter-spacing:.04em;vertical-align:1px}
 .wk-days{background:var(--sand-light)}
 .wk-day{padding:4px 6px;font-size:.72rem;color:var(--muted);border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .wk-day.now{color:var(--ink);font-weight:700}
 .wk-count .seg{min-width:15rem}
 .wk-corner{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.wk-prod{padding-block:8px;border-bottom:1px solid var(--line)}
+.wk-prod{padding-block:8px;border-bottom:1.5px solid var(--ink)}   /* linje mellem produkterne */
+.wk-prod.alt{background:var(--row-alt)}   /* hver anden række: støvet lyseblå, første er hvid */
+.wk-prod.typeskift{border-bottom-width:3px}   /* dobbelt så tyk, når produktkategorien skifter */
+:root{--row-alt:#e4ecf3}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--row-alt:#27323c} }
+:root[data-theme="dark"]{--row-alt:#27323c}
 .wk-name{grid-column:1;padding-right:8px;min-width:0}
 .wk-name strong{display:block;font-weight:700;line-height:1.25}
 .wk-name small{color:var(--muted)}
@@ -226,6 +232,10 @@ button{cursor:pointer}
 .rb-head > div{min-width:0}
 .rb-sync{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .rb-list{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;font-size:.92rem;max-width:72ch}
+.pname{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mv{display:flex;flex-direction:column;gap:2px}
+.mv-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;font-size:.6rem;line-height:1;padding:3px 7px;cursor:pointer}
+.mv-btn:disabled{opacity:.3;cursor:default}
 .sku{display:block;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* tables */
@@ -237,6 +247,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 tr.dead td{color:var(--grey)}
 td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums}
 .row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.edit-btns{display:flex;flex-direction:column;gap:6px}
 .hint{font-size:.88rem;color:var(--muted);margin:0;max-width:72ch}
 
 /* dialogs */
@@ -533,6 +544,36 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
 <dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
 
+<dialog id="dlgDiscard"><form class="dlg" id="formDiscard" method="dialog" novalidate>
+  <h2>Marker som fejlet</h2>
+  <p id="discInfo"></p>
+  <div class="field"><label for="discCat">Hvorfor kasseres batchen?</label>
+    <select id="discCat">
+      <option value="">Vælg årsag…</option>
+      <option>Vejer for lidt</option>
+      <option>Kosmetisk fejl</option>
+      <option>Fejl i opskrift</option>
+      <option>Fejl i håndtering</option>
+      <option value="Andet">Andet</option>
+    </select></div>
+  <div class="field" id="discOtherWrap" hidden><label for="discOther">Skriv årsag</label><input id="discOther" type="text" autocomplete="off" placeholder="Fx formen revnede"></div>
+  <div class="field" id="discNoteWrap"><label for="discNote">Note (valgfri)</label><input id="discNote" type="text" autocomplete="off" placeholder="Uddyb gerne"></div>
+  <p class="form-err" id="discErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn danger" type="submit">Kassér batch</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgDelete"><div class="dlg">
+  <h2>Slet batch</h2>
+  <p id="delText"></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" id="delNo">Fortryd</button>
+    <button class="btn danger" type="button" id="delYes">Ja, slet batchen</button>
+  </div>
+</div></dialog>
+
 <dialog id="dlgEdit"><form class="dlg" id="formEdit" method="dialog" novalidate>
   <h2>Ret batch</h2>
   <div class="field-row">
@@ -548,8 +589,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   </div>
   <p class="form-err" id="eErr" role="alert" hidden></p>
   <div class="dlg-actions">
-    <button class="btn" type="button" data-close>Annullér</button>
-    <button class="btn primary" type="submit">Gem ændringer</button>
+    <button class="btn" type="button" data-close id="eCancel">Annullér</button>
+    <button class="btn primary" type="submit" id="eSave">Gem ændringer</button>
   </div>
 </form></dialog>
 
@@ -902,8 +943,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       const x = analyze(p);
       const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
       const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
+      const pos = activeProducts().indexOf(p), sidst = activeProducts().length - 1;
       return `<tr>
-        <td><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></td>
+        <td><div class="pname"><span><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></span>
+          <span class="mv"><button type="button" class="mv-btn" data-move="${p.id}|-1" aria-label="Flyt ${esc(p.name)} op"${pos === 0 ? ' disabled' : ''}>▲</button><button type="button" class="mv-btn" data-move="${p.id}|1" aria-label="Flyt ${esc(p.name)} ned"${pos === sidst ? ' disabled' : ''}>▼</button></span></div></td>
         <td class="n">${lagerCell(p)}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
@@ -945,15 +988,14 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const list = [...S.batches].sort((a,b) => b.no - a.no);
     const rows = list.map(b => {
       const p = prod(b.pid); const st = batchState(b);
-      const confirming = pendingRow && pendingRow.type==='batch' && pendingRow.id===b.no;
       let actions = '';
-      if (confirming) actions = `<span class="small">Kassér ${esc(bl(b))}?</span><button class="btn small danger" type="button" data-discard="${b.no}">Ja, kassér</button><button class="btn small" type="button" data-cancel>Fortryd</button>`;
-      else if (b.status === 'aktiv' && b.packed && b.rackbeat) actions = `<span class="muted small">På lager i Rackbeat</span>`;
+      if (b.status === 'aktiv' && b.packed && b.rackbeat) actions = `<span class="muted small">På lager i Rackbeat</span>`;
       else if (b.status === 'aktiv' && b.packed) actions = `<button class="btn small ghost" type="button" data-unpack="${b.no}">Fortryd pakket</button>`;
       else if (b.status === 'aktiv' && fuldtPakket(b)) actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<span class="muted small">Pakket</span>`;
       else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${klarTilPak(b) ? `<button class="btn small primary" type="button" data-pakprod="${b.pid}">Pak</button>` : ''}${pakketFra(b) ? '' : `<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`}`;
       else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button><button class="btn small ghost" type="button" data-delplan="${b.no}">Slet</button>`;
       else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
+      actions += `<span class="edit-btns"><button class="btn small" type="button" data-edit="${b.no}">Rediger</button><button class="btn small danger" type="button" data-del="${b.no}">Slet</button></span>`;
       return `<tr class="${b.status==='kasseret'?'dead':''}">
         <td class="num"><strong>${esc(bl(b))}</strong></td><td>${esc(p?p.name:b.pid)}</td><td>${esc(b.by || '–')}</td><td class="n">${b.qty}</td><td class="n">${rejCell(b)}</td>
         <td class="num">${esc(fmt(b.made))}${b.status==='planlagt'?' <span class="muted small">(start)</span>':''}</td>
@@ -990,7 +1032,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
   let NW = 4; // antal uger, der vises frem (3–6)
   try { const v = parseInt(localStorage.getItem('kystnaer-uger'), 10); if (v >= 1 && v <= 6) NW = v; } catch(e) {}
-  let weekStart = monday(TODAY);
+  // Visningen starter i ugen før den nuværende, så det seneste er med. Den nuværende uge er markeret.
+  const startUge = () => add(monday(TODAY), -7);
+  let weekStart = startUge();
 
   function dayStatus(b, d){
     const r = ready(b);
@@ -1059,7 +1103,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     let html = `<div class="wk-row head"><div class="wk-corner">Produkt</div>`;
     for (let w = 0; w < NW; w++){
       const ws = add(weekStart, w*7);
-      html += `<div class="wk-h${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7">Uge ${isoWeek(ws)}<small>${esc(fmt(ws))}–${esc(fmt(add(ws,6)))}</small></div>`;
+      html += `<div class="wk-h${ws===curW?' now':''}" style="grid-column:${2+w*7} / span 7">Uge ${isoWeek(ws)}${ws===curW?' <span class="wk-now">Nu</span>':''}<small>${esc(fmt(ws))}–${esc(fmt(add(ws,6)))}</small></div>`;
     }
     html += `</div>`;
     if (NW <= 2){
@@ -1070,7 +1114,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       }
       html += `</div>`;
     }
-    for (const p of weekProducts()){
+    const visning = weekProducts();
+    for (const [pi, p] of visning.entries()){
       const bs = S.batches.filter(b => b.pid === p.id && b.made <= end && ready(b) >= weekStart)
         .sort((a,b) => a.made.localeCompare(b.made));
       const rs = S.res.filter(r => r.pid === p.id && r.date >= weekStart && r.date <= end);
@@ -1120,7 +1165,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         const v = proj(p, we);
         inner += `<div class="wk-stock${v < p.min ? ' low' : ''}" style="grid-column:${2+w*7} / span 7;grid-row:${row}" title="Forventet lager ${esc(fmt(we))}">≈ ${Math.max(0,v)} stk.</div>`;
       }
-      html += `<div class="wk-prod">${inner}</div>`;
+      const skift = visning[pi + 1] && visning[pi + 1].type !== p.type;
+      html += `<div class="wk-prod${pi % 2 ? ' alt' : ''}${skift ? ' typeskift' : ''}">${inner}</div>`;
     }
     if (!weekProducts().length) html += `<p class="hint" style="padding:12px 0">Ingen produkter kræver handling lige nu.</p>`;
     const wk = document.getElementById('wk');
@@ -1444,11 +1490,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       <div class="dlg-actions">${actions}<button class="btn" type="button" id="dClose">Luk</button></div>`;
     document.getElementById('dClose').onclick = () => dlgD.close();
     const dis = document.getElementById('dDiscard');
-    if (dis) dis.onclick = () => {
-      if (dis.dataset.armed){ b.status = 'kasseret'; b.rejectedOn = TODAY; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} kasseret`); return; }
-      dis.dataset.armed = '1'; dis.textContent = `Bekræft: kassér ${b.qty} stk.`;
-    };
+    if (dis) dis.onclick = () => { dlgD.close(); openDiscard(b); };
     const ed = document.getElementById('dEdit'); if (ed) ed.onclick = () => { dlgD.close(); openEdit(b); };
+    const dl = document.getElementById('dDelete'); if (dl) dl.onclick = () => { dlgD.close(); askDelete(b); };
     const mk = document.getElementById('dMade'); if (mk) mk.onclick = () => { dlgD.close(); openBatchFromPlanned(b); };
     const dr = document.getElementById('dRej');
     if (dr){
@@ -1456,7 +1500,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       dr.addEventListener('change', () => { b.rejected = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); if (b.rejected > 0) b.rejectedOn = TODAY; save(); renderAll(); });
     }
     const up = document.getElementById('dUnpack'); if (up) up.onclick = () => { b.packed = false; delete b.packedOn; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} er ikke længere pakket`); };
-    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} gendannet`); };
+    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; delete b.discardReason; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} gendannet`); };
     dlgD.showModal();
   }
 
@@ -1475,8 +1519,57 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('eCure').value = b.cure;
     document.querySelectorAll('#formEdit .bad').forEach(x => x.classList.remove('bad'));
     document.getElementById('eErr').hidden = true;
+    // Er batchen lagt på lager i Rackbeat, ligger antallet dér: kun nummeret kan rettes, og sletning kræver ekstra forsigtighed
+    ['eProd', 'eQty', 'eDate', 'eCure'].forEach(id => { document.getElementById(id).disabled = !!b.rackbeat; });
     dlgE.showModal();
   }
+  // Kassation kræver en årsag (kategori, eller tekst ved "Andet"), så der senere kan laves statistik
+  const dlgDisc = document.getElementById('dlgDiscard'), discCat = document.getElementById('discCat');
+  let discTarget = null;
+  discCat.addEventListener('change', () => {
+    document.getElementById('discOtherWrap').hidden = discCat.value !== 'Andet';
+    if (discCat.value === 'Andet') document.getElementById('discOther').focus();
+  });
+  function openDiscard(b){
+    discTarget = b;
+    document.getElementById('discInfo').textContent = `Batch ${bl(b)} ${(prod(b.pid) || {}).name || ''} · ${b.qty} stk.`;
+    discCat.value = ''; document.getElementById('discOther').value = ''; document.getElementById('discNote').value = '';
+    document.getElementById('discOtherWrap').hidden = true; document.getElementById('discErr').hidden = true;
+    document.querySelectorAll('#formDiscard .bad').forEach(x => x.classList.remove('bad'));
+    dlgDisc.showModal();
+  }
+  document.getElementById('formDiscard').addEventListener('submit', e => {
+    e.preventDefault();
+    const b = discTarget; if (!b) return;
+    const err = document.getElementById('discErr');
+    document.querySelectorAll('#formDiscard .bad').forEach(x => x.classList.remove('bad'));
+    const fail = (msg, el) => { err.textContent = msg; err.hidden = false; el.classList.add('bad'); el.focus(); };
+    const kategori = discCat.value, andet = document.getElementById('discOther').value.trim();
+    if (!kategori) return fail('Vælg en årsag til, at batchen kasseres.', discCat);
+    if (kategori === 'Andet' && !andet) return fail('Skriv årsagen i feltet, når du vælger Andet.', document.getElementById('discOther'));
+    const note = document.getElementById('discNote').value.trim();
+    b.discardReason = {kategori, tekst: kategori === 'Andet' ? andet : note, on: TODAY};
+    if (kategori === 'Andet' && note) b.discardReason.note = note;
+    b.status = 'kasseret'; b.rejectedOn = TODAY;
+    discTarget = null; save(); dlgDisc.close(); renderAll(); toast(`Batch ${bl(b)} kasseret`);
+  });
+
+  // Sletning spørger altid først. Selve sletningen sker først ved "Ja, slet batchen".
+  const dlgDel = document.getElementById('dlgDelete');
+  let delTarget = null;
+  function askDelete(b){
+    delTarget = b;
+    document.getElementById('delText').textContent = `Er du sikker på, at du vil slette batch ${bl(b)} (${(prod(b.pid) || {}).name || b.pid}, ${b.qty} stk.)? Det kan ikke fortrydes.` +
+      (b.rackbeat ? ' Batchen er lagt på lager i Rackbeat. Lageret dér rettes ikke og skal rettes i Rackbeat.' : '');
+    dlgDel.showModal();
+  }
+  document.getElementById('delNo').addEventListener('click', () => { delTarget = null; dlgDel.close(); });
+  document.getElementById('delYes').addEventListener('click', () => {
+    const b = delTarget; if (!b) return;
+    const navn = bl(b);
+    S.batches = S.batches.filter(x => x !== b);
+    delTarget = null; save(); dlgDel.close(); renderAll(); toast(`Batch ${navn} er slettet`);
+  });
   document.getElementById('eProd').addEventListener('change', ev => {
     // Nyt produkt: foreslå dets tid før pakning, som ved oprettelse
     const np = prod(ev.target.value); if (np) document.getElementById('eCure').value = np.cure;
@@ -1637,6 +1730,14 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.plan){ if (ds.mode === 'plan') openBatch(ds.plan, ds.latest, true); else openRegister(ds.plan, ds.latest); return; }
     if (ds.batch){ openDetail(Number(ds.batch)); return; }
     if (ds.res){ openResDetail(ds.res); return; }
+    if (ds.move){
+      // Rækkefølgen er rækkefølgen i listen. Flyt produktet forbi det nærmeste aktive produkt.
+      const [id, dir] = ds.move.split('|'), akt = activeProducts(), i = akt.findIndex(x => x.id === id), j = i + Number(dir);
+      if (i < 0 || j < 0 || j >= akt.length) return;
+      const a = S.products.indexOf(akt[i]), b2 = S.products.indexOf(akt[j]);
+      [S.products[a], S.products[b2]] = [S.products[b2], S.products[a]];
+      save(); renderAll(); return;
+    }
     if (ds.askArchive){ pendingProd = ds.askArchive; renderProducts(); return; }
     if ('cancelProd' in ds){ pendingProd = null; renderProducts(); return; }
     if (ds.archive){ const p = prod(ds.archive); if (p){ if (activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); pendingProd = null; renderProducts(); return; } p.archived = true; pendingProd = null; save(); renderAll(); toast(`${p.name} er arkiveret`);} return; }
@@ -1647,10 +1748,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.pakprod){ openPak(ds.pakprod); return; }
     if (ds.pakigen){ const k = S.pakninger.find(x => x.ref === ds.pakigen); if (k) openPak(k.pid, k); return; }
     if (ds.unpack){ const b = S.batches.find(x => x.no === Number(ds.unpack)); if (b && !b.rackbeat){ b.packed = false; delete b.packedOn; save(); renderAll(); toast(`Batch ${bl(b)} er ikke længere pakket`);} return; }
-    if (ds.askDiscard){ pendingRow = {type:'batch', id:Number(ds.askDiscard)}; renderBatches(); return; }
-    if (ds.discard){ const b = S.batches.find(x => x.no === Number(ds.discard)); if (b){ b.status='kasseret'; b.rejectedOn = TODAY; pendingRow=null; save(); renderAll(); toast(`Batch ${bl(b)} kasseret`);} return; }
-    if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; save(); renderAll(); toast(`Batch ${bl(b)} gendannet`);} return; }
+    if (ds.askDiscard){ const b = S.batches.find(x => x.no === Number(ds.askDiscard)); if (b) openDiscard(b); return; }
+    if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; delete b.discardReason; save(); renderAll(); toast(`Batch ${bl(b)} gendannet`);} return; }
     if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b) openBatchFromPlanned(b); return; }
+    if (ds.del){ const b = S.batches.find(x => x.no === Number(ds.del)); if (b) askDelete(b); return; }
+    if (ds.edit){ const b = S.batches.find(x => x.no === Number(ds.edit)); if (b) openEdit(b); return; }
     if (ds.delplan){ S.batches = S.batches.filter(x => x.no !== Number(ds.delplan)); save(); renderAll(); toast('Planlagt batch slettet'); return; }
     if (ds.askDelres){ pendingRow = {type:'res', id:ds.askDelres}; renderRes(); return; }
     if (ds.delres){ S.res = S.res.filter(x => x.id !== ds.delres); pendingRow=null; save(); renderAll(); toast('Slettet'); return; }
@@ -1688,7 +1790,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   document.getElementById('nextM').addEventListener('click', () => { const [y,m] = month.split('-').map(Number); month = iso(new Date(Date.UTC(y, m, 1))).slice(0,7); renderCalendar(); });
   document.getElementById('prevW').addEventListener('click', () => { weekStart = add(weekStart, -7*NW); renderWeeks(); });
   document.getElementById('nextW').addEventListener('click', () => { weekStart = add(weekStart, 7*NW); renderWeeks(); });
-  document.getElementById('todayW').addEventListener('click', () => { weekStart = monday(TODAY); renderWeeks(); });
+  document.getElementById('todayW').addEventListener('click', () => { weekStart = startUge(); renderWeeks(); });
   document.getElementById('wkc'+NW).checked = true;
   document.querySelectorAll('input[name="wkcount"]').forEach(r => r.addEventListener('change', () => {
     NW = Math.min(6, Math.max(1, parseInt(r.value, 10) || 4));

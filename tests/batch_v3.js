@@ -99,6 +99,75 @@ const server = http.createServer((req, res) => {
   await p.fill('#eNo', '9'); await p.click('#formEdit button[type=submit]');
   check('ret batch: planlagt batch kan få nummer senere', (await state()).batches.find(x => x.no === 2).label === '9');
 
+  // Rediger og Slet er to knapper over hinanden i batchlisten. Sletning spørger først.
+  const antal = async () => (await state()).batches.length;
+  const foer = await antal();
+  const knapper = await p.evaluate(() => { const r = [...document.querySelectorAll('#p-batches [data-edit="2"], #p-batches [data-del="2"]')].map(e => e.textContent.trim()); return r; });
+  check('listen har knapperne Rediger og Slet', knapper.join() === 'Rediger,Slet', knapper.join());
+  await p.evaluate(() => document.querySelector('#p-batches [data-del="2"]').click());
+  check('slet: spørger først, om man er sikker', (await p.textContent('#delText')).includes('Er du sikker') && await antal() === foer);
+  await p.click('#delNo');
+  check('slet: Fortryd sletter ikke', await antal() === foer && !(await p.isVisible('#dlgDelete')));
+  await p.evaluate(() => document.querySelector('#p-batches [data-del="2"]').click());
+  await p.click('#delYes');
+  check('slet: Ja sletter batchen', await antal() === foer - 1 && !(await state()).batches.some(x => x.no === 2));
+
+  // Batch lagt på lager i Rackbeat: kun nummeret kan rettes, og sletning advarer
+  await p.evaluate(k => { const S = JSON.parse(localStorage.getItem(k)); const b = S.batches.find(x => x.no === 1); b.packed = true; b.rackbeat = { antal: 25, dato: '2026-11-16', id: 5 }; localStorage.setItem(k, JSON.stringify(S)); }, KEY);
+  await p.reload();
+  await p.evaluate(() => document.querySelector('#p-batches [data-edit="1"]').click());
+  check('Rackbeat-batch: antal er låst', await p.isDisabled('#eQty'));
+  await p.click('#dlgEdit [data-close]');
+  await p.evaluate(() => document.querySelector('#p-batches [data-del="1"]').click());
+  check('Rackbeat-batch: sletning advarer om Rackbeat', (await p.textContent('#delText')).includes('Rackbeat'));
+
+  // Kassation kræver en årsag
+  await p.evaluate(k => { const S = JSON.parse(localStorage.getItem(k)); const b = S.batches.find(x => x.no === 1); b.packed = false; delete b.rackbeat; localStorage.setItem(k, JSON.stringify(S)); }, KEY);
+  await p.reload();
+  await p.evaluate(() => document.querySelector('[data-ask-discard="1"]').click());
+  const batch1 = async () => (await state()).batches.find(x => x.no === 1);
+  await p.click('#formDiscard button[type=submit]');
+  check('kassér: uden årsag afvises', (await batch1()).status === 'aktiv' && !(await p.$eval('#discErr', e => e.hidden)));
+  const valg = await p.$$eval('#discCat option', o => o.map(x => x.textContent.trim()).filter(x => x && !x.startsWith('Vælg')));
+  check('kassér: de fem årsager findes', valg.join('|') === 'Vejer for lidt|Kosmetisk fejl|Fejl i opskrift|Fejl i håndtering|Andet', valg.join('|'));
+  await p.selectOption('#discCat', 'Andet');
+  check('kassér: Andet viser tekstfeltet', await p.isVisible('#discOther'));
+  await p.click('#formDiscard button[type=submit]');
+  check('kassér: Andet uden tekst afvises', (await batch1()).status === 'aktiv');
+  await p.fill('#discOther', 'Formen revnede');
+  await p.click('#formDiscard button[type=submit]');
+  const k = await batch1();
+  check('kassér: Andet med tekst gemmer årsagen', k.status === 'kasseret' && k.discardReason.kategori === 'Andet' && k.discardReason.tekst === 'Formen revnede', JSON.stringify(k));
+  await p.evaluate(() => document.querySelector('[data-batch="1"]').click());
+  check('kassér: årsagen vises i detaljerne', (await p.textContent('#detailBody')).includes('Formen revnede'));
+  await p.click('#dRestore');
+  check('gendan: årsagen fjernes', !(await batch1()).discardReason && (await batch1()).status === 'aktiv');
+  await p.evaluate(() => document.querySelector('[data-batch="1"]').click());
+  await p.click('#dDiscard');
+  await p.selectOption('#discCat', 'Vejer for lidt');
+  await p.click('#formDiscard button[type=submit]');
+  check('kassér: fast kategori gemmes uden tekst', (await batch1()).discardReason?.kategori === 'Vejer for lidt');
+
+  // Produktrækkefølge og rækkefarver i ugekalenderen
+  await p.reload();
+  const navne = () => p.$$eval('.wk-prod .wk-name strong', e => e.map(x => x.textContent));
+  const foerNavne = await navne();
+  await p.evaluate(() => document.querySelector('[data-move$="|1"]:not([disabled])').click());
+  const efterNavne = await navne();
+  check('flyt produkt ned bytter de to første', efterNavne[0] === foerNavne[1] && efterNavne[1] === foerNavne[0], efterNavne.slice(0, 2).join());
+  await p.reload();
+  check('rækkefølgen huskes efter genindlæsning', (await navne())[0] === foerNavne[1]);
+  check('første række er hvid, anden har farve', await p.$$eval('.wk-prod', r => !r[0].classList.contains('alt') && r[1].classList.contains('alt')));
+  const skift = await p.$$eval('.wk-prod', (r, ) => r.map(x => x.classList.contains('typeskift')));
+  const typer = await p.evaluate(k => { const S = JSON.parse(localStorage.getItem(k)); return S.products.filter(x => !x.archived).map(x => x.type); }, KEY);
+  check('dobbelt linje præcis hvor kategorien skifter', skift.every((v, i) => v === (i < typer.length - 1 && typer[i] !== typer[i + 1])), JSON.stringify({ skift, typer }));
+
+  // Ugevisningen starter i ugen før den nuværende, og den nuværende er markeret
+  await p.reload();
+  const uger = await p.evaluate(() => [...document.querySelectorAll('#weekGrid .wk-h, .wk-h')].map(e => ({ nu: e.classList.contains('now'), tekst: e.textContent })));
+  check('ugevisningen starter en uge før nu', uger.length >= 2 && !uger[0].nu && uger[1].nu, JSON.stringify(uger));
+  check('den nuværende uge er mærket "Nu"', uger[1].tekst.includes('Nu') && !uger[0].tekst.includes('Nu'));
+
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
   process.exit(failed ? 1 : 0);
