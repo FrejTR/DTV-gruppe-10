@@ -237,6 +237,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 tr.dead td{color:var(--grey)}
 td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums}
 .row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.edit-btns{display:flex;flex-direction:column;gap:6px}
 .hint{font-size:.88rem;color:var(--muted);margin:0;max-width:72ch}
 
 /* dialogs */
@@ -524,6 +525,15 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
 <dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
 
+<dialog id="dlgDelete"><div class="dlg">
+  <h2>Slet batch</h2>
+  <p id="delText"></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" id="delNo">Fortryd</button>
+    <button class="btn danger" type="button" id="delYes">Ja, slet batchen</button>
+  </div>
+</div></dialog>
+
 <dialog id="dlgEdit"><form class="dlg" id="formEdit" method="dialog" novalidate>
   <h2>Ret batch</h2>
   <div class="field-row">
@@ -538,9 +548,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <div class="field"><label for="eCure">Dage før pakning</label><input id="eCure" type="number" min="1" step="1" inputmode="numeric"></div>
   </div>
   <p class="form-err" id="eErr" role="alert" hidden></p>
-  <p class="form-err" id="eDelAsk" role="alert" hidden></p>
   <div class="dlg-actions">
-    <button class="btn danger" type="button" id="eDelete">Slet batch</button>
     <button class="btn" type="button" data-close id="eCancel">Annullér</button>
     <button class="btn primary" type="submit" id="eSave">Gem ændringer</button>
   </div>
@@ -912,7 +920,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${ready(b) <= TODAY ? `<button class="btn small primary" type="button" data-pack="${b.no}">Marker som pakket</button>` : ''}<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`;
       else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button>`;
       else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
-      if (!confirming) actions += `<button class="btn small ghost" type="button" data-edit="${b.no}">Ret / slet</button>`;
+      if (!confirming) actions += `<span class="edit-btns"><button class="btn small" type="button" data-edit="${b.no}">Rediger</button><button class="btn small danger" type="button" data-del="${b.no}">Slet</button></span>`;
       return `<tr class="${b.status==='kasseret'?'dead':''}">
         <td class="num"><strong>${esc(bl(b))}</strong></td><td>${esc(p?p.name:b.pid)}</td><td>${esc(b.by || '–')}</td><td class="n">${b.qty}</td><td class="n">${rejCell(b)}</td>
         <td class="num">${esc(fmt(b.made))}${b.status==='planlagt'?' <span class="muted small">(start)</span>':''}</td>
@@ -1392,7 +1400,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     else if (b.status === 'aktiv') actions = `${ready(b) <= TODAY ? `<button class="btn primary" type="button" id="dPack">Marker som pakket</button>` : ''}<button class="btn danger" type="button" id="dDiscard">Marker som fejlet</button>`;
     if (b.status === 'planlagt') actions = `<button class="btn primary" type="button" id="dMade">Registrér batch</button>`;
     if (b.status === 'kasseret') actions = `<button class="btn" type="button" id="dRestore">Gendan</button>`;
-    actions += `<button class="btn" type="button" id="dEdit">Ret / slet batch</button>`;
+    actions += `<button class="btn" type="button" id="dEdit">Rediger</button><button class="btn danger" type="button" id="dDelete">Slet</button>`;
     document.getElementById('detailBody').innerHTML = `
       <h2>Batch ${esc(bl(b))}</h2>
       <span class="chip st-${st.cls}" style="align-self:flex-start">${st.label}</span>
@@ -1408,6 +1416,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       dis.dataset.armed = '1'; dis.textContent = `Bekræft: kassér ${b.qty} stk.`;
     };
     const ed = document.getElementById('dEdit'); if (ed) ed.onclick = () => { dlgD.close(); openEdit(b); };
+    const dl = document.getElementById('dDelete'); if (dl) dl.onclick = () => { dlgD.close(); askDelete(b); };
     const mk = document.getElementById('dMade'); if (mk) mk.onclick = () => { dlgD.close(); openBatchFromPlanned(b); };
     const dr = document.getElementById('dRej');
     if (dr){
@@ -1437,32 +1446,24 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('eErr').hidden = true;
     // Er batchen lagt på lager i Rackbeat, ligger antallet dér: kun nummeret kan rettes, og sletning kræver ekstra forsigtighed
     ['eProd', 'eQty', 'eDate', 'eCure'].forEach(id => { document.getElementById(id).disabled = !!b.rackbeat; });
-    resetDelete();
     dlgE.showModal();
   }
-  const eDel = document.getElementById('eDelete'), eAsk = document.getElementById('eDelAsk');
-  function resetDelete(){
-    eDel.dataset.armed = ''; eDel.textContent = 'Slet batch'; eAsk.hidden = true;
-    document.getElementById('eSave').hidden = false; document.getElementById('eCancel').textContent = 'Annullér';
+  // Sletning spørger altid først. Selve sletningen sker først ved "Ja, slet batchen".
+  const dlgDel = document.getElementById('dlgDelete');
+  let delTarget = null;
+  function askDelete(b){
+    delTarget = b;
+    document.getElementById('delText').textContent = `Er du sikker på, at du vil slette batch ${bl(b)} (${(prod(b.pid) || {}).name || b.pid}, ${b.qty} stk.)? Det kan ikke fortrydes.` +
+      (b.rackbeat ? ' Batchen er lagt på lager i Rackbeat. Lageret dér rettes ikke og skal rettes i Rackbeat.' : '');
+    dlgDel.showModal();
   }
-  eDel.addEventListener('click', () => {
-    const b = editTarget; if (!b) return;
-    if (!eDel.dataset.armed){
-      // Første tryk beder om bekræftelse. Først andet tryk sletter.
-      eDel.dataset.armed = '1'; eDel.textContent = 'Ja, slet batchen';
-      document.getElementById('eSave').hidden = true; document.getElementById('eCancel').textContent = 'Fortryd';
-      eAsk.textContent = `Er du sikker på, at du vil slette batch ${bl(b)}? Det kan ikke fortrydes.` +
-        (b.rackbeat ? ' Batchen er lagt på lager i Rackbeat. Lageret dér rettes ikke og skal rettes i Rackbeat.' : '');
-      eAsk.hidden = false; document.getElementById('eErr').hidden = true;
-      return;
-    }
+  document.getElementById('delNo').addEventListener('click', () => { delTarget = null; dlgDel.close(); });
+  document.getElementById('delYes').addEventListener('click', () => {
+    const b = delTarget; if (!b) return;
     const navn = bl(b);
     S.batches = S.batches.filter(x => x !== b);
-    editTarget = null; save(); dlgE.close(); renderAll(); toast(`Batch ${navn} er slettet`);
+    delTarget = null; save(); dlgDel.close(); renderAll(); toast(`Batch ${navn} er slettet`);
   });
-  document.getElementById('eCancel').addEventListener('click', ev => {
-    if (eDel.dataset.armed){ resetDelete(); ev.stopImmediatePropagation(); }   // "Fortryd" i sletning lukker ikke vinduet
-  }, true);
   document.getElementById('eProd').addEventListener('change', ev => {
     // Nyt produkt: foreslå dets tid før pakning, som ved oprettelse
     const np = prod(ev.target.value); if (np) document.getElementById('eCure').value = np.cure;
@@ -1581,6 +1582,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.discard){ const b = S.batches.find(x => x.no === Number(ds.discard)); if (b){ b.status='kasseret'; b.rejectedOn = TODAY; pendingRow=null; save(); renderAll(); toast(`Batch ${bl(b)} kasseret`);} return; }
     if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; save(); renderAll(); toast(`Batch ${bl(b)} gendannet`);} return; }
     if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b) openBatchFromPlanned(b); return; }
+    if (ds.del){ const b = S.batches.find(x => x.no === Number(ds.del)); if (b) askDelete(b); return; }
     if (ds.edit){ const b = S.batches.find(x => x.no === Number(ds.edit)); if (b) openEdit(b); return; }
     if (ds.delplan){ S.batches = S.batches.filter(x => x.no !== Number(ds.delplan)); save(); renderAll(); toast('Planlagt batch slettet'); return; }
     if (ds.askDelres){ pendingRow = {type:'res', id:ds.askDelres}; renderRes(); return; }

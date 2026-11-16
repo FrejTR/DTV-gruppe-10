@@ -99,25 +99,27 @@ const server = http.createServer((req, res) => {
   await p.fill('#eNo', '9'); await p.click('#formEdit button[type=submit]');
   check('ret batch: planlagt batch kan få nummer senere', (await state()).batches.find(x => x.no === 2).label === '9');
 
-  // Ret/slet fra batchlisten og sletning med sikkerhed
+  // Rediger og Slet er to knapper over hinanden i batchlisten. Sletning spørger først.
   const antal = async () => (await state()).batches.length;
   const foer = await antal();
-  await p.evaluate(() => document.querySelector('#p-batches [data-edit="2"]').click());
-  await p.click('#eDelete');
-  check('slet: spørger først, om man er sikker', (await p.textContent('#eDelAsk')).includes('Er du sikker') && await antal() === foer);
-  await p.click('#eCancel');
-  check('slet: Fortryd sletter ikke og lukker ikke vinduet', await antal() === foer && await p.isVisible('#dlgEdit') && !(await p.isVisible('#eDelAsk')));
-  await p.click('#eDelete'); await p.click('#eDelete');
-  check('slet: andet tryk sletter batchen', await antal() === foer - 1 && !(await state()).batches.some(x => x.no === 2));
-  check('slet: vinduet lukkes', !(await p.isVisible('#dlgEdit')));
+  const knapper = await p.evaluate(() => { const r = [...document.querySelectorAll('#p-batches [data-edit="2"], #p-batches [data-del="2"]')].map(e => e.textContent.trim()); return r; });
+  check('listen har knapperne Rediger og Slet', knapper.join() === 'Rediger,Slet', knapper.join());
+  await p.evaluate(() => document.querySelector('#p-batches [data-del="2"]').click());
+  check('slet: spørger først, om man er sikker', (await p.textContent('#delText')).includes('Er du sikker') && await antal() === foer);
+  await p.click('#delNo');
+  check('slet: Fortryd sletter ikke', await antal() === foer && !(await p.isVisible('#dlgDelete')));
+  await p.evaluate(() => document.querySelector('#p-batches [data-del="2"]').click());
+  await p.click('#delYes');
+  check('slet: Ja sletter batchen', await antal() === foer - 1 && !(await state()).batches.some(x => x.no === 2));
 
   // Batch lagt på lager i Rackbeat: kun nummeret kan rettes, og sletning advarer
   await p.evaluate(k => { const S = JSON.parse(localStorage.getItem(k)); const b = S.batches.find(x => x.no === 1); b.packed = true; b.rackbeat = { antal: 25, dato: '2026-11-16', id: 5 }; localStorage.setItem(k, JSON.stringify(S)); }, KEY);
   await p.reload();
   await p.evaluate(() => document.querySelector('#p-batches [data-edit="1"]').click());
   check('Rackbeat-batch: antal er låst', await p.isDisabled('#eQty'));
-  await p.click('#eDelete');
-  check('Rackbeat-batch: sletning advarer om Rackbeat', (await p.textContent('#eDelAsk')).includes('Rackbeat'));
+  await p.click('#dlgEdit [data-close]');
+  await p.evaluate(() => document.querySelector('#p-batches [data-del="1"]').click());
+  check('Rackbeat-batch: sletning advarer om Rackbeat', (await p.textContent('#delText')).includes('Rackbeat'));
 
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
