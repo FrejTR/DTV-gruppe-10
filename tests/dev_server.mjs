@@ -2,6 +2,7 @@
 // Kørsel: node tests/dev_server.mjs [port]   (standard 8788)
 // Variabler læses fra .env i projektroden (eller fra miljøet): RACKBEAT_API_KEY,
 // RACKBEAT_BASE_URL (peg på mocken: node tests/mock_rackbeat.js) og SALGSTEMPO_MAX_SIDER.
+// SUPABASE_URL og SUPABASE_SECRET_KEY (lokal database: node tests/supabase_pglite.mjs, adresse http://127.0.0.1:8792).
 // Serveren lytter kun på 127.0.0.1 og har ingen login. Brug den kun lokalt.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -21,7 +22,8 @@ try {
 } catch { /* ingen .env */ }
 
 const TYPER = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.svg': 'image/svg+xml' };
-const RUTER = { '/api/status': '../api/status.mjs', '/api/salgstempo': '../api/salgstempo.mjs', '/api/lagerregulering': '../api/lagerregulering.mjs' };
+const RUTER = { '/api/status': '../api/status.mjs', '/api/salgstempo': '../api/salgstempo.mjs', '/api/lagerregulering': '../api/lagerregulering.mjs',
+  '/api/data': '../api/data.mjs', '/api/pak': '../api/pak.mjs' };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);

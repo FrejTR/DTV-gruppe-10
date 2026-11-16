@@ -10,6 +10,7 @@
     "screenshots": "node tests/screenshots.js"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
     "playwright": "^1.48.0"
   },
   "dependencies": {
