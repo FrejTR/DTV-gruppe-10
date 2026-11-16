@@ -35,22 +35,26 @@ function anmodning(sti, k, { origin = ORIGIN, type = 'application/json', metode 
 }
 
 /** Falsk Rackbeat til skrivning, med hukommelse, så et nyt forsøg kan se, hvad der skete første gang.
- *  fejl: {find, opret, bogfoer} = HTTP-status eller 'net'. tabtSvar: bogføringen sker, men svaret går tabt. */
-function falskRackbeat({ fejl = {}, tabtSvar = false } = {}) {
+ *  fejl: {find, opret, hent, bogfoer} = HTTP-status eller 'net'. tabtSvar: bogføringen sker, men svaret går tabt.
+ *  saetTil: Rackbeat gemmer reguleringer som "sæt til" i stedet for "læg til". */
+function falskRackbeat({ fejl = {}, tabtSvar = false, saetTil = false } = {}) {
   const kald = [], reguleringer = [];
   let id = 5000;
   const svar = (krop, status) => new Response(JSON.stringify(krop), { status });
   const hent = async (url, init = {}) => {
     const metode = init.method || 'GET', sti = new URL(url).pathname;
     const k = init.body ? JSON.parse(init.body) : null;
-    const hvad = metode === 'GET' ? 'find' : sti.endsWith('/book') ? 'bogfoer' : 'opret';
+    const en = /\/inventory-adjustments\/(\d+)$/.exec(sti);
+    const hvad = metode === 'DELETE' ? 'slet' : metode === 'GET' ? (en ? 'hent' : 'find') : sti.endsWith('/book') ? 'bogfoer' : 'opret';
     kald.push({ hvad, sti, krop: k, auth: init.headers && init.headers.Authorization });
     const f = fejl[hvad];
     if (f === 'net') throw new TypeError('fetch failed');
     if (f) return svar({ errors: { message: 'nej ' + RB_NOEGLE } }, f);
     if (hvad === 'find') return svar({ inventory_regulations: [...reguleringer].reverse() }, 206);
+    if (hvad === 'hent') return svar({ inventory_regulation: reguleringer.find(x => x.id === Number(en[1])) }, 200);
+    if (hvad === 'slet') { reguleringer.splice(reguleringer.findIndex(x => x.id === Number(en[1])), 1); return new Response('', { status: 200 }); }
     if (hvad === 'opret') {
-      const r = { id: ++id, is_booked: false, description: k.description, krop: k };
+      const r = { id: ++id, is_booked: false, regulate_difference: saetTil || k.regulate_diff !== false, description: k.description, krop: k };
       reguleringer.push(r);
       return svar({ inventory_regulation: { id: r.id, is_booked: false } }, 201);
     }
@@ -160,7 +164,7 @@ test('pak: 22 stk. med 2 kasseret tages fra ældste batch, og 20 lægges på Hov
   assert.equal(b.pakning.status, 'bogfoert');
   assert.deepEqual(b.pakning.linjer, [{ batch: 1, label: '1', antal: 22, kasseret: 2 }]);
   assert.deepEqual(b.rackbeat, { id: 5001, antal: 20, lokation: 1001, dato: '2026-11-16' });
-  assert.deepEqual(rb.kald.map(k => k.hvad), ['find', 'opret', 'bogfoer']);
+  assert.deepEqual(rb.kald.map(k => k.hvad), ['find', 'opret', 'hent', 'bogfoer'], 'tjekker "læg til" i Rackbeat før bogføring');
   assert.deepEqual(rb.kald[1].krop, { regulated_at: '2026-11-16', reason: 'Pakket fra batch #1', description: 'Produktionskalender, ref. pak-aaaaaaaa',
     adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '20', regulation_type: 1004, regulate_diff: false });
   assert.ok(rb.kald.every(k => k.auth === `Bearer ${RB_NOEGLE}`));
@@ -180,7 +184,7 @@ test('pak: over flere batches, ældste først. Kun hærdede batches kan pakkes',
   assert.equal(svar.status, 409, 'batch #3 hærder stadig, så der er kun 15 klar');
   const b = await krop(svar);
   assert.equal(b.kode, 'ikke_nok_klar'); assert.equal(b.klar, 15);
-  assert.equal(rb.kald.length, 3, 'intet sendt til Rackbeat');
+  assert.equal(rb.kald.length, 4, 'intet sendt til Rackbeat');
 });
 
 test('pak: samme ref igen tager ikke stk. ud to gange og sender intet til Rackbeat', async () => {
@@ -190,7 +194,7 @@ test('pak: samme ref igen tager ikke stk. ud to gange og sender intet til Rackbe
   const svar = await pak({ request: anmodning('/api/pak', PAK(22, 2)), env: ENV }, deps);
   assert.equal(svar.status, 200);
   assert.equal((await krop(svar)).data.allerede, true);
-  assert.equal(rb.kald.length, 3);
+  assert.equal(rb.kald.length, 4);
   assert.equal((await lager(deps)).pakninger.length, 1);
 });
 
@@ -215,6 +219,18 @@ test('pak: afvist i Rackbeat giver stk. tilbage til produktionslageret', async (
     assert.ok(rb.kald.filter(k => k.hvad === 'opret').length <= 1, 'et POST sendes aldrig to gange');
     await ingenHemmeligheder(svar);
   }
+});
+
+test('pak: ville Rackbeat sætte lageret i stedet for at lægge til, bogføres intet, og stk. gives tilbage', async () => {
+  const { rb, deps } = await opsaet({ saetTil: true });
+  await medData(deps);
+  const svar = await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, deps);
+  assert.equal(svar.status, 502);
+  const b = await krop(svar);
+  assert.equal(b.kode, 'ville_saette_lager'); assert.equal(b.pakning, 'annulleret');
+  assert.ok(!rb.kald.some(k => k.hvad === 'bogfoer'), 'ingen bogføring');
+  assert.equal(rb.reguleringer.length, 0, 'kladden er slettet, så ingen bogfører den i hånden');
+  assert.deepEqual((await lager(deps)).pakninger, []);
 });
 
 test('pak: fejlet bogføring venter, og samme ref bogfører kladden uden at oprette en ny', async () => {

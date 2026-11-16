@@ -154,7 +154,8 @@ export async function pak({ request, env }, deps = {}) {
   } catch (e) {
     const kode = fejlkode(e);
     log('pak', 'rackbeat_' + kode, e && e.status);
-    const udfald = await efterFejl(data, skrevet ? rb : null, pakning.ref);
+    // Ville Rackbeat sætte lageret, er kladden slettet og intet bogført: stk. gives tilbage til produktionslageret
+    const udfald = await efterFejl(data, skrevet && kode !== 'ville_saette_lager' ? rb : null, pakning.ref);
     if (!erObjekt(udfald)) return json({ ...(await fejlSvar(kode).json()), pakning: udfald }, 502);
     // Reguleringen blev bogført alligevel (fx svaret gik tabt)
     pakning = udfald.pakning;
