@@ -538,9 +538,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <div class="field"><label for="eCure">Dage før pakning</label><input id="eCure" type="number" min="1" step="1" inputmode="numeric"></div>
   </div>
   <p class="form-err" id="eErr" role="alert" hidden></p>
+  <p class="form-err" id="eDelAsk" role="alert" hidden></p>
   <div class="dlg-actions">
-    <button class="btn" type="button" data-close>Annullér</button>
-    <button class="btn primary" type="submit">Gem ændringer</button>
+    <button class="btn danger" type="button" id="eDelete">Slet batch</button>
+    <button class="btn" type="button" data-close id="eCancel">Annullér</button>
+    <button class="btn primary" type="submit" id="eSave">Gem ændringer</button>
   </div>
 </form></dialog>
 
@@ -908,8 +910,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       else if (b.status === 'aktiv' && b.packed && b.rackbeat) actions = `<span class="muted small">På lager i Rackbeat</span>`;
       else if (b.status === 'aktiv' && b.packed) actions = `<button class="btn small ghost" type="button" data-unpack="${b.no}">Fortryd pakket</button>`;
       else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${ready(b) <= TODAY ? `<button class="btn small primary" type="button" data-pack="${b.no}">Marker som pakket</button>` : ''}<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`;
-      else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button><button class="btn small ghost" type="button" data-delplan="${b.no}">Slet</button>`;
+      else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button>`;
       else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
+      if (!confirming) actions += `<button class="btn small ghost" type="button" data-edit="${b.no}">Ret / slet</button>`;
       return `<tr class="${b.status==='kasseret'?'dead':''}">
         <td class="num"><strong>${esc(bl(b))}</strong></td><td>${esc(p?p.name:b.pid)}</td><td>${esc(b.by || '–')}</td><td class="n">${b.qty}</td><td class="n">${rejCell(b)}</td>
         <td class="num">${esc(fmt(b.made))}${b.status==='planlagt'?' <span class="muted small">(start)</span>':''}</td>
@@ -1389,7 +1392,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     else if (b.status === 'aktiv') actions = `${ready(b) <= TODAY ? `<button class="btn primary" type="button" id="dPack">Marker som pakket</button>` : ''}<button class="btn danger" type="button" id="dDiscard">Marker som fejlet</button>`;
     if (b.status === 'planlagt') actions = `<button class="btn primary" type="button" id="dMade">Registrér batch</button>`;
     if (b.status === 'kasseret') actions = `<button class="btn" type="button" id="dRestore">Gendan</button>`;
-    if (b.status !== 'kasseret' && !b.rackbeat) actions += `<button class="btn" type="button" id="dEdit">Ret batch</button>`;
+    actions += `<button class="btn" type="button" id="dEdit">Ret / slet batch</button>`;
     document.getElementById('detailBody').innerHTML = `
       <h2>Batch ${esc(bl(b))}</h2>
       <span class="chip st-${st.cls}" style="align-self:flex-start">${st.label}</span>
@@ -1432,8 +1435,34 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('eCure').value = b.cure;
     document.querySelectorAll('#formEdit .bad').forEach(x => x.classList.remove('bad'));
     document.getElementById('eErr').hidden = true;
+    // Er batchen lagt på lager i Rackbeat, ligger antallet dér: kun nummeret kan rettes, og sletning kræver ekstra forsigtighed
+    ['eProd', 'eQty', 'eDate', 'eCure'].forEach(id => { document.getElementById(id).disabled = !!b.rackbeat; });
+    resetDelete();
     dlgE.showModal();
   }
+  const eDel = document.getElementById('eDelete'), eAsk = document.getElementById('eDelAsk');
+  function resetDelete(){
+    eDel.dataset.armed = ''; eDel.textContent = 'Slet batch'; eAsk.hidden = true;
+    document.getElementById('eSave').hidden = false; document.getElementById('eCancel').textContent = 'Annullér';
+  }
+  eDel.addEventListener('click', () => {
+    const b = editTarget; if (!b) return;
+    if (!eDel.dataset.armed){
+      // Første tryk beder om bekræftelse. Først andet tryk sletter.
+      eDel.dataset.armed = '1'; eDel.textContent = 'Ja, slet batchen';
+      document.getElementById('eSave').hidden = true; document.getElementById('eCancel').textContent = 'Fortryd';
+      eAsk.textContent = `Er du sikker på, at du vil slette batch ${bl(b)}? Det kan ikke fortrydes.` +
+        (b.rackbeat ? ' Batchen er lagt på lager i Rackbeat. Lageret dér rettes ikke og skal rettes i Rackbeat.' : '');
+      eAsk.hidden = false; document.getElementById('eErr').hidden = true;
+      return;
+    }
+    const navn = bl(b);
+    S.batches = S.batches.filter(x => x !== b);
+    editTarget = null; save(); dlgE.close(); renderAll(); toast(`Batch ${navn} er slettet`);
+  });
+  document.getElementById('eCancel').addEventListener('click', ev => {
+    if (eDel.dataset.armed){ resetDelete(); ev.stopImmediatePropagation(); }   // "Fortryd" i sletning lukker ikke vinduet
+  }, true);
   document.getElementById('eProd').addEventListener('change', ev => {
     // Nyt produkt: foreslå dets tid før pakning, som ved oprettelse
     const np = prod(ev.target.value); if (np) document.getElementById('eCure').value = np.cure;
@@ -1552,6 +1581,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.discard){ const b = S.batches.find(x => x.no === Number(ds.discard)); if (b){ b.status='kasseret'; b.rejectedOn = TODAY; pendingRow=null; save(); renderAll(); toast(`Batch ${bl(b)} kasseret`);} return; }
     if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; save(); renderAll(); toast(`Batch ${bl(b)} gendannet`);} return; }
     if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b) openBatchFromPlanned(b); return; }
+    if (ds.edit){ const b = S.batches.find(x => x.no === Number(ds.edit)); if (b) openEdit(b); return; }
     if (ds.delplan){ S.batches = S.batches.filter(x => x.no !== Number(ds.delplan)); save(); renderAll(); toast('Planlagt batch slettet'); return; }
     if (ds.askDelres){ pendingRow = {type:'res', id:ds.askDelres}; renderRes(); return; }
     if (ds.delres){ S.res = S.res.filter(x => x.id !== ds.delres); pendingRow=null; save(); renderAll(); toast('Slettet'); return; }
