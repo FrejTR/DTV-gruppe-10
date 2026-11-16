@@ -139,6 +139,46 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     await a.click('#pkNo');
     check('stk. er stadig på produktionslageret', JSON.stringify(await raekke(a, 'Havtorn balsam')) === '[0,46,46]');
 
+    // En batch er "Klar til pakning" (grøn), til alle stk. er pakket eller kasseret. Bjælken fortsætter til i dag.
+    // #50 Hyben shampoo bar: 30 stk., klar for 3 dage siden
+    await a.evaluate(([k, d10]) => { const s = JSON.parse(localStorage.getItem(k));
+      s.batches.push({ no: 50, label: '50', by: 'Test', pid: 'hyben-shampoo', qty: 30, made: d10, cure: 7, status: 'aktiv' });
+      localStorage.setItem(k, JSON.stringify(s)); }, [KEY, dag(-10)]);
+    await a.reload();
+    await gemt(a);
+    const status50 = () => a.evaluate(() => [...document.querySelectorAll('#batchTbl tbody tr')].find(r => r.textContent.includes('#50')).querySelector('.chip').textContent);
+    // Kolonnen for i dag i ugeoversigten: den nuværende uges første kolonne plus ugedagen (mandag = 0)
+    const iDagKol = await a.evaluate(() => parseInt(document.querySelector('.wk-h.now').style.gridColumn, 10) + (new Date().getDay() + 6) % 7);
+    const bjaelke = cls => a.evaluate(c => [...document.querySelectorAll(`.bar.${c}[data-batch="50"]`)].map(x => x.style.gridColumn.replace(/\s/g, '')), cls);
+    const slutter = async (cls, kol) => (await bjaelke(cls)).some(g => Number(g.split('/')[1]) === kol + 1);
+    check('#50: klar til pakning', (await status50()) === 'Klar til pakning', await status50());
+    check('#50: grøn bjælke fortsætter til i dag', await slutter('s-green', iDagKol), JSON.stringify(await bjaelke('s-green')));
+
+    const pak = async (antal, kas) => {
+      await klik(a, '[data-pakprod="hyben-shampoo"]');
+      await a.waitForSelector('#pkAntal');
+      await skriv(a, '#pkAntal', antal); await skriv(a, '#pkKas', kas);
+      await a.click('#pkYes');
+      return ventPaa(() => a.$eval('#dlgDetail', d => !d.open));
+    };
+    check('#50: 10 stk. pakket', await pak(10, 0));
+    check('#50: delvist pakket er stadig klar til pakning', (await status50()) === 'Klar til pakning' && await slutter('s-green', iDagKol), await status50());
+    check('#50: resten pakket (15 godkendt, 5 kasseret)', await pak(20, 5));
+    check('#50: pakket og lagt i Rackbeat', await ventPaa(async () => (await status50()) === 'Pakket og lagt i Rackbeat'), await status50());
+    check('#50: mørkegrøn bjælke slutter i dag, ingen grøn', await slutter('s-packed', iDagKol) && (await bjaelke('s-green')).length === 0,
+      JSON.stringify([await bjaelke('s-packed'), await bjaelke('s-green')]));
+    check('#50: ikke længere på produktionslageret', (await raekke(a, 'Hyben shampoo')) === null);
+
+    // En batch, der er pakket fra, kan ikke slettes, og kun nummeret kan rettes
+    await klik(a, '[data-del="50"]');
+    await a.waitForSelector('#dlgDelete[open]');
+    check('#50: kan ikke slettes', await a.$eval('#delYes', el => el.hidden) && (await a.$eval('#delText', el => el.textContent)).includes('kan ikke slettes'));
+    await a.click('#delNo');
+    await klik(a, '[data-edit="50"]');
+    await a.waitForSelector('#dlgEdit[open]');
+    check('#50: kun nummeret kan rettes', await a.$eval('#eQty', el => el.disabled) && await a.$eval('#eProd', el => el.disabled) && !(await a.$eval('#eNo', el => el.disabled)));
+    await a.evaluate(() => document.getElementById('dlgEdit').close());
+
     // Uden server (åbnet som fil) pakkes kun i kalenderen
     const f = await (await b.newContext()).newPage();
     f.errs = [];
