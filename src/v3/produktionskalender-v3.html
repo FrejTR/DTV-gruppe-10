@@ -676,11 +676,14 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const stepsOf = p => (p && p.steps || []).filter(x => STEP_DEFS[x.key]).map(x => ({...STEP_DEFS[x.key], day: x.day}));
   const stepDate = (b, st) => add(b.made, st.day);
   const stepDone = (b, key) => b.steps && b.steps[key];
-  function stepState(b, st){                  // null | 'upcoming' | 'due' | 'done'
+  // Et trin kan først udføres, når trinene før det er gjort (kanter skæres først, når sæben er taget ud af formene)
+  const foerTrin = (b, st) => stepsOf(prod(b.pid)).filter(x => x.day < st.day);
+  function stepState(b, st){                  // null | 'upcoming' | 'blocked' | 'due' | 'done'
     if (b.status === 'kasseret') return null;
     if (stepDone(b, st.key)) return 'done';
     if (b.status === 'planlagt') return 'upcoming';
     if (fuldtPakket(b)) return null;
+    if (foerTrin(b, st).some(x => !stepDone(b, x.key))) return 'blocked';
     return stepDate(b, st) <= TODAY ? 'due' : 'upcoming';
   }
   const batchSteps = b => stepsOf(prod(b.pid)).map(st => ({st, state: stepState(b, st), date: stepDate(b, st)}));
@@ -718,7 +721,12 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   function setStep(b, key, on, who){
     const st = STEP_DEFS[key];
     if (on){ b.steps = b.steps || {}; b.steps[key] = {on: TODAY, by: who || null}; }
-    else if (b.steps){ delete b.steps[key]; }
+    else if (b.steps){
+      delete b.steps[key];
+      // Fortrydes et trin, må de senere trin ikke stå som gjort
+      const alle = stepsOf(prod(b.pid)), dag = (alle.find(x => x.key === key) || {}).day;
+      if (dag != null) for (const x of alle) if (x.day > dag && b.steps[x.key]) delete b.steps[x.key];
+    }
     save(); renderAll();
     toast(on ? `${st.doneText}: batch ${bl(b)}${who ? ' af ' + who : ''}` : `Batch ${bl(b)}: ${st.name.toLowerCase()} fortrudt`);
   }
@@ -996,6 +1004,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       if (state === 'due') return `<span class="trim-note due">${st.icon} ${esc(st.name)}</span>`;
       if (state === 'done'){ const d0 = stepDone(b, st.key); return `<span class="trim-note">${esc(st.doneText)} ${esc(fmt(d0.on))}${d0.by ? ' af ' + esc(d0.by) : ''}</span>`; }
       if (state === 'upcoming') return `<span class="trim-note">${esc(st.name)} ${esc(fmt(date))}</span>`;
+      if (state === 'blocked') return `<span class="trim-note">${esc(st.name)}: først når den er taget ud af formene</span>`;
       return '';
     }).join('');
   }
@@ -1164,7 +1173,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
           if (ti < 0 || ti >= D) continue;
           const d0 = stepDone(b, st.key);
           const txt = state === 'done' ? `${st.doneText}${d0 && d0.by ? ' af ' + d0.by : ''}` : state === 'due' ? `${st.name} nu` : `${st.name} ${fmt(date)}`;
-          inner += `<button type="button" class="trim t-${state}" data-batch="${b.no}" style="grid-column:${2+ti};grid-row:${li+1}" title="${esc(txt)} · ${esc(bl(b))}" aria-label="${esc(txt)}, batch ${esc(bn(b))}">${state === 'done' ? '✓' : st.icon}</button>`;
+          inner += `<button type="button" class="trim t-${state === 'blocked' ? 'upcoming' : state}" data-batch="${b.no}" style="grid-column:${2+ti};grid-row:${li+1}" title="${esc(txt)} · ${esc(bl(b))}" aria-label="${esc(txt)}, batch ${esc(bn(b))}">${state === 'done' ? '✓' : st.icon}</button>`;
         }
       });
       let row = Math.max(1, bs.length) + 1;
@@ -1395,14 +1404,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (!who) return fail('Skriv navnet på den, der har lavet eller planlagt batchen.', bWhoNew);
     const status = document.querySelector('input[name="bkind"]:checked').value;
     const conv = convertFrom != null ? S.batches.find(x => x.no === convertFrom) : null;
-    const existing = new Set(S.batches.filter(x => x !== conv).map(labelOf).filter(Boolean)), seen = new Set();
     for (const l of ls){
       if (!l.p) return fail('Vælg et produkt.', l.el.querySelector('.l-prod'));
       if (!l.qty || l.qty < 1) return fail('Antal skal være mindst 1.', l.el.querySelector('.l-qty'));
       if (!l.label && status === 'aktiv') return fail('Skriv et batchnummer. Det kan først stå tomt, når batchen kun er planlagt.', l.el.querySelector('.l-no'));
-      if (!l.label) continue;
-      if (existing.has(l.label) || seen.has(l.label)) return fail(`Batchnummer ${l.label} er allerede brugt. Vælg et andet.`, l.el.querySelector('.l-no'));
-      seen.add(l.label);
     }
     let used = false;
     for (const l of ls){
@@ -1480,6 +1485,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       let dd;
       if (state === 'done'){ const d0 = stepDone(b, st.key); dd = `${esc(fmtW(d0.on))}${d0.by ? ' af ' + esc(d0.by) : ''} <button class="btn small ghost" type="button" data-unstep="${b.no}|${st.key}">Fortryd</button>`; }
       else if (state === 'due') dd = `<button class="btn small primary" type="button" data-step="${b.no}|${st.key}">${esc(st.doneText)}</button> <span class="muted small">${diff(date, TODAY) > 0 ? 'skulle være gjort ' + esc(fmt(date)) : 'i dag'}</span>`;
+      else if (state === 'blocked') dd = `<span class="muted small">Først når batchen er taget ud af formene</span>`;
       else dd = esc(fmtW(date));
       return `<dt>${esc(st.name)}</dt><dd>${dd}</dd>`;
     }).join('');
@@ -1613,7 +1619,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (!p) return fail('Vælg et produkt.', 'eProd');
     if (!qty || qty < 1) return fail('Antal skal være mindst 1.', 'eQty');
     if (b.status === 'aktiv' && !label) return fail('Skriv et batchnummer. Det kan kun stå tomt, mens batchen er planlagt.', 'eNo');
-    if (label && S.batches.some(x => x !== b && labelOf(x) === label)) return fail(`Batchnummer ${label} er allerede brugt. Vælg et andet.`, 'eNo');
     if (!d) return fail('Vælg en dato.', 'eDate');
     if (!cure || cure < 1) return fail('Dage før pakning skal være mindst 1.', 'eCure');
     const skiftetProdukt = p.id !== b.pid;

@@ -45,6 +45,12 @@ const server = http.createServer((req, res) => {
   }, [KEY, dag(-10), dag(5)]);
   await p.reload();
 
+  // Skær kanter kan først vælges, når batchen er taget ud af formene
+  check('skær kanter tilbydes ikke, før den er taget ud af formene', (await p.$$('[data-step$="|trim"]')).length === 0 && (await p.$$('[data-step$="|demold"]')).length > 0);
+  await p.click('[data-batch="1"]');
+  check('detaljen forklarer, at kanter først skæres efter udtagning', (await p.textContent('#detailBody')).includes('Først når batchen er taget ud af formene'));
+  await p.click('#dClose');
+
   // Trinnene
   for (const key of ['demold', 'trim']) {
     await p.click('[data-batch="1"]');
@@ -52,6 +58,11 @@ const server = http.createServer((req, res) => {
     check(`trinnet ${key} spørger ikke om sæbespåner`, !(await p.isVisible('#tResWrap')));
     await p.click('#formTrim button[type=submit]');
     check(`trinnet ${key} kan registreres`, !!(await state()).batches[0].steps?.[key]);
+  }
+  await p.click('[data-batch="1"]'); await p.click('dialog[open] [data-unstep$="|demold"]');
+  check('fortryd udtagning fjerner også kantskæringen', !(await state()).batches[0].steps?.trim && !(await state()).batches[0].steps?.demold, JSON.stringify((await state()).batches[0]));
+  for (const key of ['demold', 'trim']) {
+    await p.click('[data-batch="1"]'); await p.click(`dialog[open] [data-step$="|${key}"]`); await p.click('#formTrim button[type=submit]');
   }
   check('ingen fejl i siden ved trinnene', errs.length === 0, errs.join(' | '));
 
@@ -95,7 +106,8 @@ const server = http.createServer((req, res) => {
   check('ret batch: nyt nummer gemmes', (await state()).batches.find(x => x.no === 1).label === '8');
   await visBatch(2); await p.click('#dEdit');
   await p.fill('#eNo', '8'); await p.click('#formEdit button[type=submit]');
-  check('ret batch: nummer der er brugt afvises', (await p.textContent('#eErr')).includes('allerede brugt'));
+  check('ret batch: samme nummer som en anden batch er tilladt', (await state()).batches.filter(x => x.label === '8').length === 2);
+  await visBatch(2); await p.click('#dEdit');
   await p.fill('#eNo', '9'); await p.click('#formEdit button[type=submit]');
   check('ret batch: planlagt batch kan få nummer senere', (await state()).batches.find(x => x.no === 2).label === '9');
 
