@@ -103,7 +103,7 @@ async function ventPaa(fn, ms = 3000) {
   await p.click('#bSubmit');
   await ventPaa(async () => (await state(p)).batches.length === 1);
   st = await state(p);
-  check('første batch registreres med nr. 1 og navnet gemmes', st.batches.length === 1 && st.batches[0].no === 1 && st.people.join() === 'Testperson', JSON.stringify(st.batches));
+  check('første batch registreres med nr. 1 og navnet gemmes', st.batches.length === 1 && st.batches[0].label === '1' && Number.isSafeInteger(st.batches[0].no) && st.people.join() === 'Testperson', JSON.stringify(st.batches));
   await ventPaa(async () => (await pill(p)).cls === 'ok');
   let s = await pill(p);
   check('start: status og salgstempo hentes straks', hits.status === 1 && hits.salgstempo === 1, JSON.stringify(hits));

@@ -2,7 +2,7 @@
 import { enAdGangen, gem, laes } from './cache.js';
 import { HOVEDLAGER, lavKlient, lavSkriveKlient, RackbeatFejl } from './rackbeat.js';
 import { beregnAlle, isoDato, normaliser, tilKlient, vindue } from './salgstempo.js';
-import { dataSvar, fejlSvar, iDagIDanmark, json, log } from './svar.js';
+import { dataSvar, fejlSvar, fraKalenderen, iDagIDanmark, json, log } from './svar.js';
 
 export const STATUS_TTL_MS = 20 * 1000;
 export const SALGSTEMPO_TTL_MS = 3600 * 1000;
@@ -110,14 +110,6 @@ function laesRegulering(k) {
   if (!Number.isInteger(batch) || batch < 1 || batch > 1e6) return null;
   if (typeof reference !== 'string' || !REFERENCE.test(reference)) return null;
   return { sku, antal, batch, reference };
-}
-
-/** Kun kald fra kalenderen selv. Vercel Authentication sender login-cookien med, så et kald fra
- *  en anden side skal afvises her (CSRF). Origin skal matche, og kroppen skal være JSON. */
-function fraKalenderen(request) {
-  const origin = request.headers.get('origin');
-  const type = request.headers.get('content-type') || '';
-  return origin === new URL(request.url).origin && type.split(';')[0].trim() === 'application/json';
 }
 
 /** POST /api/lagerregulering: lægger en godkendt batch på Hovedlager i Rackbeat.
