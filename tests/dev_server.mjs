@@ -41,4 +41,4 @@ http.createServer(async (req, res) => {
   if (!fil.startsWith(path.join(ROD, 'src') + path.sep) || !fs.existsSync(fil) || fs.statSync(fil).isDirectory()) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'Content-Type': TYPER[path.extname(fil)] || 'application/octet-stream' });
   fs.createReadStream(fil).pipe(res);
-}).listen(PORT, '127.0.0.1', () => console.log(`Lokal server: http://127.0.0.1:${PORT}/v2/produktionskalender-v2.html`));
+}).listen(PORT, '127.0.0.1', () => console.log(`Lokal server: http://127.0.0.1:${PORT}/v3/produktionskalender-v3.html`));

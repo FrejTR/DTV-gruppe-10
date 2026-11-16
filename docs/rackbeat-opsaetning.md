@@ -1,11 +1,11 @@
 # Rackbeat live: opsætning på Vercel
 
-Denne vejledning sætter V2 op på Vercel, så kalenderen viser aktuelt lager og salgstempo fra Rackbeat. Når en batch markeres som pakket, lægges det godkendte antal på Hovedlager i Rackbeat som en lagerregulering (afsnit 7). Ellers er der kun læseadgang. Antagelser og begrænsninger står i README under *Rackbeat live*.
+Denne vejledning sætter V3 op på Vercel, så kalenderen viser aktuelt lager og salgstempo fra Rackbeat. Når en batch markeres som pakket, lægges det godkendte antal på Hovedlager i Rackbeat som en lagerregulering (afsnit 7). Ellers er der kun læseadgang. Antagelser og begrænsninger står i README under *Rackbeat live*.
 
 Sådan hænger det sammen:
 
 ```
-Browser (V2) ──▶ Vercel Deployment Protection (login) ──▶ /api/status, /api/salgstempo ──GET──▶ Rackbeat
+Browser (V3) ──▶ Vercel Deployment Protection (login) ──▶ /api/status, /api/salgstempo ──GET──▶ Rackbeat
                                                               nøglen ligger kun her, som Secret
 ```
 
@@ -19,7 +19,7 @@ Rackbeat: *Firmaindstillinger > API > Opret nøgle*. Fjern fluebenet ved *Alle r
 |---|---|---|
 | `RACKBEAT_API_KEY` | *Tilgå ordrer* (access orders) og ret til lagerreguleringer | Læsning: ordrelinjer (salgstempo, `GET /orders/lines`) og produkter (lager, `GET /products`, feltet `stock_quantity`). Skrivning: godkendte batches lægges på lager (`POST /inventory-adjustments`, se afsnit 7) |
 
-- Rackbeats dokumentation nævner ingen særskilt rettighed til produkter. Jeres nøgle med *Tilgå ordrer* kunne læse lager i produktionen 9. november 2026 (grøn pille). Mangler en nøgle adgang, svarer Rackbeat 403, og V2 viser rød pille ("mangler adgang til lager"), mens salgstempo stadig virker.
+- Rackbeats dokumentation nævner ingen særskilt rettighed til produkter. Jeres nøgle med *Tilgå ordrer* kunne læse lager i produktionen 9. november 2026 (grøn pille). Mangler en nøgle adgang, svarer Rackbeat 403, og kalenderen viser rød pille ("mangler adgang til lager"), mens salgstempo stadig virker.
 - Brug ikke *Alle rettigheder* uden at have overvejet det. Koden skriver kun lagerreguleringer. En lækket nøgle med alle rettigheder kan ændre og slette data i Rackbeat.
 
 ## 2. Vercel-projekt
@@ -54,7 +54,7 @@ Sæt **aldrig** `RACKBEAT_BASE_URL`. Den er kun til lokal udvikling og ignoreres
 
 ## 5. Kontrol efter udrulning
 
-1. Åbn `https://<projekt>.vercel.app/v2/produktionskalender-v2.html` i et privat vindue. Du skal først møde Vercels login.
+1. Åbn `https://<projekt>.vercel.app/v3/produktionskalender-v3.html` i et privat vindue. Du skal først møde Vercels login.
 2. **Kontrollér, at API'et er lukket.** I terminalen, uden login:
    ```
    curl -i https://<projekt>.vercel.app/api/status
@@ -86,17 +86,17 @@ Kræver Node 18 eller nyere. Der skal ikke bruges Vercel-konto lokalt.
    npm run mock
    npm start
    ```
-3. Åbn `http://127.0.0.1:8788/v2/produktionskalender-v2.html`.
+3. Åbn `http://127.0.0.1:8788/v3/produktionskalender-v3.html`.
 
 Den lokale server kører de samme funktioner som Vercel, men uden login, og lytter kun på `127.0.0.1`. `MOCK_LAGER_STATUS=403 npm run mock` efterligner en nøgle uden lageradgang.
 
 **Med rigtig nøgle:** skriv nøglen i `.env`, og fjern linjen `RACKBEAT_BASE_URL`. `.env` er i `.gitignore`. Kontrollér alligevel med `git status`, før du committer.
 
 **Automatiske test (kræver ingen nøgle):** `npm test` kører
-- røgtest af V1 og V2,
+- røgtest af V1, V2 og V3,
 - serverfunktionerne og pariteten med facit fra det oprindelige Python-script (`node --test "tests/*.test.mjs"`),
-- V2 i browser: polling, backoff, dialoger, statuspille og starttilstand (`node tests/live_v2.js`),
-- pakning → lagerregulering, hele vejen mod mocken (`node tests/pak_rackbeat.js`).
+- kalenderen i browser, for både den frosne V2 og V3: polling, backoff, dialoger, statuspille og starttilstand (`node tests/live_v2.js` og `node tests/live_v3.js`),
+- pakning → lagerregulering, hele vejen mod mocken (`node tests/pak_rackbeat.js` og `node tests/pak_rackbeat_v3.js`).
 
 ## 7. Godkendte batches lægges på lager
 

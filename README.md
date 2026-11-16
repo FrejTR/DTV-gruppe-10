@@ -10,7 +10,7 @@ Appen henter alle data fra serveren og virker ikke, hvis HTML-filen åbnes direk
 npm install
 cp .env.example .env   # udfyld: RACKBEAT_API_KEY=lokal-test og RACKBEAT_BASE_URL=http://127.0.0.1:8790
 npm run mock           # mock af Rackbeat (terminal 1)
-npm start              # lokal server: http://127.0.0.1:8788/v2/produktionskalender-v2.html (terminal 2)
+npm start              # lokal server: http://127.0.0.1:8788/v3/produktionskalender-v3.html (terminal 2)
 npm test               # alle test, kræver ingen nøgle
 ```
 Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md).
@@ -19,7 +19,8 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 | Mappe | Indhold |
 |---|---|
 | `src/v1/` | Iteration 1 (frosset) |
-| `src/v2/` | Aktuel version, her arbejder vi |
+| `src/v2/` | Iteration 2 (frosset, afleveret, tagget `iteration-2`) |
+| `src/v3/` | Aktuel version (iteration 3), her arbejder vi |
 | `api/` | Vercel-funktioner til Rackbeat live (`/api/status`, `/api/salgstempo`, kun GET) |
 | `functions/_lib/` | Delt kode til funktionerne (Rackbeat-klient, beregning af salgstempo, cache) |
 | `assets/` | Kystnær-logo (sort PNG) |
@@ -27,17 +28,23 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 | `report/` | Indholdsfortegnelse (PPTX/PDF) |
 | `tests/` | Test, mock af Rackbeat og lokal server. Testdata og facit i `tests/fixtures/` |
 
+## Versioner
+- **V1 og V2 er frosne.** Koden i `src/v1/` og `src/v2/` ændres ikke. V2 er den version, der blev afleveret som iteration 2, og den kan genfindes med git-tagget `iteration-2`.
+- **V3 er iteration 3.** Den startede som en kopi af V2 og er den eneste, der udvikles videre i `src/v3/`.
+- **V2 og V3 deler serveren** (`/api/status`, `/api/salgstempo`, `/api/lagerregulering`). Serverens kontrakt må derfor ikke brydes, ellers holder den frosne V2 op med at virke. Den frosne V2 kan stadig lægge batches på lager i Rackbeat, så brug V3.
+- **V3 har sin egen gemmenøgle i browseren** (`kystnaer-produktionskalender-v3`) og læser aldrig V2's gemte data.
+
 ## Status
-- V2 henter lager og salgstempo live fra Rackbeat (kun læsning) og kører på Vercel bag login.
+- V3 henter lager og salgstempo live fra Rackbeat (kun læsning) og kører på Vercel bag login.
 - Produkterne har Rackbeats varenumre og navne og tørretiderne fra produktionsoversigten. Minimum og typisk batch er foreløbige tal, som i næste fase bliver tomme, til ejeren udfylder dem.
 - Batches, reservationer og personer starter tomme. De ligger indtil videre kun i den enkelte browser. Fælles data er næste fase.
 
 ### Rackbeat live
-Når V2 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat, og godkendte batches lægges på Hovedlager i Rackbeat, når de markeres som pakket (lagerregulering, se vejledningens afsnit 7). Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
+Når V3 kører på Vercel (se [docs/rackbeat-opsaetning.md](docs/rackbeat-opsaetning.md)), henter den selv data fra Rackbeat, og godkendte batches lægges på Hovedlager i Rackbeat, når de markeres som pakket (lagerregulering, se vejledningens afsnit 7). Rackbeat-nøglen ligger kun som Secret hos Vercel, og adgangen styres af Vercel Authentication.
 
 - `GET /api/status` (hvert 20. sekund, kun mens fanen er synlig): lager pr. varenummer (`stock_quantity`). Serveren gemmer svaret i 20 sekunder. Lige efter en pakning henter appen lageret straks uden om den gemte version (`?frisk=1`), så det nye tal vises med det samme. Svar med ældre lager end det, appen viser (fra en anden serverinstans), vises ikke. Svarer Rackbeat ikke, sendes sidst gemte version markeret som forældet.
 - `GET /api/salgstempo` (ved start og hvert 10. minut): salgstempo beregnet af serveren efter reglerne nedenfor. Beregningen er testet mod facit fra det oprindelige Python-script (`tests/fixtures/salgstempo_facit.json`). Serveren gemmer resultatet i en time og beregner det nye i baggrunden.
-- Ved fejl venter V2 gradvist længere (20, 40, 60 sekunder) og fortsætter med de data, den har. Pillen i sidefoden viser status: grøn (opdateret), gul (forældet) eller rød (fejl, mangler adgang eller login udløbet).
+- Ved fejl venter V3 gradvist længere (20, 40, 60 sekunder) og fortsætter med de data, den har. Pillen i sidefoden viser status: grøn (opdateret), gul (forældet) eller rød (fejl, mangler adgang eller login udløbet).
 - Data ændres aldrig, mens en dialog er åben eller et felt har en ændring, der ikke er gemt. Opdateringen vises bagefter.
 - Uden server (fx åbnet direkte som fil) viser pillen "ingen forbindelse", og der er ingen data.
 
@@ -55,10 +62,10 @@ Kendte begrænsninger:
 - **Hobby-planen** er gratis, men kun til ikke-kommerciel, personlig brug, og kun én ekstern bruger kan få adgang udover ejeren. Drift hos Kystnær og flere brugere kræver Pro.
 - Rackbeat har ingen salgskanal på ordrelinjerne. Event- og b2b-ordrer fjernes kun, hvis de er over 3 × medianen.
 - Cachen ligger i den enkelte serverinstans. Flere samtidige instanser giver hver deres kald til Rackbeat (grænse: 480 kald i minuttet). Salgstempo bruger ét kald pr. 100 ordrelinjer og stopper med fejl ved over 200 sider (ca. 20.000 linjer), frem for at regne på en halv historik.
-- Nøglen skal kunne læse produkter (`GET /products`). Rackbeats dokumentation nævner ingen særskilt rettighed til det. Uden adgang viser V2 rød pille, og lageret står som "Ikke hentet".
+- Nøglen skal kunne læse produkter (`GET /products`). Rackbeats dokumentation nævner ingen særskilt rettighed til det. Uden adgang viser V3 rød pille, og lageret står som "Ikke hentet".
 - Produkter uden løbende salg i Rackbeat får intet salgstempo (0 pr. uge), så kalenderen forventer ikke, at deres lager falder.
 
-Test uden nøgle: `npm test` (røgtest, serverfunktioner, paritet med facit og V2 i browser).
+Test uden nøgle: `npm test` (røgtest, serverfunktioner, paritet med facit og V2 og V3 i browser).
 
 ### Salgstempo: hvad beregningen bygger på
 Serveren (`functions/_lib/salgstempo.js`) beregner et gennemsnitligt ugentligt salg pr. produkt (`rate`), som kalenderen bruger til at forudsige lagerets udvikling. Tallet er et estimat og bygger på disse antagelser:
