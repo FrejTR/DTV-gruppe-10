@@ -34,6 +34,8 @@ const side = (felt, alle, q) => {
 };
 
 const reguleringer = [];   // Nyeste først, som hos Rackbeat
+let slettede = 0;
+const SALG_UNDERVEJS = Number(process.env.MOCK_SALG_UNDERVEJS || 0);
 
 // Samme påkrævede felter som Rackbeats "Create Inventory Adjustment". Ukendt vare giver 422.
 function opretRegulering(k) {
@@ -45,7 +47,7 @@ function opretRegulering(k) {
   if (k.item_id && !vare) fejl.item_id = ['The selected item id is invalid.'];
   if (Object.keys(fejl).length) return [422, { errors: fejl }];
   // Som hos Rackbeat er en ny regulering en kladde. Beholdningen ændres først ved bogføring.
-  const r = { id: 2000 + reguleringer.length, reason: k.reason, description: k.description || '', regulated_value: k.adjustment_type,
+  const r = { id: 2000 + reguleringer.length + slettede, reason: k.reason, description: k.description || '', regulated_value: k.adjustment_type,
     regulate_difference: !!k.regulate_diff, is_booked: false, regulation_type: { number: k.regulation_type },
     lines: [{ child_id: k.item_id, quantity: Number(k.quantity), location_id: k.location }], regulated_at: k.regulated_at };
   reguleringer.unshift(r);
@@ -56,8 +58,12 @@ function bogfoer(id) {
   const r = reguleringer.find(x => x.id === id);
   if (!r) return [404, { errors: { message: 'Not found' } }];
   if (r.is_booked) return [422, { errors: { message: 'This regulation has already been booked.' } }];
+  // Som hos Rackbeat (afprøvet 16. november 2026): regulate_difference false SÆTTER beholdningen til antallet.
+  // Linjen viser derefter den ændring, der blev bogført. true antages at lægge til (ikke afprøvet mod Rackbeat).
   const l = r.lines[0], vare = lager.find(v => v.number === l.child_id);
-  vare.stock_quantity = r.regulate_difference ? l.quantity : vare.stock_quantity + l.quantity;
+  vare.stock_quantity -= SALG_UNDERVEJS;   // Efterligner et salg mellem læsning og bogføring
+  const aendring = r.regulate_difference ? l.quantity : l.quantity - vare.stock_quantity;
+  vare.stock_quantity += aendring; l.quantity = aendring;
   r.is_booked = true;
   return [200, { inventory_regulation: r }];
 }
@@ -72,7 +78,7 @@ http.createServer(async (req, res) => {
   if (en && req.method === 'DELETE') {
     const i = reguleringer.findIndex(x => x.id === Number(en[1]) && !x.is_booked);
     if (i < 0) return svar(404, { errors: { message: 'Not found' } });
-    reguleringer.splice(i, 1);
+    reguleringer.splice(i, 1); slettede++;
     return svar(200, {});
   }
   if (en && req.method === 'GET') {
@@ -80,7 +86,12 @@ http.createServer(async (req, res) => {
     return r ? svar(200, { inventory_regulation: r }) : svar(404, { errors: { message: 'Not found' } });
   }
   if (u.pathname === '/inventory-adjustments') {
-    if (req.method === 'GET') return svar(206, side('inventory_regulations', reguleringer, u.searchParams));
+    // Som hos Rackbeat viser listen kun kladder, medmindre is_booked=true. Filtrene item_number og date_from virker.
+    if (req.method === 'GET') {
+      const bogfoert = u.searchParams.get('is_booked') === 'true', vare = u.searchParams.get('item_number'), fra = u.searchParams.get('date_from');
+      return svar(206, side('inventory_regulations', reguleringer.filter(r => r.is_booked === bogfoert
+        && (!vare || r.lines[0].child_id === vare) && (!fra || r.regulated_at.slice(0, 10) >= fra)), u.searchParams));
+    }
     if (req.method !== 'POST') return svar(405, { errors: { message: 'Metode ikke tilladt' } });
     let tekst = '';
     for await (const del of req) tekst += del;
@@ -91,6 +102,12 @@ http.createServer(async (req, res) => {
   if (u.pathname === '/orders/lines') {
     const fra = (u.searchParams.get('order_date_from') || '0000').slice(0, 10), til = (u.searchParams.get('order_date_to') || '9999').slice(0, 10);
     return svar(206, side('order_lines', linjer.filter(l => l.order.order_date.slice(0, 10) >= fra && l.order.order_date.slice(0, 10) <= til), u.searchParams));
+  }
+  const pl = /^\/products\/([^/]+)\/locations$/.exec(u.pathname);
+  if (pl) {
+    const vare = lager.find(v => v.number === decodeURIComponent(pl[1]));
+    if (!vare) return svar(404, { errors: { message: 'Not found' } });
+    return svar(200, { product_locations: [{ number: 1001, name: 'Hovedlager', stock_quantity: vare.stock_quantity }, { number: 1002, name: 'Ørbyhage 96', stock_quantity: 0 }] });
   }
   if (u.pathname === '/products') {
     if (LAGER_STATUS) return svar(LAGER_STATUS, { errors: { message: 'This action is unauthorized.' } });

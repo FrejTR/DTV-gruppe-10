@@ -87,10 +87,12 @@ export function lavKlient({ noegle, fetch: hent = globalThis.fetch, vent = ms =>
   };
 }
 
-/** Skriveadgang: opretter og bogfører lagerreguleringer, der lægger et antal til beholdningen. En regulering er
- *  en kladde, indtil den er bogført, og først da ændres beholdningen (afprøvet mod Rackbeat 9. november 2026).
- *  Ingen genforsøg ved fejl, for et POST, der måske er gået igennem, må ikke sendes igen.
- *  Dobbelt-registrering forhindres med referencen. */
+/** Skriveadgang: opretter og bogfører lagerreguleringer, der lægger et antal til beholdningen på Hovedlager.
+ *  En regulering er en kladde, indtil den er bogført, og først da ændres beholdningen (afprøvet 9. november 2026).
+ *  Med regulate_diff: false SÆTTER Rackbeat beholdningen til det sendte antal, når reguleringen bogføres
+ *  (afprøvet 16. november 2026: 22 sendt ved 24 på lager gav -2). Rackbeats dokumentation beskriver ikke feltet.
+ *  Derfor lægges til ved at læse beholdningen og sende nuværende + antal, og bagefter tjekkes det, at den bogførte
+ *  ændring blev præcis +antal. Ingen genforsøg ved fejl. Dobbelt-registrering forhindres med referencen. */
 export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisUrl = BASIS_URL }) {
   if (!noegle) throw new RackbeatFejl('ikke_sat_op');
   const hoveder = { Authorization: `Bearer ${noegle}`, Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -111,17 +113,56 @@ export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisU
     }
   }
 
+  const reguleringSti = id => `/inventory-adjustments/${encodeURIComponent(id)}`;
+  async function hentRegulering(id) {
+    const data = await kald('GET', reguleringSti(id));
+    const r = data && (data.inventory_regulation || data);
+    if (!r || typeof r !== 'object') throw new RackbeatFejl('uventet_svar');
+    return r;
+  }
+
+  /** Beholdningen på Hovedlager lige nu */
+  async function lagerPaaHovedlager(sku) {
+    let data;
+    try {
+      data = await kald('GET', `/products/${encodeURIComponent(sku)}/locations`);
+    } catch (e) {
+      throw e instanceof RackbeatFejl && e.kode === 'ikke_fundet' ? new RackbeatFejl('ukendt_vare', e.status) : e;
+    }
+    const l = data && Array.isArray(data.product_locations) && data.product_locations.find(x => x && Number(x.number) === HOVEDLAGER);
+    const n = l ? Number(l.stock_quantity) : NaN;
+    if (!Number.isFinite(n)) throw new RackbeatFejl('uventet_svar');
+    return n;
+  }
+
+  /** Bogfører reguleringen, så beholdningen ændres. 422 betyder måske "allerede bogført", så det tjekkes. */
+  async function bogfoer(id) {
+    try {
+      await kald('POST', `${reguleringSti(id)}/book`, null, { tomtSvarOk: true });
+    } catch (e) {
+      if (!(e instanceof RackbeatFejl) || e.kode !== 'afvist_af_rackbeat') throw e;
+      if ((await hentRegulering(id)).is_booked !== true) throw e;
+    }
+  }
+
   return {
-    /** Finder en regulering med referencen i beskrivelsen blandt de nyeste (Rackbeat viser nyeste først). */
-    async findRegulering(reference) {
-      const data = await kald('GET', `/inventory-adjustments?${new URLSearchParams({ limit: 100, page: 1 })}`);
-      const liste = data && data.inventory_regulations;
-      if (!Array.isArray(liste)) throw new RackbeatFejl('uventet_svar');
-      const fundet = liste.find(r => r && typeof r.description === 'string' && r.description.includes(reference));
-      return fundet ? { id: fundet.id, bogfoert: fundet.is_booked === true } : null;
+    /** Finder en regulering med referencen i beskrivelsen. Rackbeats liste viser som standard kun kladder,
+     *  så der søges i både bogførte og kladder, for varen og fra datoen. */
+    async findRegulering(reference, { sku, dato }) {
+      for (const bogfoert of [true, false]) {
+        const q = new URLSearchParams({ is_booked: String(bogfoert), item_number: sku, date_from: dato, limit: 100, page: 1 });
+        const data = await kald('GET', `/inventory-adjustments?${q}`);
+        const liste = data && data.inventory_regulations;
+        if (!Array.isArray(liste)) throw new RackbeatFejl('uventet_svar');
+        const fundet = liste.find(r => r && typeof r.description === 'string' && r.description.includes(reference));
+        if (fundet) return { id: fundet.id, bogfoert: fundet.is_booked === true };
+      }
+      return null;
     },
-    /** Lægger antal stk. af varen til på Hovedlager. regulate_diff: false betyder "læg til", ikke "sæt til". */
-    async lagerregulering({ sku, antal, dato, aarsag, beskrivelse }) {
+    /** Lægger antal stk. til på Hovedlager: læser beholdningen, opretter "sæt til nuværende + antal" og bogfører straks.
+     *  Bagefter tjekkes den bogførte ændring. afviger er true, hvis den ikke blev præcis +antal (fx et salg i samme sekund). */
+    async laegTil({ sku, antal, dato, aarsag, beskrivelse }) {
+      const foer = await lagerPaaHovedlager(sku);
       const data = await kald('POST', '/inventory-adjustments', {
         regulated_at: dato,
         reason: aarsag,
@@ -129,35 +170,24 @@ export function lavSkriveKlient({ noegle, fetch: hent = globalThis.fetch, basisU
         adjustment_type: 'quantity',
         item_id: sku,
         location: HOVEDLAGER,
-        quantity: String(antal),
+        quantity: String(foer + antal),
         regulation_type: KATEGORI_PRODUKTION,
         regulate_diff: false,
       });
       const r = data && (data.inventory_regulation || data.inventory_adjustment || data);
       if (!r || r.id == null) throw new RackbeatFejl('uventet_svar');
-      return { id: r.id };
-    },
-    /** Bogfører reguleringen, så beholdningen ændres. 422 betyder måske "allerede bogført", så det tjekkes.
-     *  Først tjekkes det i Rackbeat, at reguleringen lægger antallet til (regulate_difference: false). Ville den
-     *  i stedet sætte beholdningen til antallet, bogføres den ikke, og kladden slettes, så ingen bogfører den i hånden. */
-    async bogfoer(id) {
-      const sti = `/inventory-adjustments/${encodeURIComponent(id)}`;
-      const foer = await kald('GET', sti);
-      const r0 = foer && (foer.inventory_regulation || foer);
-      if (!r0 || typeof r0 !== 'object') throw new RackbeatFejl('uventet_svar');
-      if (r0.is_booked === true) return;
-      if (r0.regulate_difference !== false) {
-        try { await kald('DELETE', sti, null, { tomtSvarOk: true }); } catch { /* fejlen herunder er det vigtige */ }
-        throw new RackbeatFejl('ville_saette_lager');
-      }
+      await bogfoer(r.id);
+      let aendring = null;
       try {
-        await kald('POST', `/inventory-adjustments/${encodeURIComponent(id)}/book`, null, { tomtSvarOk: true });
-      } catch (e) {
-        if (!(e instanceof RackbeatFejl) || e.kode !== 'afvist_af_rackbeat') throw e;
-        const data = await kald('GET', sti);
-        const r = data && (data.inventory_regulation || data);
-        if (!r || r.is_booked !== true) throw e;
-      }
+        const l = (await hentRegulering(r.id)).lines;
+        aendring = Array.isArray(l) && l[0] ? Number(l[0].quantity) : null;
+      } catch { /* bogført, men kunne ikke kontrolleres */ }
+      return { id: r.id, foer, aendring, afviger: aendring !== null && aendring !== antal };
+    },
+    /** Sletter en kladde. En gammel kladde bogføres aldrig, for den sætter beholdningen ud fra lageret dengang. */
+    async sletKladde(id) {
+      if ((await hentRegulering(id)).is_booked === true) throw new RackbeatFejl('allerede_bogfoert');
+      await kald('DELETE', reguleringSti(id), null, { tomtSvarOk: true });
     },
   };
 }

@@ -14,7 +14,7 @@ const TEKSTER = {
   for_mange_kald: 'Rackbeat har for travlt',
   for_mange_sider: 'For mange data at hente',
   afvist_af_rackbeat: 'Rackbeat afviste reguleringen',
-  ville_saette_lager: 'Rackbeat ville sætte lageret til antallet i stedet for at lægge det til, så intet er bogført',
+  ukendt_vare: 'Varenummeret findes ikke i Rackbeat',
   ingen_forbindelse: 'Ingen forbindelse til Rackbeat',
   db_ikke_sat_op: 'Den fælles database er ikke sat op',
   db_noegle_afvist: 'Databasen afviste nøglen',

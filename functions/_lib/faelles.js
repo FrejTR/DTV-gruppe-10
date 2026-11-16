@@ -143,19 +143,24 @@ export async function pak({ request, env }, deps = {}) {
   try {
     if (godkendt > 0) {
       rb = lavSkriveKlient({ noegle: env.RACKBEAT_API_KEY, ...deps.rackbeat });
-      // Findes reguleringen allerede (et tidligere forsøg nåede til Rackbeat), oprettes den ikke igen
-      const fundet = await rb.findRegulering(pakning.ref);
+      // Er reguleringen allerede bogført (et tidligere forsøg nåede igennem), oprettes den ikke igen.
+      // En kladde fra et tidligere forsøg slettes: den ville sætte beholdningen ud fra lageret dengang.
+      const fundet = await rb.findRegulering(pakning.ref, { sku: pakning.sku, dato: pakning.dato });
       skrevet = true;
-      const { id } = fundet || await rb.lagerregulering({ sku: pakning.sku, antal: godkendt, dato,
-        aarsag: `Pakket fra batch ${labels(pakning)}`, beskrivelse: `Produktionskalender, ref. ${pakning.ref}` });
-      if (!fundet || !fundet.bogfoert) await rb.bogfoer(id);
-      regulering = { id, antal: godkendt, lokation: HOVEDLAGER, dato };
+      if (fundet && fundet.bogfoert) regulering = { id: fundet.id, antal: godkendt, lokation: HOVEDLAGER, dato };
+      else {
+        if (fundet) await rb.sletKladde(fundet.id);
+        const r = await rb.laegTil({ sku: pakning.sku, antal: godkendt, dato,
+          aarsag: `Pakket fra batch ${labels(pakning)}`, beskrivelse: `Produktionskalender, ref. ${pakning.ref}` });
+        regulering = { id: r.id, antal: godkendt, lokation: HOVEDLAGER, dato };
+        // Den bogførte ændring blev ikke præcis +godkendt (fx et salg i samme sekund): beholdningen skal tjekkes
+        if (r.afviger){ regulering.advarsel = true; regulering.aendring = r.aendring; log('pak', 'afvigelse_i_rackbeat'); }
+      }
     }
   } catch (e) {
     const kode = fejlkode(e);
     log('pak', 'rackbeat_' + kode, e && e.status);
-    // Ville Rackbeat sætte lageret, er kladden slettet og intet bogført: stk. gives tilbage til produktionslageret
-    const udfald = await efterFejl(data, skrevet && kode !== 'ville_saette_lager' ? rb : null, pakning.ref);
+    const udfald = await efterFejl(data, skrevet ? rb : null, pakning);
     if (!erObjekt(udfald)) return json({ ...(await fejlSvar(kode).json()), pakning: udfald }, 502);
     // Reguleringen blev bogført alligevel (fx svaret gik tabt)
     pakning = udfald.pakning;
@@ -176,17 +181,18 @@ export async function pak({ request, env }, deps = {}) {
   return json({ data: { pakning, rackbeat: regulering, allerede: false }, kilde: 'supabase' }, 201);
 }
 
-/** Efter en fejl i Rackbeat (rb er null, hvis intet blev sendt til Rackbeat): blev reguleringen alligevel bogført, gælder pakningen ({id, pakning}). Findes den
- *  slet ikke, gives stk. tilbage til produktionslageret ('annulleret'). Ellers (kladde, eller Rackbeat svarer
- *  ikke) venter pakningen på et nyt forsøg med samme ref ('venter'), så stk. aldrig både står på
- *  produktionslageret og i Rackbeat. */
-async function efterFejl(data, rb, ref) {
+/** Efter en fejl i Rackbeat (rb er null, hvis intet blev sendt til Rackbeat): blev reguleringen alligevel bogført,
+ *  gælder pakningen ({id, pakning}). Er den kun en kladde, slettes den (en kladde ændrer ikke beholdningen), og stk.
+ *  gives tilbage til produktionslageret ('annulleret'), ligesom når den slet ikke findes. Svarer Rackbeat ikke,
+ *  venter pakningen på et nyt forsøg med samme ref ('venter'), så stk. aldrig både står på produktionslageret og i Rackbeat. */
+async function efterFejl(data, rb, pakning) {
+  const ref = pakning.ref;
   try {
-    const fundet = rb ? await rb.findRegulering(ref) : null;
+    const fundet = rb ? await rb.findRegulering(ref, { sku: pakning.sku, dato: pakning.dato }) : null;
     if (fundet && fundet.bogfoert) {
       return { id: fundet.id, pakning: await data.rpc('bekraeft_pakning', { ref, rackbeatId: fundet.id }) };
     }
-    if (fundet) return 'venter';
+    if (fundet) await rb.sletKladde(fundet.id);
     const { annulleret } = await data.rpc('annuller_pakning', { ref });
     return annulleret ? 'annulleret' : 'venter';
   } catch (e) {

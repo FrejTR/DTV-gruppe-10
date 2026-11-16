@@ -1725,7 +1725,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         // Vises straks. De fælles data og lageret i Rackbeat hentes bagefter.
         S.pakninger = S.pakninger.filter(k => k.ref !== d.pakning.ref).concat(d.pakning);
         save(); dlgD.close(); renderAll();
-        toast(d.rackbeat ? `${p.name}: ${d.rackbeat.antal} stk. er lagt på lager i Rackbeat` : `${p.name}: ${x.antal} stk. kasseret`);
+        toast(d.rackbeat && d.rackbeat.advarsel ? `${p.name}: lagt på lager, men beholdningen i Rackbeat ændrede sig samtidig. Tjek beholdningen i Rackbeat.`
+          : d.rackbeat ? `${p.name}: ${d.rackbeat.antal} stk. er lagt på lager i Rackbeat` : `${p.name}: ${x.antal} stk. kasseret`);
         hentFaelles(); hentFriskLager();
       } catch(e) {
         fejl.textContent = e.tekst || 'Noget gik galt. Prøv igen.'; fejl.hidden = false;

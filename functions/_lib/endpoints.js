@@ -124,13 +124,19 @@ export async function lagerregulering({ request, env }, deps = {}) {
     const klient = lavSkriveKlient({ noegle: env.RACKBEAT_API_KEY, ...deps });
     const beskrivelse = `Produktionskalender, ref. ${r.reference}`;
     // Er batchen allerede registreret (fx netværksfejl efter et vellykket kald), oprettes den ikke igen.
-    // Er den oprettet, men ikke bogført, bogføres den nu.
-    const fundet = await klient.findRegulering(r.reference);
+    // Er den oprettet, men ikke bogført, slettes kladden og laves igen ud fra lageret nu.
     const dato = iDagIDanmark(deps.nu ? new Date(deps.nu()) : new Date());
-    const { id } = fundet || await klient.lagerregulering({ sku: r.sku, antal: r.antal, dato, aarsag: `Batch #${r.batch} godkendt`, beskrivelse });
-    if (!fundet || !fundet.bogfoert) await klient.bogfoer(id);
-    log('lagerregulering', fundet ? (fundet.bogfoert ? 'allerede_bogfoert' : 'bogfoert_senere') : 'oprettet_og_bogfoert');
-    return json({ data: { id, sku: r.sku, antal: r.antal, lokation: HOVEDLAGER, dato, allerede: !!fundet }, kilde: 'rackbeat' }, fundet ? 200 : 201);
+    const fundet = await klient.findRegulering(r.reference, { sku: r.sku, dato });
+    let id = fundet && fundet.bogfoert ? fundet.id : null;
+    if (id == null) {
+      if (fundet) await klient.sletKladde(fundet.id);
+      const ny = await klient.laegTil({ sku: r.sku, antal: r.antal, dato, aarsag: `Batch #${r.batch} godkendt`, beskrivelse });
+      id = ny.id;
+      if (ny.afviger) log('lagerregulering', 'afvigelse_i_rackbeat');
+    }
+    log('lagerregulering', fundet ? (fundet.bogfoert ? 'allerede_bogfoert' : 'kladde_erstattet') : 'oprettet_og_bogfoert');
+    const allerede = !!(fundet && fundet.bogfoert);
+    return json({ data: { id, sku: r.sku, antal: r.antal, lokation: HOVEDLAGER, dato, allerede }, kilde: 'rackbeat' }, allerede ? 200 : 201);
   } catch (e) {
     const kode = fejlkode(e);
     log('lagerregulering', kode, e && e.status);

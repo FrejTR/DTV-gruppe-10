@@ -367,42 +367,71 @@ function regAnmodning(krop = GYLDIG, { origin = 'https://kalender.example.com', 
   return new Request(URL_REG, { method: 'POST', headers: hoveder, body: typeof krop === 'string' ? krop : JSON.stringify(krop) });
 }
 
-/** Falsk Rackbeat til skrivning. eksisterende: reguleringer, der allerede findes. postStatus: svar på oprettelse.
- *  bogStatus: svar på bogføring. bogfoertVed422: om GET af reguleringen viser den som bogført efter et forsøg.
- *  saetTil: Rackbeat har gemt reguleringen som "sæt til" i stedet for "læg til". */
-function falskSkriv({ eksisterende = [], postStatus = 201, bogStatus = 200, bogfoertVed422 = false, netvaerk = false, saetTil = false } = {}) {
-  const kald = [];
-  let bogForsoegt = false;
+/** Falsk Rackbeat til skrivning, med lager, der opfører sig som den rigtige Rackbeat (afprøvet 16. november 2026):
+ *  regulate_difference false sætter beholdningen til antallet ved bogføring, og linjen viser derefter ændringen.
+ *  Listen viser kun kladder, medmindre is_booked=true. eksisterende: reguleringer, der findes i forvejen.
+ *  postStatus: svar på oprettelse. bogStatus: svar på bogføring. bogfoertVed422: bogføringen sker, men svarer 422.
+ *  lager: beholdningen på Hovedlager. salgUndervejs: stk. solgt mellem læsning og bogføring. */
+function falskSkriv({ eksisterende = [], postStatus = 201, bogStatus = 200, bogfoertVed422 = false, netvaerk = false, lager = 40, salgUndervejs = 0 } = {}) {
+  const kald = [], regs = eksisterende.map(r => ({ lines: [{ child_id: 'HAT003', quantity: 1 }], ...r }));
+  const tilstand = { lager };
+  const svar = (krop, status) => new Response(JSON.stringify(krop), { status });
+  const bogfoer = r => {
+    tilstand.lager -= salgUndervejs;
+    const l = r.lines[0], aendring = r.regulate_difference ? l.quantity : l.quantity - tilstand.lager;
+    tilstand.lager += aendring; l.quantity = aendring; r.is_booked = true;
+  };
   const hent = async (url, init = {}) => {
-    const metode = init.method || 'GET', sti = new URL(url).pathname;
+    const u = new URL(url), metode = init.method || 'GET', sti = u.pathname;
     kald.push({ url, sti, metode, auth: init.headers && init.headers.Authorization, krop: init.body ? JSON.parse(init.body) : null });
     if (netvaerk) throw new TypeError('fetch failed');
-    const fejl = status => new Response(JSON.stringify({ errors: { item_id: ['invalid ' + NOEGLE] } }), { status });
-    if (metode === 'GET' && sti.endsWith('/inventory-adjustments')) return new Response(JSON.stringify({ inventory_regulations: eksisterende, total: eksisterende.length, pages: 1, limit: 100, page: 1 }), { status: 206 });
-    if (metode === 'GET') return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: bogForsoegt && bogfoertVed422, regulate_difference: saetTil } }), { status: 200 });
-    if (metode === 'DELETE') return new Response('', { status: 200 });
-    if (sti.endsWith('/book')) { bogForsoegt = true; return bogStatus === 200 ? new Response('', { status: 200 }) : fejl(bogStatus); }
+    const fejl = status => svar({ errors: { item_id: ['invalid ' + NOEGLE] } }, status);
+    const en = /\/inventory-adjustments\/(\d+)/.exec(sti), r = en && regs.find(x => x.id === Number(en[1]));
+    if (sti.endsWith('/locations')) return svar({ product_locations: [{ number: 1001, stock_quantity: tilstand.lager }, { number: 1002, stock_quantity: 5 }] }, 200);
+    if (metode === 'GET' && sti.endsWith('/inventory-adjustments')) {
+      const liste = regs.filter(x => x.is_booked === (u.searchParams.get('is_booked') === 'true'));
+      return svar({ inventory_regulations: liste, total: liste.length, pages: 1, limit: 100, page: 1 }, 206);
+    }
+    if (metode === 'GET') return r ? svar({ inventory_regulation: r }, 200) : fejl(404);
+    if (metode === 'DELETE') { regs.splice(regs.indexOf(r), 1); return new Response('', { status: 200 }); }
+    if (sti.endsWith('/book')) {
+      if (bogStatus === 422 && bogfoertVed422) { bogfoer(r); return fejl(422); }
+      if (bogStatus !== 200) return fejl(bogStatus);
+      bogfoer(r); return new Response('', { status: 200 });
+    }
     if (postStatus !== 201) return fejl(postStatus);
-    return new Response(JSON.stringify({ inventory_regulation: { id: 4711, is_booked: false } }), { status: 201 });
+    const k = JSON.parse(init.body);
+    const ny = { id: 4711, is_booked: false, regulate_difference: !!k.regulate_diff, description: k.description, lines: [{ child_id: k.item_id, quantity: Number(k.quantity) }] };
+    regs.push(ny);
+    return svar({ inventory_regulation: { id: ny.id, is_booked: false } }, 201);
   };
-  return { hent, kald };
+  return { hent, kald, regs, tilstand };
 }
 const poster = kald => kald.filter(k => k.metode === 'POST');
 const OPRET = '/api/inventory-adjustments', BOG = id => `/api/inventory-adjustments/${id}/book`;
 
-test('lagerregulering: opretter og bogfører, så antallet lægges til på Hovedlager i kategorien Produktion', async () => {
-  const rb = falskSkriv();
+test('lagerregulering: lægger antallet TIL på Hovedlager (sætter til nuværende + antal) i kategorien Produktion', async () => {
+  const rb = falskSkriv({ lager: 40 });
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
   assert.equal(svar.status, 201);
   const b = await krop(svar);
   assert.deepEqual(b.data, { id: 4711, sku: 'HAT003', antal: 63, lokation: 1001, dato: '2026-11-03', allerede: false });
+  assert.equal(rb.tilstand.lager, 103, '40 på lager + 63 = 103, ikke 63');
+  assert.equal(rb.regs[0].lines[0].quantity, 63, 'den bogførte ændring er +63');
   assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET, BOG(4711)], 'først oprettes kladden, så bogføres den');
   const p = poster(rb.kald)[0];
   assert.equal(p.url, 'https://app.rackbeat.com/api/inventory-adjustments');
   assert.deepEqual(p.krop, { regulated_at: '2026-11-03', reason: 'Batch #43 godkendt', description: 'Produktionskalender, ref. b43-1a2b3c4d',
-    adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '63', regulation_type: 1004, regulate_diff: false });
+    adjustment_type: 'quantity', item_id: 'HAT003', location: 1001, quantity: '103', regulation_type: 1004, regulate_diff: false });
+  assert.ok(rb.kald.some(k => k.sti === '/api/products/HAT003/locations'), 'læser beholdningen på Hovedlager først');
   assert.ok(rb.kald.every(k => k.auth === `Bearer ${NOEGLE}`));
   await ingenHemmeligheder(svar);
+});
+
+test('lagerregulering: negativt lager lægges også til', async () => {
+  const rb = falskSkriv({ lager: -3 });
+  assert.equal((await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb))).status, 201);
+  assert.equal(rb.tilstand.lager, 60);
 });
 
 test('lagerregulering: uden nøgle skrives intet', async () => {
@@ -435,21 +464,24 @@ test('lagerregulering: ugyldige data afvises uden kald til Rackbeat', async () =
   }
 });
 
-test('lagerregulering: en batch, der allerede er bogført, sendes ikke igen', async () => {
+test('lagerregulering: en batch, der allerede er bogført, sendes ikke igen (bogførte findes, selv om listen som standard kun viser kladder)', async () => {
   const rb = falskSkriv({ eksisterende: [{ id: 999, is_booked: true, description: 'Produktionskalender, ref. b43-1a2b3c4d' }] });
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
   assert.equal(svar.status, 200);
   const b = await krop(svar);
   assert.equal(b.data.id, 999); assert.equal(b.data.allerede, true);
   assert.equal(poster(rb.kald).length, 0);
+  assert.equal(rb.tilstand.lager, 40);
 });
 
-test('lagerregulering: en oprettet, men ikke bogført regulering bogføres uden at blive oprettet igen', async () => {
-  const rb = falskSkriv({ eksisterende: [{ id: 2796, is_booked: false, description: 'Produktionskalender, ref. b43-1a2b3c4d' }] });
+test('lagerregulering: en gammel kladde bogføres aldrig. Den slettes og laves igen ud fra lageret nu', async () => {
+  const rb = falskSkriv({ lager: 50, eksisterende: [{ id: 2796, is_booked: false, regulate_difference: false, description: 'Produktionskalender, ref. b43-1a2b3c4d',
+    lines: [{ child_id: 'HAT003', quantity: 63 }] }] });
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
-  assert.equal(svar.status, 200);
-  assert.equal((await krop(svar)).data.id, 2796);
-  assert.deepEqual(poster(rb.kald).map(k => k.sti), [BOG(2796)]);
+  assert.equal(svar.status, 201);
+  assert.deepEqual(rb.kald.filter(k => k.metode === 'DELETE').map(k => k.sti), ['/api/inventory-adjustments/2796']);
+  assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET, BOG(4711)]);
+  assert.equal(rb.tilstand.lager, 113);
 });
 
 test('lagerregulering: afvisning af oprettelsen giver fejl uden genforsøg og uden nøgle i svaret', async () => {
@@ -459,6 +491,7 @@ test('lagerregulering: afvisning af oprettelsen giver fejl uden genforsøg og ud
     assert.equal(svar.status, 502);
     assert.equal((await krop(svar)).kode, kode);
     assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET], 'et POST må aldrig sendes to gange, og en afvist kladde bogføres ikke');
+    assert.equal(rb.tilstand.lager, 40);
     await ingenHemmeligheder(svar);
   }
 });
@@ -470,22 +503,15 @@ test('lagerregulering: fejlet bogføring giver fejl, så batchen ikke markeres s
     assert.equal(svar.status, 502, String(bogStatus));
     assert.equal((await krop(svar)).kode, kode);
     assert.equal(poster(rb.kald).length, 2);
+    assert.equal(rb.tilstand.lager, 40);
   }
 });
 
-test('lagerregulering: bogfører aldrig en regulering, der ville sætte lageret i stedet for at lægge til', async () => {
-  const rb = falskSkriv({ saetTil: true });
-  const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
-  assert.equal(svar.status, 502);
-  assert.equal((await krop(svar)).kode, 'ville_saette_lager');
-  assert.deepEqual(poster(rb.kald).map(k => k.sti), [OPRET], 'ingen bogføring');
-  assert.deepEqual(rb.kald.filter(k => k.metode === 'DELETE').map(k => k.sti), ['/api/inventory-adjustments/4711'], 'kladden slettes');
-});
-
-test('lagerregulering: 422 ved bogføring er i orden, hvis reguleringen allerede er bogført', async () => {
+test('lagerregulering: 422 ved bogføring er i orden, hvis reguleringen blev bogført', async () => {
   const rb = falskSkriv({ bogStatus: 422, bogfoertVed422: true });
   const svar = await lagerregulering({ request: regAnmodning(), env: REG_ENV }, deps(rb));
   assert.equal(svar.status, 201);
+  assert.equal(rb.tilstand.lager, 103);
 });
 
 test('lagerregulering: netværksfejl giver fejl uden POST', async () => {
@@ -497,19 +523,13 @@ test('lagerregulering: netværksfejl giver fejl uden POST', async () => {
 });
 
 test('ruter: POST /api/lagerregulering bruger Rackbeats adresse og nøglen fra miljøet', async () => {
-  const kald = [];
+  const rb = falskSkriv();
   const original = globalThis.fetch;
-  globalThis.fetch = async (url, init = {}) => {
-    kald.push({ url: String(url), metode: init.method, auth: init.headers && init.headers.Authorization });
-    if (String(url).endsWith('/book')) return new Response('', { status: 200 });
-    if (String(url).endsWith('/inventory-adjustments/1')) return new Response(JSON.stringify({ inventory_regulation: { id: 1, is_booked: false, regulate_difference: false } }), { status: 200 });
-    return init.method === 'POST' ? new Response(JSON.stringify({ inventory_regulation: { id: 1 } }), { status: 201 })
-      : new Response(JSON.stringify({ inventory_regulations: [] }), { status: 206 });
-  };
+  globalThis.fetch = rb.hent;
   try {
     const svar = await medMiljoe({ VERCEL: '1', RACKBEAT_API_KEY: NOEGLE, RACKBEAT_BASE_URL: 'http://127.0.0.1:8790' },
       () => reguleringRute.POST(regAnmodning()));
     assert.equal(svar.status, 201);
   } finally { globalThis.fetch = original; }
-  assert.ok(kald.length === 4 && kald.every(k => k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/inventory-adjustments')));
+  assert.ok(rb.kald.length > 0 && rb.kald.every(k => k.auth === `Bearer ${NOEGLE}` && k.url.startsWith('https://app.rackbeat.com/api/')));
 });
