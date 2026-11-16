@@ -121,6 +121,33 @@ const server = http.createServer((req, res) => {
   await p.evaluate(() => document.querySelector('#p-batches [data-del="1"]').click());
   check('Rackbeat-batch: sletning advarer om Rackbeat', (await p.textContent('#delText')).includes('Rackbeat'));
 
+  // Kassation kræver en årsag
+  await p.evaluate(k => { const S = JSON.parse(localStorage.getItem(k)); const b = S.batches.find(x => x.no === 1); b.packed = false; delete b.rackbeat; localStorage.setItem(k, JSON.stringify(S)); }, KEY);
+  await p.reload();
+  await p.evaluate(() => document.querySelector('[data-ask-discard="1"]').click());
+  const batch1 = async () => (await state()).batches.find(x => x.no === 1);
+  await p.click('#formDiscard button[type=submit]');
+  check('kassér: uden årsag afvises', (await batch1()).status === 'aktiv' && !(await p.$eval('#discErr', e => e.hidden)));
+  const valg = await p.$$eval('#discCat option', o => o.map(x => x.textContent.trim()).filter(x => x && !x.startsWith('Vælg')));
+  check('kassér: de fem årsager findes', valg.join('|') === 'Vejer for lidt|Kosmetisk fejl|Fejl i opskrift|Fejl i håndtering|Andet', valg.join('|'));
+  await p.selectOption('#discCat', 'Andet');
+  check('kassér: Andet viser tekstfeltet', await p.isVisible('#discOther'));
+  await p.click('#formDiscard button[type=submit]');
+  check('kassér: Andet uden tekst afvises', (await batch1()).status === 'aktiv');
+  await p.fill('#discOther', 'Formen revnede');
+  await p.click('#formDiscard button[type=submit]');
+  const k = await batch1();
+  check('kassér: Andet med tekst gemmer årsagen', k.status === 'kasseret' && k.discardReason.kategori === 'Andet' && k.discardReason.tekst === 'Formen revnede', JSON.stringify(k));
+  await p.evaluate(() => document.querySelector('[data-batch="1"]').click());
+  check('kassér: årsagen vises i detaljerne', (await p.textContent('#detailBody')).includes('Formen revnede'));
+  await p.click('#dRestore');
+  check('gendan: årsagen fjernes', !(await batch1()).discardReason && (await batch1()).status === 'aktiv');
+  await p.evaluate(() => document.querySelector('[data-batch="1"]').click());
+  await p.click('#dDiscard');
+  await p.selectOption('#discCat', 'Vejer for lidt');
+  await p.click('#formDiscard button[type=submit]');
+  check('kassér: fast kategori gemmes uden tekst', (await batch1()).discardReason?.kategori === 'Vejer for lidt');
+
   // Ugevisningen starter i ugen før den nuværende, og den nuværende er markeret
   await p.reload();
   const uger = await p.evaluate(() => [...document.querySelectorAll('#weekGrid .wk-h, .wk-h')].map(e => ({ nu: e.classList.contains('now'), tekst: e.textContent })));

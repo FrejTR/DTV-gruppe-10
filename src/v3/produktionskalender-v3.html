@@ -526,6 +526,27 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
 <dialog id="dlgDetail"><div class="dlg" id="detailBody"></div></dialog>
 
+<dialog id="dlgDiscard"><form class="dlg" id="formDiscard" method="dialog" novalidate>
+  <h2>Marker som fejlet</h2>
+  <p id="discInfo"></p>
+  <div class="field"><label for="discCat">Hvorfor kasseres batchen?</label>
+    <select id="discCat">
+      <option value="">Vælg årsag…</option>
+      <option>Vejer for lidt</option>
+      <option>Kosmetisk fejl</option>
+      <option>Fejl i opskrift</option>
+      <option>Fejl i håndtering</option>
+      <option value="Andet">Andet</option>
+    </select></div>
+  <div class="field" id="discOtherWrap" hidden><label for="discOther">Skriv årsag</label><input id="discOther" type="text" autocomplete="off" placeholder="Fx formen revnede"></div>
+  <div class="field" id="discNoteWrap"><label for="discNote">Note (valgfri)</label><input id="discNote" type="text" autocomplete="off" placeholder="Uddyb gerne"></div>
+  <p class="form-err" id="discErr" role="alert" hidden></p>
+  <div class="dlg-actions">
+    <button class="btn" type="button" data-close>Annullér</button>
+    <button class="btn danger" type="submit">Kassér batch</button>
+  </div>
+</form></dialog>
+
 <dialog id="dlgDelete"><div class="dlg">
   <h2>Slet batch</h2>
   <p id="delText"></p>
@@ -913,15 +934,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const list = [...S.batches].sort((a,b) => b.no - a.no);
     const rows = list.map(b => {
       const p = prod(b.pid); const st = batchState(b);
-      const confirming = pendingRow && pendingRow.type==='batch' && pendingRow.id===b.no;
       let actions = '';
-      if (confirming) actions = `<span class="small">Kassér ${esc(bl(b))}?</span><button class="btn small danger" type="button" data-discard="${b.no}">Ja, kassér</button><button class="btn small" type="button" data-cancel>Fortryd</button>`;
-      else if (b.status === 'aktiv' && b.packed && b.rackbeat) actions = `<span class="muted small">På lager i Rackbeat</span>`;
+      if (b.status === 'aktiv' && b.packed && b.rackbeat) actions = `<span class="muted small">På lager i Rackbeat</span>`;
       else if (b.status === 'aktiv' && b.packed) actions = `<button class="btn small ghost" type="button" data-unpack="${b.no}">Fortryd pakket</button>`;
       else if (b.status === 'aktiv') actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}${batchSteps(b).filter(x => x.state === 'due').map(x => `<button class="btn small" type="button" data-step="${b.no}|${x.st.key}">${esc(x.st.doneText)}</button>`).join('')}${ready(b) <= TODAY ? `<button class="btn small primary" type="button" data-pack="${b.no}">Marker som pakket</button>` : ''}<button class="btn small danger" type="button" data-ask-discard="${b.no}">Marker som fejlet</button>`;
       else if (b.status === 'planlagt') actions = `<button class="btn small" type="button" data-made="${b.no}">Registrér batch</button>`;
       else actions = `${flakesOpen(b) ? `<button class="btn small" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button>` : ''}<button class="btn small" type="button" data-restore="${b.no}">Gendan</button>`;
-      if (!confirming) actions += `<span class="edit-btns"><button class="btn small" type="button" data-edit="${b.no}">Rediger</button><button class="btn small danger" type="button" data-del="${b.no}">Slet</button></span>`;
+      actions += `<span class="edit-btns"><button class="btn small" type="button" data-edit="${b.no}">Rediger</button><button class="btn small danger" type="button" data-del="${b.no}">Slet</button></span>`;
       return `<tr class="${b.status==='kasseret'?'dead':''}">
         <td class="num"><strong>${esc(bl(b))}</strong></td><td>${esc(p?p.name:b.pid)}</td><td>${esc(b.by || '–')}</td><td class="n">${b.qty}</td><td class="n">${rejCell(b)}</td>
         <td class="num">${esc(fmt(b.made))}${b.status==='planlagt'?' <span class="muted small">(start)</span>':''}</td>
@@ -1410,14 +1429,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:b.pid)}</dd><dt>Antal lavet</dt><dd class="num">${b.qty} stk.</dd>
       ${b.status === 'aktiv' ? `<dt><label for="dRej">Kasserede</label></dt><dd>${canEditRej(b) ? `<input id="dRej" class="d-rej" type="number" min="0" max="${b.qty}" step="1" inputmode="numeric" value="${b.rejected || 0}"> stk.` : `${b.rejected || 0} stk.`}</dd><dt>Godkendt</dt><dd class="num"><strong id="dNet">${net(b)} stk.</strong></dd>` : ''}
       <dt>Oprettet af</dt><dd>${esc(b.by || '–')}</dd>${b.madeBy ? `<dt>Lavet af</dt><dd>${esc(b.madeBy)}</dd>` : ''}
-      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}${b.rackbeat ? `<dt>Rackbeat</dt><dd>${esc(b.rackbeat.antal)} stk. lagt på Hovedlager ${esc(fmtW(b.rackbeat.dato))}${b.rackbeat.id != null ? ` (regulering ${esc(b.rackbeat.id)})` : ''}. Skal det rettes, så gør det i Rackbeat.</dd>` : ''}</dl>
+      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(b.discardReason.kategori)}${b.discardReason.tekst ? ': ' + esc(b.discardReason.tekst) : ''}</dd>` : ''}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}${b.rackbeat ? `<dt>Rackbeat</dt><dd>${esc(b.rackbeat.antal)} stk. lagt på Hovedlager ${esc(fmtW(b.rackbeat.dato))}${b.rackbeat.id != null ? ` (regulering ${esc(b.rackbeat.id)})` : ''}. Skal det rettes, så gør det i Rackbeat.</dd>` : ''}</dl>
       <div class="dlg-actions">${actions}<button class="btn" type="button" id="dClose">Luk</button></div>`;
     document.getElementById('dClose').onclick = () => dlgD.close();
     const dis = document.getElementById('dDiscard');
-    if (dis) dis.onclick = () => {
-      if (dis.dataset.armed){ b.status = 'kasseret'; b.rejectedOn = TODAY; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} kasseret`); return; }
-      dis.dataset.armed = '1'; dis.textContent = `Bekræft: kassér ${b.qty} stk.`;
-    };
+    if (dis) dis.onclick = () => { dlgD.close(); openDiscard(b); };
     const ed = document.getElementById('dEdit'); if (ed) ed.onclick = () => { dlgD.close(); openEdit(b); };
     const dl = document.getElementById('dDelete'); if (dl) dl.onclick = () => { dlgD.close(); askDelete(b); };
     const mk = document.getElementById('dMade'); if (mk) mk.onclick = () => { dlgD.close(); openBatchFromPlanned(b); };
@@ -1428,7 +1444,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }
     const pk = document.getElementById('dPack'); if (pk) pk.onclick = () => { if (dr) b.rejected = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); save(); packBatch(b); };
     const up = document.getElementById('dUnpack'); if (up) up.onclick = () => { b.packed = false; delete b.packedOn; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} er ikke længere pakket`); };
-    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} gendannet`); };
+    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; delete b.discardReason; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} gendannet`); };
     dlgD.showModal();
   }
 
@@ -1451,6 +1467,37 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     ['eProd', 'eQty', 'eDate', 'eCure'].forEach(id => { document.getElementById(id).disabled = !!b.rackbeat; });
     dlgE.showModal();
   }
+  // Kassation kræver en årsag (kategori, eller tekst ved "Andet"), så der senere kan laves statistik
+  const dlgDisc = document.getElementById('dlgDiscard'), discCat = document.getElementById('discCat');
+  let discTarget = null;
+  discCat.addEventListener('change', () => {
+    document.getElementById('discOtherWrap').hidden = discCat.value !== 'Andet';
+    if (discCat.value === 'Andet') document.getElementById('discOther').focus();
+  });
+  function openDiscard(b){
+    discTarget = b;
+    document.getElementById('discInfo').textContent = `Batch ${bl(b)} ${(prod(b.pid) || {}).name || ''} · ${b.qty} stk.`;
+    discCat.value = ''; document.getElementById('discOther').value = ''; document.getElementById('discNote').value = '';
+    document.getElementById('discOtherWrap').hidden = true; document.getElementById('discErr').hidden = true;
+    document.querySelectorAll('#formDiscard .bad').forEach(x => x.classList.remove('bad'));
+    dlgDisc.showModal();
+  }
+  document.getElementById('formDiscard').addEventListener('submit', e => {
+    e.preventDefault();
+    const b = discTarget; if (!b) return;
+    const err = document.getElementById('discErr');
+    document.querySelectorAll('#formDiscard .bad').forEach(x => x.classList.remove('bad'));
+    const fail = (msg, el) => { err.textContent = msg; err.hidden = false; el.classList.add('bad'); el.focus(); };
+    const kategori = discCat.value, andet = document.getElementById('discOther').value.trim();
+    if (!kategori) return fail('Vælg en årsag til, at batchen kasseres.', discCat);
+    if (kategori === 'Andet' && !andet) return fail('Skriv årsagen i feltet, når du vælger Andet.', document.getElementById('discOther'));
+    const note = document.getElementById('discNote').value.trim();
+    b.discardReason = {kategori, tekst: kategori === 'Andet' ? andet : note, on: TODAY};
+    if (kategori === 'Andet' && note) b.discardReason.note = note;
+    b.status = 'kasseret'; b.rejectedOn = TODAY;
+    discTarget = null; save(); dlgDisc.close(); renderAll(); toast(`Batch ${bl(b)} kasseret`);
+  });
+
   // Sletning spørger altid først. Selve sletningen sker først ved "Ja, slet batchen".
   const dlgDel = document.getElementById('dlgDelete');
   let delTarget = null;
@@ -1581,9 +1628,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.unstep){ const [no, key] = ds.unstep.split('|'); const b = S.batches.find(x => x.no === Number(no)); if (b && STEP_DEFS[key]){ if (dlgD.open) dlgD.close(); setStep(b, key, false); } return; }
     if (ds.pack){ const b = S.batches.find(x => x.no === Number(ds.pack)); if (b) packBatch(b); return; }
     if (ds.unpack){ const b = S.batches.find(x => x.no === Number(ds.unpack)); if (b && !b.rackbeat){ b.packed = false; delete b.packedOn; save(); renderAll(); toast(`Batch ${bl(b)} er ikke længere pakket`);} return; }
-    if (ds.askDiscard){ pendingRow = {type:'batch', id:Number(ds.askDiscard)}; renderBatches(); return; }
-    if (ds.discard){ const b = S.batches.find(x => x.no === Number(ds.discard)); if (b){ b.status='kasseret'; b.rejectedOn = TODAY; pendingRow=null; save(); renderAll(); toast(`Batch ${bl(b)} kasseret`);} return; }
-    if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; save(); renderAll(); toast(`Batch ${bl(b)} gendannet`);} return; }
+    if (ds.askDiscard){ const b = S.batches.find(x => x.no === Number(ds.askDiscard)); if (b) openDiscard(b); return; }
+    if (ds.restore){ const b = S.batches.find(x => x.no === Number(ds.restore)); if (b){ b.status='aktiv'; delete b.discardReason; save(); renderAll(); toast(`Batch ${bl(b)} gendannet`);} return; }
     if (ds.made){ const b = S.batches.find(x => x.no === Number(ds.made)); if (b) openBatchFromPlanned(b); return; }
     if (ds.del){ const b = S.batches.find(x => x.no === Number(ds.del)); if (b) askDelete(b); return; }
     if (ds.edit){ const b = S.batches.find(x => x.no === Number(ds.edit)); if (b) openEdit(b); return; }
