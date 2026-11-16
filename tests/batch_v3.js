@@ -148,6 +148,20 @@ const server = http.createServer((req, res) => {
   await p.click('#formDiscard button[type=submit]');
   check('kassér: fast kategori gemmes uden tekst', (await batch1()).discardReason?.kategori === 'Vejer for lidt');
 
+  // Produktrækkefølge og rækkefarver i ugekalenderen
+  await p.reload();
+  const navne = () => p.$$eval('.wk-prod .wk-name strong', e => e.map(x => x.textContent));
+  const foerNavne = await navne();
+  await p.evaluate(() => document.querySelector('[data-move$="|1"]:not([disabled])').click());
+  const efterNavne = await navne();
+  check('flyt produkt ned bytter de to første', efterNavne[0] === foerNavne[1] && efterNavne[1] === foerNavne[0], efterNavne.slice(0, 2).join());
+  await p.reload();
+  check('rækkefølgen huskes efter genindlæsning', (await navne())[0] === foerNavne[1]);
+  check('første række er hvid, anden har farve', await p.$$eval('.wk-prod', r => !r[0].classList.contains('alt') && r[1].classList.contains('alt')));
+  const skift = await p.$$eval('.wk-prod', (r, ) => r.map(x => x.classList.contains('typeskift')));
+  const typer = await p.evaluate(k => { const S = JSON.parse(localStorage.getItem(k)); return S.products.filter(x => !x.archived).map(x => x.type); }, KEY);
+  check('dobbelt linje præcis hvor kategorien skifter', skift.every((v, i) => v === (i < typer.length - 1 && typer[i] !== typer[i + 1])), JSON.stringify({ skift, typer }));
+
   // Ugevisningen starter i ugen før den nuværende, og den nuværende er markeret
   await p.reload();
   const uger = await p.evaluate(() => [...document.querySelectorAll('#weekGrid .wk-h, .wk-h')].map(e => ({ nu: e.classList.contains('now'), tekst: e.textContent })));

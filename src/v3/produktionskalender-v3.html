@@ -151,7 +151,12 @@ button{cursor:pointer}
 .wk-day.now{color:var(--ink);font-weight:700}
 .wk-count .seg{min-width:15rem}
 .wk-corner{padding:7px 8px;font-size:.74rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.wk-prod{padding-block:8px;border-bottom:3px solid var(--ink)}   /* fed linje mellem produkterne */
+.wk-prod{padding-block:8px;border-bottom:1.5px solid var(--ink)}   /* linje mellem produkterne */
+.wk-prod.alt{background:var(--row-alt)}   /* hver anden række: støvet lyseblå, første er hvid */
+.wk-prod.typeskift{border-bottom-width:3px}   /* dobbelt så tyk, når produktkategorien skifter */
+:root{--row-alt:#e4ecf3}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--row-alt:#27323c} }
+:root[data-theme="dark"]{--row-alt:#27323c}
 .wk-name{grid-column:1;padding-right:8px;min-width:0}
 .wk-name strong{display:block;font-weight:700;line-height:1.25}
 .wk-name small{color:var(--muted)}
@@ -227,6 +232,10 @@ button{cursor:pointer}
 .rb-head > div{min-width:0}
 .rb-sync{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .rb-list{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;font-size:.92rem;max-width:72ch}
+.pname{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mv{display:flex;flex-direction:column;gap:2px}
+.mv-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;font-size:.6rem;line-height:1;padding:3px 7px;cursor:pointer}
+.mv-btn:disabled{opacity:.3;cursor:default}
 .sku{display:block;font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* tables */
@@ -891,8 +900,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       const x = analyze(p);
       const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
       const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
+      const pos = activeProducts().indexOf(p), sidst = activeProducts().length - 1;
       return `<tr>
-        <td><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></td>
+        <td><div class="pname"><span><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></span>
+          <span class="mv"><button type="button" class="mv-btn" data-move="${p.id}|-1" aria-label="Flyt ${esc(p.name)} op"${pos === 0 ? ' disabled' : ''}>▲</button><button type="button" class="mv-btn" data-move="${p.id}|1" aria-label="Flyt ${esc(p.name)} ned"${pos === sidst ? ' disabled' : ''}>▼</button></span></div></td>
         <td class="n">${lagerCell(p)}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
@@ -1059,7 +1070,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       }
       html += `</div>`;
     }
-    for (const p of weekProducts()){
+    const visning = weekProducts();
+    for (const [pi, p] of visning.entries()){
       const bs = S.batches.filter(b => b.pid === p.id && b.made <= end && ready(b) >= weekStart)
         .sort((a,b) => a.made.localeCompare(b.made));
       const rs = S.res.filter(r => r.pid === p.id && r.date >= weekStart && r.date <= end);
@@ -1109,7 +1121,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         const v = proj(p, we);
         inner += `<div class="wk-stock${v < p.min ? ' low' : ''}" style="grid-column:${2+w*7} / span 7;grid-row:${row}" title="Forventet lager ${esc(fmt(we))}">≈ ${Math.max(0,v)} stk.</div>`;
       }
-      html += `<div class="wk-prod">${inner}</div>`;
+      const skift = visning[pi + 1] && visning[pi + 1].type !== p.type;
+      html += `<div class="wk-prod${pi % 2 ? ' alt' : ''}${skift ? ' typeskift' : ''}">${inner}</div>`;
     }
     if (!weekProducts().length) html += `<p class="hint" style="padding:12px 0">Ingen produkter kræver handling lige nu.</p>`;
     const wk = document.getElementById('wk');
@@ -1619,6 +1632,14 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (ds.plan){ if (ds.mode === 'plan') openBatch(ds.plan, ds.latest, true); else openRegister(ds.plan, ds.latest); return; }
     if (ds.batch){ openDetail(Number(ds.batch)); return; }
     if (ds.res){ openResDetail(ds.res); return; }
+    if (ds.move){
+      // Rækkefølgen er rækkefølgen i listen. Flyt produktet forbi det nærmeste aktive produkt.
+      const [id, dir] = ds.move.split('|'), akt = activeProducts(), i = akt.findIndex(x => x.id === id), j = i + Number(dir);
+      if (i < 0 || j < 0 || j >= akt.length) return;
+      const a = S.products.indexOf(akt[i]), b2 = S.products.indexOf(akt[j]);
+      [S.products[a], S.products[b2]] = [S.products[b2], S.products[a]];
+      save(); renderAll(); return;
+    }
     if (ds.askArchive){ pendingProd = ds.askArchive; renderProducts(); return; }
     if ('cancelProd' in ds){ pendingProd = null; renderProducts(); return; }
     if (ds.archive){ const p = prod(ds.archive); if (p){ if (activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); pendingProd = null; renderProducts(); return; } p.archived = true; pendingProd = null; save(); renderAll(); toast(`${p.name} er arkiveret`);} return; }
