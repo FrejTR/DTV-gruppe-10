@@ -253,6 +253,8 @@ const server = http.createServer((req, res) => {
   // Produkter og minimum: alle kolonner kan ses uden at scrolle sidelæns ved 1280 px (overskrifter ombrydes)
   const bredde = await p.evaluate(() => { document.getElementById('sec-produkter').open = true; const t = document.getElementById('prodTbl'); return { tabel: t.scrollWidth, plads: t.parentElement.clientWidth }; });
   check('produkttabellen passer i bredden ved 1280 px', bredde.tabel <= bredde.plads, JSON.stringify(bredde));
+  const bBredde = await p.evaluate(() => { document.getElementById('sec-batches').open = true; const t = document.getElementById('batchTbl'); return { tabel: t.scrollWidth, plads: t.parentElement.clientWidth, raekker: t.tBodies[0].rows.length }; });
+  check('batchtabellen passer i bredden ved 1280 px', bBredde.tabel <= bBredde.plads && bBredde.raekker > 3, JSON.stringify(bBredde));
 
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
