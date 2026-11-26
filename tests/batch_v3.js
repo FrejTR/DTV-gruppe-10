@@ -250,6 +250,10 @@ const server = http.createServer((req, res) => {
   const nyP = (await state()).products.find(x => x.name === 'Test sæbe uden kanter');
   check('nyt produkt: oprettes uden kanter', nyP && nyP.kanter === false && !(await findes(`#ps-trim-${nyP.id}`)), JSON.stringify(nyP));
 
+  // Produkter og minimum: alle kolonner kan ses uden at scrolle sidelæns ved 1280 px (overskrifter ombrydes)
+  const bredde = await p.evaluate(() => { document.getElementById('sec-produkter').open = true; const t = document.getElementById('prodTbl'); return { tabel: t.scrollWidth, plads: t.parentElement.clientWidth }; });
+  check('produkttabellen passer i bredden ved 1280 px', bredde.tabel <= bredde.plads, JSON.stringify(bredde));
+
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
   process.exit(failed ? 1 : 0);
