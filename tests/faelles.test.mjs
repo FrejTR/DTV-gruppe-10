@@ -120,6 +120,28 @@ test('data: gemmer, opdaterer og sletter, og sender alle data tilbage', async ()
     'lager og salgstempo fra Rackbeat deles ikke');
 });
 
+test('data: et ubrugt produkt kan slettes, men ikke et produkt med batches, bestillinger eller pakninger', async () => {
+  const { deps } = await opsaet();
+  const P = id => ({ id, name: id, sku: id.toUpperCase().slice(0, 6), type: 'Andet', min: 0, batch: 10, cure: 1, steps: [] });
+  await medData(deps, {
+    ...TRE_BATCHES,
+    produkter: { gem: [P('havtorn-saebe'), P('ny-vare'), P('bestilt'), P('pakket')] },
+    reservationer: { gem: [{ id: 'r1-0', pid: 'bestilt', qty: 5, date: '2026-12-01' }] },
+  });
+  await medData(deps, { batches: { gem: [B(7, '7', '2026-10-01', 10, { pid: 'pakket' })] } });
+  await pak({ request: anmodning('/api/pak', { ref: 'pak-cccccccc', pid: 'pakket', sku: 'PAKKET', antal: 3, kasseret: 3 }), env: ENV }, deps);
+  // Sletningen af batch 3 og produktet i samme kald: produktet har stadig batch 1 og 2
+  let d = await medData(deps, { produkter: { slet: ['ny-vare', 'havtorn-saebe', 'bestilt', 'pakket'] }, batches: { slet: [3] } });
+  assert.deepEqual(d.produkter.map(p => p.id).sort(), ['bestilt', 'havtorn-saebe', 'pakket'], 'kun det ubrugte produkt er slettet');
+  // Er bestillingen slettet i samme kald, må produktet slettes
+  d = await medData(deps, { produkter: { slet: ['bestilt'] }, reservationer: { slet: ['r1-0'] } });
+  assert.ok(!d.produkter.some(p => p.id === 'bestilt'));
+  // En ny batch i samme kald forhindrer sletningen
+  d = await medData(deps, { produkter: { gem: [P('ny-vare')] } });
+  d = await medData(deps, { produkter: { slet: ['ny-vare'] }, batches: { gem: [B(8, '8', '2026-11-01', 10, { pid: 'ny-vare' })] } });
+  assert.ok(d.produkter.some(p => p.id === 'ny-vare'));
+});
+
 test('data: kald fra en anden side eller uden JSON afvises (CSRF)', async () => {
   const { deps } = await opsaet();
   for (const opt of [{ origin: 'https://ond.example.com' }, { origin: null }, { type: 'text/plain' }]) {
@@ -315,12 +337,28 @@ test('pak: uden Rackbeat-nøgle reserveres intet', async () => {
   assert.deepEqual((await lager(deps)).pakninger, []);
 });
 
-test('data: en batch, der er pakket fra, kan ikke slettes', async () => {
-  const { deps } = await opsaet();
+test('data: en batch, der er pakket fra, kan slettes, og pakningerne fra den slettes med. Rackbeat røres ikke', async () => {
+  const { rb, deps } = await opsaet();
   await medData(deps);
-  await pak({ request: anmodning('/api/pak', PAK(10)), env: ENV }, deps);
+  await pak({ request: anmodning('/api/pak', PAK(50)), env: ENV }, deps);   // 40 fra #1 og 10 fra #2
+  const kaldFoer = rb.kald.length;
+  let d = await medData(deps, { batches: { slet: [1] } });
+  assert.deepEqual(d.batches.map(b => b.no), [2, 3]);
+  assert.deepEqual(d.pakninger.map(k => k.linjer.map(l => [l.batch, l.antal])), [[[2, 10]]], 'kun linjen fra #2 er tilbage');
+  d = await medData(deps, { batches: { slet: [2] } });
+  assert.deepEqual(d.pakninger, [], 'en pakning uden linjer slettes');
+  assert.equal(rb.kald.length, kaldFoer, 'intet sendt til Rackbeat');
+  assert.equal(rb.beholdning.HAT003, 74, 'lageret i Rackbeat er urørt');
+});
+
+test('data: en batch med en pakning, der venter på Rackbeat, slettes ikke', async () => {
+  const { deps } = await opsaet({ fejlFra: 5 });   // Bogføringen fejler, og Rackbeat svarer ikke bagefter
+  await medData(deps);
+  const svar = await pak({ request: anmodning('/api/pak', PAK(10)), env: ENV }, deps);
+  assert.equal((await krop(svar)).pakning, 'venter');
   const d = await medData(deps, { batches: { slet: [1, 3] } });
   assert.deepEqual(d.batches.map(b => b.no), [1, 2]);
+  assert.equal(d.pakninger[0].status, 'reserveret');
 });
 
 test('ruter: /api/data har GET og POST, /api/pak kun POST', () => {

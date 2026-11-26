@@ -834,7 +834,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   let month = TODAY.slice(0,7);
   let showAllAlerts = false;
   let pendingRow = null;
-  let pendingProd = null; // {type,id}
+  let pendingProd = null; // 'arkiv:<id>' eller 'slet:<id>', mens der spørges
 
   function toast(msg){
     const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.setAttribute('role','status');
@@ -958,10 +958,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     ? `<span id="lager-${p.id}">${esc(p.count)}</span><div class="muted small">Rackbeat, ${esc(tidspunkt(p.lagerHentet))}</div>`
     : `<span id="lager-${p.id}" class="muted">–</span><div class="muted small">Ikke hentet</div>`;
 
+  // Et produkt kan kun slettes, når intet hører til det. Ellers arkiveres det.
+  const brugAf = id => ({batches: S.batches.filter(b => b.pid === id).length, res: S.res.filter(r => r.pid === id).length,
+    pakninger: S.pakninger.filter(k => k.pid === id).length});
+  function prodHandlinger(p){
+    const fortryd = `<button class="btn small" type="button" data-cancel-prod>Fortryd</button>`;
+    if (pendingProd === 'arkiv:' + p.id) return `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button>${fortryd}</div>`;
+    if (pendingProd === 'slet:' + p.id) return `<div class="row-actions"><span class="small">Slet ${esc(p.name)} helt?</span><button class="btn small danger" type="button" data-delprod="${p.id}">Ja, slet</button>${fortryd}</div>`;
+    const forst = p.archived ? `<button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`;
+    return `<div class="row-actions">${forst}<button class="btn small ghost danger" type="button" data-ask-delprod="${p.id}">Slet</button></div>`;
+  }
+
   function renderProducts(){
     const list =[...activeProducts(), ...S.products.filter(p => p.archived)];
     const rows = list.map(p => {
-      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="9" class="muted">Arkiveret · vises ikke i kalenderen</td><td><button class="btn small" type="button" data-unarchive="${p.id}">Gendan</button></td></tr>`;
+      if (p.archived) return `<tr class="dead"><td><strong>${esc(p.name)}</strong>${p.sku ? `<span class="sku">${esc(p.sku)}</span>` : ''}</td><td colspan="9" class="muted">Arkiveret · vises ikke i kalenderen</td><td>${prodHandlinger(p)}</td></tr>`;
       const x = analyze(p);
       const risk = x.status === 'akut' ? '<span class="risk akut">Under minimum</span>' : x.status === 'plan' ? '<span class="risk plan">Start snart</span>' : '<span class="risk ok">OK</span>';
       const latest = x.status === 'akut' ? 'Nu' : x.latest ? (x.latest < TODAY ? 'Nu' : fmt(x.latest)) : '–';
@@ -978,7 +989,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td>${risk}</td>
         <td class="num">${esc(latest)}</td>
         <td>${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep">${esc(st.name)} efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
-        <td>${pendingProd === p.id ? `<div class="row-actions"><button class="btn small danger" type="button" data-archive="${p.id}">Ja, arkivér</button><button class="btn small" type="button" data-cancel-prod>Fortryd</button></div>` : `<button class="btn small ghost" type="button" data-ask-archive="${p.id}">Arkivér</button>`}</td>
+        <td>${prodHandlinger(p)}</td>
       </tr>`;
     }).join('');
     document.getElementById('prodTbl').innerHTML = `<thead><tr><th>Produkt</th><th class="n">Lager i Rackbeat<span class="src">Rackbeat</span></th><th class="n">Produktionslager<span class="src">Hærder + klar</span></th><th class="n">Minimum<span class="src">Mod produktionslager</span></th><th class="n">Salg/uge<span class="src">Rackbeat</span></th><th class="n">Dage før pakning</th><th class="n">Typisk batch</th><th>Status</th><th>Start senest</th><th>Trin undervejs</th><th></th></tr></thead><tbody>${rows}</tbody>`;
@@ -1584,20 +1595,24 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   let delTarget = null;
   function askDelete(b){
     delTarget = b;
-    // Er der pakket fra batchen, hører pakningerne til den, så den kan ikke slettes (databasen afviser det også)
-    const laast = pakketFra(b) > 0;
-    document.getElementById('delYes').hidden = laast;
-    document.getElementById('delText').textContent = laast
-      ? `Batch ${bl(b)} kan ikke slettes, fordi der er pakket ${pakketFra(b)} stk. fra den. Er antallet forkert, så ret det i Rackbeat.`
+    // En batch, der er pakket fra, kan slettes (fx testdata). Pakningerne fra den slettes med, men lageret i Rackbeat røres ikke.
+    // Venter en pakning på Rackbeat, må batchen vente, til den er færdig (databasen afviser det også).
+    const venter = pakningerFor(b).some(k => k.status === 'reserveret');
+    document.getElementById('delYes').hidden = venter;
+    document.getElementById('delText').textContent = venter
+      ? `Batch ${bl(b)} kan ikke slettes lige nu, fordi en pakning fra den venter på Rackbeat. Prøv igen, når den er færdig.`
       : `Er du sikker på, at du vil slette batch ${bl(b)} (${(prod(b.pid) || {}).name || b.pid}, ${b.qty} stk.)? Det kan ikke fortrydes.` +
+        (pakketFra(b) ? ` Der er pakket ${pakketFra(b)} stk. fra den. Pakningerne slettes også i kalenderen, men det, der er lagt på lager i Rackbeat, bliver liggende og skal rettes i Rackbeat, hvis det er forkert.` : '') +
         (b.rackbeat ? ' Batchen er lagt på lager i Rackbeat. Lageret dér rettes ikke og skal rettes i Rackbeat.' : '');
     dlgDel.showModal();
   }
   document.getElementById('delNo').addEventListener('click', () => { delTarget = null; dlgDel.close(); });
   document.getElementById('delYes').addEventListener('click', () => {
-    const b = delTarget; if (!b || pakketFra(b) > 0) return;
+    const b = delTarget; if (!b || pakningerFor(b).some(k => k.status === 'reserveret')) return;
     const navn = bl(b);
     S.batches = S.batches.filter(x => x !== b);
+    // Vises straks som i databasen: batchens linjer fjernes fra pakningerne, og tomme pakninger forsvinder
+    S.pakninger = S.pakninger.map(k => ({...k, linjer: k.linjer.filter(l => l.batch !== b.no)})).filter(k => k.linjer.length);
     delTarget = null; save(); dlgDel.close(); renderAll(); toast(`Batch ${navn} er slettet`);
   });
   document.getElementById('eProd').addEventListener('change', ev => {
@@ -1768,7 +1783,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       [S.products[a], S.products[b2]] = [S.products[b2], S.products[a]];
       save(); renderAll(); return;
     }
-    if (ds.askArchive){ pendingProd = ds.askArchive; renderProducts(); return; }
+    if (ds.askArchive){ pendingProd = 'arkiv:' + ds.askArchive; renderProducts(); return; }
+    if (ds.askDelprod){
+      const p = prod(ds.askDelprod); if (!p) return;
+      const u = brugAf(p.id), dele = [u.batches && `${u.batches} batch${u.batches === 1 ? '' : 'es'}`, u.res && `${u.res} bestilling${u.res === 1 ? '' : 'er'}`, u.pakninger && `${u.pakninger} pakning${u.pakninger === 1 ? '' : 'er'}`].filter(Boolean);
+      if (dele.length){ toast(`${p.name} kan ikke slettes, fordi der er ${dele.join(' og ')}. Arkivér det i stedet.`); return; }
+      if (!p.archived && activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); return; }
+      pendingProd = 'slet:' + p.id; renderProducts(); return;
+    }
+    if (ds.delprod){
+      const p = prod(ds.delprod); pendingProd = null;
+      const u = p && brugAf(p.id);
+      if (p && !u.batches && !u.res && !u.pakninger){ S.products = S.products.filter(x => x !== p); save(); renderAll(); toast(`${p.name} er slettet`); }
+      else renderProducts();
+      return;
+    }
     if ('cancelProd' in ds){ pendingProd = null; renderProducts(); return; }
     if (ds.archive){ const p = prod(ds.archive); if (p){ if (activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); pendingProd = null; renderProducts(); return; } p.archived = true; pendingProd = null; save(); renderAll(); toast(`${p.name} er arkiveret`);} return; }
     if (ds.unarchive){ const p = prod(ds.unarchive); if (p){ p.archived = false; save(); renderAll(); toast(`${p.name} er gendannet`);} return; }
@@ -1889,7 +1918,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const ud = {};
     const bt = diff(nu.batches, s.batches); if (bt.gem.length || bt.slet.length) ud.batches = {gem: bt.gem, slet: bt.slet.map(Number)};
     const rs = diff(nu.res, s.res); if (rs.gem.length || rs.slet.length) ud.reservationer = rs;
-    const pr = diff(nu.prod, s.prod); if (pr.gem.length) ud.produkter = {gem: pr.gem};   // Produkter slettes ikke, de arkiveres
+    const pr = diff(nu.prod, s.prod); if (pr.gem.length || pr.slet.length) ud.produkter = pr;
     const nye = S.people.filter(n => !s.people.includes(n)); if (nye.length) ud.personer = {gem: nye};
     return Object.keys(ud).length ? ud : null;
   }
@@ -1909,7 +1938,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     S.batches = flet(nu.batches, ny.batches, s.batches);
     S.res = flet(nu.res, ny.res, s.res);
     // Produkter: kun de delte felter. Lager og salgstempo fra Rackbeat bliver på produktet.
-    for (const x of flet(nu.prod, ny.prod, s.prod)){
+    // Et produkt, der er slettet i en anden kalender (og ikke ændret her), fjernes også her.
+    const produkter = flet(nu.prod, ny.prod, s.prod);
+    const behold = new Set(produkter.map(x => x.id));
+    S.products = S.products.filter(p => behold.has(p.id));
+    for (const x of produkter){
       const p = prod(x.id);
       if (p) Object.assign(p, x); else S.products.push({rate: 0, count: 0, countDate: TODAY, steps: [], ...x});
     }

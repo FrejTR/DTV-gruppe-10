@@ -82,6 +82,20 @@ export async function hentData({ env }, deps = {}) {
   }
 }
 
+/** Et produkt, der har batches, bestillinger eller pakninger (i databasen eller i samme kald), slettes ikke.
+ *  Kalenderen tillader det ikke, men to kalendere kan ændre samtidig. */
+function brugteFjernet(aendringer, nu) {
+  const sletBatch = new Set(aendringer.batches.slet || []), sletRes = new Set(aendringer.reservationer.slet || []);
+  const brugt = new Set([
+    ...nu.batches.filter(b => !sletBatch.has(b.no)).map(b => b.pid),
+    ...nu.reservationer.filter(r => !sletRes.has(r.id)).map(r => r.pid),
+    ...nu.pakninger.map(k => k.pid),
+    ...(aendringer.batches.gem || []).map(b => b.pid),
+    ...(aendringer.reservationer.gem || []).map(r => r.pid),
+  ]);
+  return aendringer.produkter.slet.filter(id => !brugt.has(id));
+}
+
 /** POST /api/data: gemmer ændringer fra en kalender og sender alle data tilbage. */
 export async function gemData({ request, env }, deps = {}) {
   if (!fraKalenderen(request)) return json({ fejl: 'Ugyldigt kald', kode: 'ugyldigt_kald' }, 403);
@@ -89,6 +103,9 @@ export async function gemData({ request, env }, deps = {}) {
   if (!aendringer) return json({ fejl: 'Ugyldige data', kode: 'ugyldige_data' }, 400);
   try {
     const klient = db(env, deps);
+    if (aendringer.produkter.slet && aendringer.produkter.slet.length) {
+      aendringer.produkter.slet = brugteFjernet(aendringer, await klient.rpc('hent_data', {}));
+    }
     await klient.rpc('gem_data', aendringer);
     return dataSvar(await klient.rpc('hent_data', {}));
   } catch (e) {
