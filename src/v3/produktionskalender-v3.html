@@ -249,6 +249,12 @@ td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radiu
 .row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .edit-btns{display:flex;flex-direction:column;gap:6px}
 .hint{font-size:.88rem;color:var(--muted);margin:0;max-width:72ch}
+/* Bruger: den, der bruger kalenderen lige nu (til små ændringer i tabellerne) */
+.hvem-top{display:flex;align-items:center;gap:6px}
+.hvem-top label{font-size:.82rem;font-weight:700;color:var(--muted)}
+.hvem-top select,.hvem-top input{padding:6px 12px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);min-height:38px;max-width:12rem}
+.hvem-top.mangler select{border-color:var(--orange);color:var(--orange);font-weight:700}
+.field input[hidden]{display:none}
 /* historik */
 .hist-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
 .hist-filter .field{min-width:0}
@@ -258,7 +264,8 @@ td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radiu
 #histTbl .hist-hvad{min-width:16rem}
 #histTbl .hist-tekst{color:var(--muted);font-size:.88rem;margin-top:2px;max-width:70ch;overflow-wrap:anywhere}
 #histTbl .hist-enhed{white-space:nowrap;color:var(--muted);font-size:.85rem}
-#histTbl .hist-denne{display:block}
+#histTbl .hist-person{display:block;color:var(--ink);font-weight:700}
+#histTbl .hist-sted{display:block;font-size:.8rem}
 #histTbl details summary{cursor:pointer;font-size:.8rem;color:var(--muted);margin-top:4px}
 #histTbl pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;background:var(--sunk);padding:8px;border-radius:8px;margin:4px 0 0;max-width:70ch}
 .hist-kat{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
@@ -270,7 +277,8 @@ td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radiu
   #histTbl td{display:block;border:0;padding:2px 0}
   #histTbl .hist-hvad{min-width:0}
   #histTbl .hist-enhed{white-space:normal}
-  #histTbl .hist-denne{display:inline;margin-left:.4em}
+  #histTbl .hist-person,#histTbl .hist-sted{display:inline}
+  #histTbl .hist-sted::before{content:" · "}
   .hist-soeg{max-width:none}
 }
 
@@ -386,6 +394,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     </div>
     </div>
     <div class="actions">
+      <div class="hvem-top" id="hvemTopWrap" title="Navnet står i historikken ved ændringer, du laver direkte i tabellerne"><label for="hvemTop">Bruger</label><select id="hvemTop"></select><input id="hvemTopNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
       <button class="btn primary" id="btnNewBatch" type="button">+ Batch</button>
       <button class="btn" id="btnNewRes" type="button">+ Bestilling/event</button>
     </div>
@@ -488,7 +497,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
             <option value="bestilling">Bestillinger og events</option><option value="produkt">Produkter</option>
             <option value="person">Personer</option><option value="fejl">Fejl</option>
           </select></div>
-        <div class="field hist-soeg"><label for="histSoeg">Søg</label><input id="histSoeg" type="search" maxlength="80" placeholder="Fx K241106, Rosmarin, Mette" autocomplete="off"></div>
+        <div class="field hist-soeg"><label for="histSoeg">Søg</label><input id="histSoeg" type="search" maxlength="80" placeholder="Fx K241106, Rosmarin eller et navn" autocomplete="off"></div>
         <button class="btn small" id="histOpdater" type="button">Opdater</button>
       </div>
       <p class="muted small" id="histStatus" aria-live="polite"></p>
@@ -539,6 +548,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <div class="field"><label for="rWho">Kunde eller event</label><input id="rWho" type="text" placeholder="Fx Dansani eller Julemarked" required></div>
     <div class="field"><label for="rDate">Skal bruges den</label><input id="rDate" type="date" required></div>
   </div>
+  <div class="field"><label for="rBy">Oprettet af</label><select id="rBy" data-hvem></select><input id="rByNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
   <div class="lines-head lines-r" aria-hidden="true"><span>Produkt</span><span>Antal</span><span></span></div>
   <div class="lines" id="rLines"></div>
   <button class="btn small ghost add-line" type="button" id="rAdd">+ Tilføj produkt</button>
@@ -566,6 +576,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <div class="field"><label for="npBatch">Typisk batch (stk.)</label><input id="npBatch" type="number" min="1" step="1" inputmode="numeric" value="60"></div>
   </div>
   <p class="preview" id="npSteps"></p>
+  <div class="field"><label for="npWho">Oprettet af</label><select id="npWho" data-hvem></select><input id="npWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
   <p class="form-err" id="npErr" role="alert" hidden></p>
   <div class="dlg-actions">
     <button class="btn" type="button" data-close>Annullér</button>
@@ -606,6 +617,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     </select></div>
   <div class="field" id="discOtherWrap" hidden><label for="discOther">Skriv årsag</label><input id="discOther" type="text" autocomplete="off" placeholder="Fx formen revnede"></div>
   <div class="field" id="discNoteWrap"><label for="discNote">Note (valgfri)</label><input id="discNote" type="text" autocomplete="off" placeholder="Uddyb gerne"></div>
+  <div class="field"><label for="discWho">Kasseret af</label><select id="discWho" data-hvem></select><input id="discWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
   <p class="form-err" id="discErr" role="alert" hidden></p>
   <div class="dlg-actions">
     <button class="btn" type="button" data-close>Annullér</button>
@@ -616,11 +628,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 <dialog id="dlgDelete"><div class="dlg">
   <h2>Slet batch</h2>
   <p id="delText"></p>
+  <div id="delWhoWrap"><div class="field"><label for="delWho">Slettet af</label><select id="delWho" data-hvem></select><input id="delWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div></div>
+  <p class="form-err" id="delErr" role="alert" hidden></p>
   <div class="dlg-actions">
     <button class="btn" type="button" id="delNo">Fortryd</button>
     <button class="btn danger" type="button" id="delYes">Ja, slet batchen</button>
   </div>
 </div></dialog>
+
+<dialog id="dlgHvem"><form class="dlg" id="formHvem" method="dialog" novalidate>
+  <h2>Hvem er du?</h2>
+  <p class="muted">Vælg dit navn, så historikken viser, hvem der lavede ændringen. Navnet huskes på denne computer og kan skiftes øverst under Bruger.</p>
+  <div class="field"><label for="hvWho">Navn</label><select id="hvWho" data-hvem></select><input id="hvWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
+  <p class="form-err" id="hvErr" role="alert" hidden></p>
+  <div class="dlg-actions"><button class="btn" type="button" id="hvNo">Annullér</button><button class="btn primary" type="submit">Fortsæt</button></div>
+</form></dialog>
 
 <dialog id="dlgEdit"><form class="dlg" id="formEdit" method="dialog" novalidate>
   <h2>Ret batch</h2>
@@ -634,6 +656,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   </div>
   <div class="field-row">
     <div class="field"><label for="eCure">Dage før pakning</label><input id="eCure" type="number" min="1" step="1" inputmode="numeric"></div>
+    <div class="field"><label for="eWho">Rettet af</label><select id="eWho" data-hvem></select><input id="eWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
   </div>
   <p class="form-err" id="eErr" role="alert" hidden></p>
   <div class="dlg-actions">
@@ -1053,7 +1076,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
   function setRejected(b, raw){
     const v = Math.min(b.qty, Math.max(0, parseInt(raw, 10) || 0));
-    b.rejected = v; if (v > 0) b.rejectedOn = TODAY; save(); renderAll();
+    b.rejected = v; if (v > 0){ b.rejectedOn = TODAY; b.rejectedBy = nuvHvem(); } save(); renderAll();
     toast(v ? `Batch ${bl(b)}: ${v} kasseret, ${net(b)} godkendt` : `Batch ${bl(b)}: ingen kasserede`);
   }
 
@@ -1108,10 +1131,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       const actions = confirming
         ? `<span class="small">Slet?</span><button class="btn small danger" type="button" data-delres="${r.id}">Ja, slet</button><button class="btn small" type="button" data-cancel>Fortryd</button>`
         : `<button class="btn small ghost" type="button" data-ask-delres="${r.id}">Slet</button>`;
-      return `<tr${r.date < TODAY ? ' class="dead"' : ''}><td class="num">${esc(fmt(r.date))}</td><td>${r.kind==='event'?'Event':'Forudbestilling'}</td><td>${esc(r.who)}</td><td>${esc(p?p.name:r.pid)}</td><td class="n">${r.qty}</td><td><div class="row-actions">${actions}</div></td></tr>`;
+      return `<tr${r.date < TODAY ? ' class="dead"' : ''}><td class="num">${esc(fmt(r.date))}</td><td>${r.kind==='event'?'Event':'Forudbestilling'}</td><td>${esc(r.who)}</td><td>${esc(p?p.name:r.pid)}</td><td class="n">${r.qty}</td><td>${esc(r.by || '–')}</td><td><div class="row-actions">${actions}</div></td></tr>`;
     }).join('');
     document.getElementById('resTbl').innerHTML = list.length
-      ? `<thead><tr><th>Dato</th><th>Type</th><th>Kunde/event</th><th>Produkt</th><th class="n">Antal</th><th></th></tr></thead><tbody>${rows}</tbody>`
+      ? `<thead><tr><th>Dato</th><th>Type</th><th>Kunde/event</th><th>Produkt</th><th class="n">Antal</th><th>Oprettet af</th><th></th></tr></thead><tbody>${rows}</tbody>`
       : `<tbody><tr><td class="muted">Ingen bestillinger eller events endnu. Brug "+ Bestilling eller event" øverst.</td></tr></tbody>`;
   }
 
@@ -1282,7 +1305,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }).join('');
   }
 
-  function renderAll(){ renderStats(); renderTasks(); renderWeeks(); renderAlerts(); renderProdLager(); renderCalendar(); renderProducts(); renderBatches(); renderRes(); }
+  function renderAll(){ renderHvem(); renderStats(); renderTasks(); renderWeeks(); renderAlerts(); renderProdLager(); renderCalendar(); renderProducts(); renderBatches(); renderRes(); }
 
   // ---------- dialoger ----------
   const dlgB = document.getElementById('dlgBatch'), dlgR = document.getElementById('dlgRes'), dlgD = document.getElementById('dlgDetail');
@@ -1324,7 +1347,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     sel.innerHTML = S.people.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') + `<option value="__new">+ Nyt navn…</option>`;
     let last = null; try { last = localStorage.getItem('kystnaer-hvem'); } catch(e) {}
     sel.value = S.people.includes(prev) ? prev : (S.people.includes(last) ? last : (S.people[0] ?? '__new'));
-    sel.dispatchEvent(new Event('change'));   // Viser feltet til nyt navn, når der ikke er nogen personer endnu
+    sel.dispatchEvent(new Event('change', {bubbles: true}));   // Viser feltet til nyt navn, når der ikke er nogen personer endnu
     if (labelEl) labelEl.textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
   }
   const bWho = document.getElementById('bWho'), bWhoNew = document.getElementById('bWhoNew');
@@ -1409,6 +1432,63 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
   const pickWho = () => pickWhoFrom(bWho, bWhoNew);
 
+  // ---------- hvem: den ansvarlige person ----------
+  // Hver handling med en batch eller vare har et navn. Dialoger spørger (udfyldt med det sidst valgte navn).
+  // Små ændringer direkte i tabellerne bruger "Bruger" øverst. Er der ingen valgt, spørges der først.
+  // Navnet huskes i browseren og sendes med til serveren, som skriver det i historikken.
+  const HVEM_KEY = 'kystnaer-hvem';
+  function nuvHvem(){ let n = null; try { n = localStorage.getItem(HVEM_KEY); } catch(e) {} return n && S.people.includes(n) ? n : null; }
+  function saetHvem(n){ if (!S.people.includes(n)) S.people.push(n); try { localStorage.setItem(HVEM_KEY, n); } catch(e) {} renderHvem(); }
+  function fyldHvem(id){ const inp = document.getElementById(id + 'New'); inp.value = ''; inp.classList.remove('bad'); fillWho(document.getElementById(id), null); }
+  function laesHvem(id){ const n = pickWhoFrom(document.getElementById(id), document.getElementById(id + 'New')); if (n) saetHvem(n); return n; }
+  document.addEventListener('change', e => {
+    const sel = e.target; if (!sel.matches || !sel.matches('select[data-hvem]')) return;
+    const inp = document.getElementById(sel.id + 'New'); if (!inp) return;
+    inp.hidden = sel.value !== '__new'; if (!inp.hidden) inp.focus();
+  });
+  const hvemTop = document.getElementById('hvemTop'), hvemTopNew = document.getElementById('hvemTopNew');
+  function renderHvem(){
+    if (document.activeElement === hvemTopNew) return;
+    const n = nuvHvem();
+    hvemTop.innerHTML = (n ? '' : '<option value="">Vælg navn…</option>') + S.people.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('') + '<option value="__new">+ Nyt navn…</option>';
+    hvemTop.value = n || '';
+    hvemTopNew.hidden = true;
+    document.getElementById('hvemTopWrap').classList.toggle('mangler', !n);
+  }
+  hvemTop.addEventListener('change', () => {
+    if (hvemTop.value === '__new'){ hvemTopNew.hidden = false; hvemTopNew.value = ''; hvemTopNew.focus(); return; }
+    if (hvemTop.value){ saetHvem(hvemTop.value); toast(`Bruger: ${hvemTop.value}`); }
+  });
+  function nytTop(){
+    const n = hvemTopNew.value.trim(); hvemTopNew.value = ''; hvemTopNew.hidden = true;
+    if (!n){ renderHvem(); return; }
+    const ny = !S.people.includes(n); saetHvem(n); if (ny) save(); toast(`Bruger: ${n}`);
+  }
+  hvemTopNew.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); nytTop(); }
+    if (e.key === 'Escape'){ hvemTopNew.value = ''; nytTop(); }
+  });
+  hvemTopNew.addEventListener('blur', () => { if (!hvemTopNew.hidden) nytTop(); });
+
+  // Kør fn med en bruger valgt. Er ingen valgt, spørges der først. Annulleres der, kaldes fortryd (fx for at nulstille et felt).
+  const dlgHv = document.getElementById('dlgHvem');
+  let hvemVent = null;
+  function medHvem(fn, fortryd = renderAll){
+    if (nuvHvem()) return fn();
+    hvemVent = {fn, fortryd};
+    fyldHvem('hvWho'); document.getElementById('hvErr').hidden = true;
+    dlgHv.showModal();
+  }
+  document.getElementById('formHvem').addEventListener('submit', e => {
+    e.preventDefault();
+    const n = laesHvem('hvWho');
+    if (!n){ const er = document.getElementById('hvErr'); er.textContent = 'Vælg dit navn, eller skriv et nyt.'; er.hidden = false; document.getElementById('hvWhoNew').focus(); return; }
+    dlgHv.close(); const v = hvemVent; hvemVent = null; if (v) v.fn();
+  });
+  function hvemAnnuller(){ const v = hvemVent; hvemVent = null; if (dlgHv.open) dlgHv.close(); if (v && v.fortryd) v.fortryd(); }
+  document.getElementById('hvNo').addEventListener('click', hvemAnnuller);
+  dlgHv.addEventListener('cancel', e => { e.preventDefault(); hvemAnnuller(); });
+
   // Dialog: nyt produkt
   const dlgP = document.getElementById('dlgProd');
   const npType = document.getElementById('npType');
@@ -1421,7 +1501,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   npType.addEventListener('change', npTypeChanged);
   document.getElementById('batchAfsl').addEventListener('click', () => { visAfsluttede = !visAfsluttede; renderBatches(); });
   document.getElementById('btnNewProd').addEventListener('click', () => {
-    document.getElementById('formProd').reset(); npTypeChanged(); document.getElementById('npErr').hidden = true;
+    document.getElementById('formProd').reset(); npTypeChanged(); document.getElementById('npErr').hidden = true; fyldHvem('npWho');
     dlgP.showModal(); document.getElementById('npName').focus();
   });
   const slug = t => t.toLowerCase().replace(/æ/g,'ae').replace(/ø/g,'oe').replace(/å/g,'aa').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'produkt';
@@ -1432,6 +1512,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const num = id => Math.max(0, parseInt(document.getElementById(id).value, 10) || 0);
     if (!name){ err.textContent = 'Skriv et navn på produktet.'; err.hidden = false; document.getElementById('npName').focus(); return; }
     if (S.products.some(p => p.name.toLowerCase() === name.toLowerCase())){ err.textContent = `Der findes allerede et produkt med navnet ${name}.`; err.hidden = false; return; }
+    if (!laesHvem('npWho')){ err.textContent = 'Vælg hvem der opretter produktet.'; err.hidden = false; document.getElementById('npWhoNew').focus(); return; }
     let id = slug(name), k = 2; while (prod(id)) id = slug(name) + '-' + (k++);
     S.products.push({ id, name, sku: document.getElementById('npSku').value.trim(), type: npType.value,
       min: num('npMin'), rate: 0, cure: Math.max(1, num('npCure')), batch: Math.max(1, num('npBatch')),
@@ -1456,7 +1537,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     e.preventDefault();
     const who = pickWhoFrom(tWho, tWhoNew);
     if (!who){ const er = document.getElementById('tErr'); er.textContent = 'Skriv navnet på den, der har udført trinnet.'; er.hidden = false; tWhoNew.focus(); return; }
-    try { localStorage.setItem('kystnaer-hvem', who); } catch(e2) {}
+    saetHvem(who);
     dlgT.close(); if (stepTarget){ if (stepTarget.key === 'make') markMade(stepTarget.b, who); else if (stepTarget.key === 'flakes') setFlakes(stepTarget.b, who, document.getElementById('tRes').value === 'made'); else setStep(stepTarget.b, stepTarget.key, true, who); }
   });
 
@@ -1489,7 +1570,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       S.batches.push({no: nytNo(), label: l.label, by: who, pid: l.p.id, qty: l.qty, made: d, cure: l.cure, status});
     }
     convertFrom = null;
-    try { localStorage.setItem('kystnaer-hvem', who); } catch(e2) {}
+    saetHvem(who);
     save(); dlgB.close(); renderAll();
     const what = ls.length === 1 ? `Batch #${ls[0].label}` : `${ls.length} batches`;
     toast(status === 'planlagt' ? `${what} planlagt` : `${what} registreret`);
@@ -1516,6 +1597,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('rDate').value = add(TODAY, 14);
     document.getElementById('rkindOrd').checked = true;
     document.getElementById('rErr').hidden = true;
+    fyldHvem('rBy');
     dlgR.showModal();
   }
   document.getElementById('rAdd').addEventListener('click', () => {
@@ -1535,9 +1617,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (!d) return fail('Vælg en dato.', document.getElementById('rDate'));
     const ls = [...document.querySelectorAll('#rLines .line')].map(el => ({el, pid: el.querySelector('.l-prod').value, qty: parseInt(el.querySelector('.l-qty').value, 10)}));
     for (const l of ls) if (!l.qty || l.qty < 1) return fail('Skriv et antal på mindst 1 for hvert produkt.', l.el.querySelector('.l-qty'));
+    const by = laesHvem('rBy');
+    if (!by) return fail('Vælg hvem der opretter bestillingen.', document.getElementById('rByNew'));
     const kind = document.querySelector('input[name="rkind"]:checked').value;
     const group = 'g' + Date.now();
-    ls.forEach((l, i) => S.res.push({id: group + '-' + i, group, kind, who, pid: l.pid, qty: l.qty, date: d}));
+    ls.forEach((l, i) => S.res.push({id: group + '-' + i, group, kind, who, by, pid: l.pid, qty: l.qty, date: d}));
     save(); dlgR.close(); renderAll(); toast(ls.length === 1 ? 'Gemt i kalenderen' : `${ls.length} produkter gemt i kalenderen`);
   });
 
@@ -1577,10 +1661,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       <h2>Batch ${esc(bl(b))}</h2>
       <span class="chip st-${st.cls}" style="align-self:flex-start">${st.label}</span>
       <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:b.pid)}</dd><dt>Antal lavet</dt><dd class="num">${b.qty} stk.</dd>
-      ${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(aarsag(b.discardReason))}</dd>` : ''}
+      ${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(aarsag(b.discardReason))}${b.discardReason.by ? ` (kasseret af ${esc(b.discardReason.by)}${b.discardReason.on ? ' ' + esc(fmt(b.discardReason.on)) : ''})` : ''}</dd>` : ''}
       ${b.status === 'aktiv' ? `<dt><label for="dRej">Kasserede</label></dt><dd>${canEditRej(b) ? `<input id="dRej" class="d-rej" type="number" min="0" max="${b.qty}" step="1" inputmode="numeric" value="${b.rejected || 0}"> stk.` : `${b.rejected || 0} stk.`}</dd><dt>Godkendt</dt><dd class="num"><strong id="dNet">${net(b)} stk.</strong></dd>` : ''}
       <dt>Oprettet af</dt><dd>${esc(b.by || '–')}</dd>${b.madeBy ? `<dt>Lavet af</dt><dd>${esc(b.madeBy)}</dd>` : ''}
-      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(b.discardReason.kategori)}${b.discardReason.tekst ? ': ' + esc(b.discardReason.tekst) : ''}</dd>` : ''}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}${pakketFra(b) ? `<dt>Pakket</dt><dd>${pakketFra(b)} stk.${kasseretVedPak(b) ? `, heraf ${kasseretVedPak(b)} kasseret` : ''}. ${rest(b)} stk. tilbage på produktionslageret.</dd>` : ''}${b.rackbeat ? `<dt>Rackbeat</dt><dd>${esc(b.rackbeat.antal)} stk. lagt på Hovedlager ${esc(fmtW(b.rackbeat.dato))}${b.rackbeat.id != null ? ` (regulering ${esc(b.rackbeat.id)})` : ''}. Skal det rettes, så gør det i Rackbeat.</dd>` : ''}</dl>
+      <dt>${b.status==='planlagt'?'Planlagt start':'Lavet'}</dt><dd>${esc(fmtW(b.made))}</dd><dt>Dage før pakning</dt><dd class="num">${b.cure} dage</dd><dt>Forventet pakkedato</dt><dd>${esc(fmtW(ready(b)))}${b.status==='aktiv' && left>0 ? ` (om ${left} dage)` : ''}</dd>${stepDetailRows(b)}${flakesDetail(b)}${b.status === 'kasseret' && b.discardReason ? `<dt>Årsag til kassation</dt><dd>${esc(b.discardReason.kategori)}${b.discardReason.tekst ? ': ' + esc(b.discardReason.tekst) : ''}</dd>` : ''}${b.packed ? `<dt>Pakket</dt><dd>${esc(b.packedOn ? fmtW(b.packedOn) : 'Ja')}</dd>` : ''}${pakketFra(b) ? `<dt>Pakket</dt><dd>${pakketFra(b)} stk.${kasseretVedPak(b) ? `, heraf ${kasseretVedPak(b)} kasseret` : ''}. ${rest(b)} stk. tilbage på produktionslageret.${pakningerFor(b).map(k => { const l = k.linjer.find(x => x.batch === b.no); return `<br>${esc(fmt(k.dato))}: ${l.antal} stk.${l.kasseret ? ` (${l.kasseret} kasseret)` : ''}${k.af ? ` af ${esc(k.af)}` : ''}`; }).join('')}</dd>` : ''}${b.rejectedBy && b.rejected ? `<dt>Kasserede registreret af</dt><dd>${esc(b.rejectedBy)}${b.rejectedOn ? ' ' + esc(fmt(b.rejectedOn)) : ''}</dd>` : ''}${b.rettet ? `<dt>Sidst rettet</dt><dd>${esc(fmtW(b.rettet.on))} af ${esc(b.rettet.by)}</dd>` : ''}${b.rackbeat ? `<dt>Rackbeat</dt><dd>${esc(b.rackbeat.antal)} stk. lagt på Hovedlager ${esc(fmtW(b.rackbeat.dato))}${b.rackbeat.id != null ? ` (regulering ${esc(b.rackbeat.id)})` : ''}. Skal det rettes, så gør det i Rackbeat.</dd>` : ''}</dl>
       <div class="dlg-actions">${actions}<button class="btn" type="button" id="dClose">Luk</button></div>`;
     document.getElementById('dClose').onclick = () => dlgD.close();
     const dis = document.getElementById('dDiscard');
@@ -1591,10 +1675,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const dr = document.getElementById('dRej');
     if (dr){
       dr.addEventListener('input', () => { const v = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); document.getElementById('dNet').textContent = `${b.qty - v} stk.`; });
-      dr.addEventListener('change', () => { b.rejected = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); if (b.rejected > 0) b.rejectedOn = TODAY; save(); renderAll(); });
+      dr.addEventListener('change', () => medHvem(() => { b.rejected = Math.min(b.qty, Math.max(0, parseInt(dr.value, 10) || 0)); if (b.rejected > 0){ b.rejectedOn = TODAY; b.rejectedBy = nuvHvem(); } save(); renderAll(); }, () => { dr.value = b.rejected || 0; }));
     }
-    const up = document.getElementById('dUnpack'); if (up) up.onclick = () => { b.packed = false; delete b.packedOn; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} er ikke længere pakket`); };
-    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => { b.status='aktiv'; delete b.discardReason; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} gendannet`); };
+    const up = document.getElementById('dUnpack'); if (up) up.onclick = () => medHvem(() => { b.packed = false; delete b.packedOn; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} er ikke længere pakket`); });
+    const rs = document.getElementById('dRestore'); if (rs) rs.onclick = () => medHvem(() => { b.status='aktiv'; delete b.discardReason; save(); dlgD.close(); renderAll(); toast(`Batch ${bl(b)} gendannet`); });
     dlgD.showModal();
   }
 
@@ -1612,7 +1696,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('eDateLabel').textContent = b.status === 'planlagt' ? 'Planlagt start' : 'Lavet den';
     document.getElementById('eCure').value = b.cure;
     document.querySelectorAll('#formEdit .bad').forEach(x => x.classList.remove('bad'));
-    document.getElementById('eErr').hidden = true;
+    document.getElementById('eErr').hidden = true; fyldHvem('eWho');
     // Er batchen lagt på lager i Rackbeat, ligger antallet dér: kun nummeret kan rettes, og sletning kræver ekstra forsigtighed.
     // Det samme gælder, når der er pakket fra den: produktionslageret regnes ud fra produkt, antal og datoer.
     ['eProd', 'eQty', 'eDate', 'eCure'].forEach(id => { document.getElementById(id).disabled = !!b.rackbeat || pakketFra(b) > 0; });
@@ -1629,7 +1713,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     discTarget = b;
     document.getElementById('discInfo').textContent = `Batch ${bl(b)} ${(prod(b.pid) || {}).name || ''} · ${b.qty} stk.`;
     discCat.value = ''; document.getElementById('discOther').value = ''; document.getElementById('discNote').value = '';
-    document.getElementById('discOtherWrap').hidden = true; document.getElementById('discErr').hidden = true;
+    document.getElementById('discOtherWrap').hidden = true; document.getElementById('discErr').hidden = true; fyldHvem('discWho');
     document.querySelectorAll('#formDiscard .bad').forEach(x => x.classList.remove('bad'));
     dlgDisc.showModal();
   }
@@ -1643,7 +1727,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (!kategori) return fail('Vælg en årsag til, at batchen kasseres.', discCat);
     if (kategori === 'Andet' && !andet) return fail('Skriv årsagen i feltet, når du vælger Andet.', document.getElementById('discOther'));
     const note = document.getElementById('discNote').value.trim();
-    b.discardReason = {kategori, tekst: kategori === 'Andet' ? andet : note, on: TODAY};
+    const who = laesHvem('discWho');
+    if (!who) return fail('Vælg hvem der kasserer batchen.', document.getElementById('discWhoNew'));
+    b.discardReason = {kategori, tekst: kategori === 'Andet' ? andet : note, on: TODAY, by: who};
     if (kategori === 'Andet' && note) b.discardReason.note = note;
     b.status = 'kasseret'; b.rejectedOn = TODAY;
     discTarget = null; save(); dlgDisc.close(); renderAll(); toast(`Batch ${bl(b)} kasseret`);
@@ -1658,6 +1744,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     // Venter en pakning på Rackbeat, må batchen vente, til den er færdig (databasen afviser det også).
     const venter = pakningerFor(b).some(k => k.status === 'reserveret');
     document.getElementById('delYes').hidden = venter;
+    document.getElementById('delWhoWrap').hidden = venter; document.getElementById('delErr').hidden = true; fyldHvem('delWho');
     document.getElementById('delText').textContent = venter
       ? `Batch ${bl(b)} kan ikke slettes lige nu, fordi en pakning fra den venter på Rackbeat. Prøv igen, når den er færdig.`
       : `Er du sikker på, at du vil slette batch ${bl(b)} (${(prod(b.pid) || {}).name || b.pid}, ${b.qty} stk.)? Det kan ikke fortrydes.` +
@@ -1668,6 +1755,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   document.getElementById('delNo').addEventListener('click', () => { delTarget = null; dlgDel.close(); });
   document.getElementById('delYes').addEventListener('click', () => {
     const b = delTarget; if (!b || pakningerFor(b).some(k => k.status === 'reserveret')) return;
+    if (!laesHvem('delWho')){ const er = document.getElementById('delErr'); er.textContent = 'Vælg hvem der sletter batchen.'; er.hidden = false; document.getElementById('delWhoNew').focus(); return; }
     const navn = bl(b);
     S.batches = S.batches.filter(x => x !== b);
     // Vises straks som i databasen: batchens linjer fjernes fra pakningerne, og tomme pakninger forsvinder
@@ -1694,8 +1782,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (b.status === 'aktiv' && !label) return fail('Skriv et batchnummer. Det kan kun stå tomt, mens batchen er planlagt.', 'eNo');
     if (!d) return fail('Vælg en dato.', 'eDate');
     if (!cure || cure < 1) return fail('Dage før pakning skal være mindst 1.', 'eCure');
+    const who = laesHvem('eWho');
+    if (!who) return fail('Vælg hvem der retter batchen.', 'eWhoNew');
     const skiftetProdukt = p.id !== b.pid;
-    Object.assign(b, {pid: p.id, qty, label, made: d, cure});
+    Object.assign(b, {pid: p.id, qty, label, made: d, cure, rettet: {on: TODAY, by: who}});
     if (b.rejected > qty) b.rejected = qty;
     if (skiftetProdukt){
       // Trin og sæbespåner hørte til det gamle produkt
@@ -1769,10 +1859,12 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <div class="field"><label for="pkAntal">Antal taget ud</label><input id="pkAntal" type="number" min="1" max="${vent ? vent.antal : klar}" step="1" inputmode="numeric" value="${vent ? vent.antal : klar}"${vent ? ' disabled' : ''}></div>
         <div class="field"><label for="pkKas">Heraf kasseret</label><input id="pkKas" type="number" min="0" step="1" inputmode="numeric" value="${vent ? vent.kasseret : 0}"${vent ? ' disabled' : ''}></div>
       </div>
+      ${vent && vent.af ? `<p class="muted">Pakket af ${esc(vent.af)}.</p>` : `<div class="field"><label for="pkWho">Pakket af</label><select id="pkWho" data-hvem></select><input id="pkWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>`}
       <p class="preview" id="pkPrev"></p>
       <p class="form-err" id="pkErr" role="alert"${stop ? '' : ' hidden'}>${esc(stop)}</p>
       <div class="dlg-actions"><button class="btn" type="button" id="pkNo">Annullér</button><button class="btn primary" type="button" id="pkYes">Pak</button></div>`;
     const antalEl = document.getElementById('pkAntal'), kasEl = document.getElementById('pkKas'), prev = document.getElementById('pkPrev');
+    if (document.getElementById('pkWho')) fyldHvem('pkWho');
     const ja = document.getElementById('pkYes'), nej = document.getElementById('pkNo'), fejl = document.getElementById('pkErr');
     function laes(){
       const antal = parseInt(antalEl.value, 10), kasseret = parseInt(kasEl.value, 10) || 0;
@@ -1796,15 +1888,16 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     nej.onclick = () => dlgD.close();
     ja.onclick = async () => {
       const x = laes(); if (x.fejl) return;
+      const af = vent && vent.af ? vent.af : laesHvem('pkWho');
+      if (!af){ fejl.textContent = 'Vælg hvem der pakker.'; fejl.hidden = false; document.getElementById('pkWhoNew').focus(); return; }
       if (lokalt){
-        S.pakninger.push({ref, pid, antal: x.antal, kasseret: x.kasseret, status: 'lokal', dato: TODAY, linjer: x.linjer.map(({batch, antal, kasseret}) => ({batch, antal, kasseret}))});
+        S.pakninger.push({ref, pid, af, antal: x.antal, kasseret: x.kasseret, status: 'lokal', dato: TODAY, linjer: x.linjer.map(({batch, antal, kasseret}) => ({batch, antal, kasseret}))});
         save(); dlgD.close(); renderAll();
         toast(`${p.name}: ${x.antal} stk. pakket, ${x.godkendt} godkendt`);
         return;
       }
-      ja.disabled = nej.disabled = antalEl.disabled = kasEl.disabled = true; ja.textContent = 'Sender til Rackbeat…'; fejl.hidden = true;
-      try {
-        const d = await sendPak({ref, pid, sku: p.sku, navn: p.name, antal: x.antal, kasseret: x.kasseret});
+      ja.disabled = nej.disabled = antalEl.disabled = kasEl.disabled = true; ja.textContent = 'Sender til Rackbeat…'; fejl.hidden = true;      try {
+        const d = await sendPak({ref, pid, sku: p.sku, navn: p.name, af, antal: x.antal, kasseret: x.kasseret});
         // Vises straks. De fælles data og lageret i Rackbeat hentes bagefter.
         S.pakninger = S.pakninger.filter(k => k.ref !== d.pakning.ref).concat(d.pakning);
         save(); dlgD.close(); renderAll();
@@ -1826,7 +1919,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   function openResDetail(id){
     const r = S.res.find(x => x.id === id); if (!r) return; const p = prod(r.pid);
     document.getElementById('detailBody').innerHTML = `<h2>${r.kind==='event'?'Event':'Forudbestilling'}: ${esc(r.who)}</h2>
-      <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:r.pid)}</dd><dt>Antal</dt><dd class="num">${r.qty} stk.</dd><dt>Dato</dt><dd>${esc(fmtW(r.date))}</dd></dl>
+      <dl class="kv"><dt>Produkt</dt><dd>${esc(p?p.name:r.pid)}</dd><dt>Antal</dt><dd class="num">${r.qty} stk.</dd><dt>Dato</dt><dd>${esc(fmtW(r.date))}</dd><dt>Oprettet af</dt><dd>${esc(r.by || '–')}</dd></dl>
       <div class="dlg-actions"><button class="btn" type="button" id="dClose">Luk</button></div>`;
     document.getElementById('dClose').onclick = () => dlgD.close();
     dlgD.showModal();
@@ -1860,6 +1953,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       if (!p.archived && activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); return; }
       pendingProd = 'slet:' + p.id; renderProducts(); return;
     }
+    if (ds.delprod && !nuvHvem()){ medHvem(() => t.click()); return; }
     if (ds.delprod){
       const p = prod(ds.delprod); pendingProd = null;
       const u = p && brugAf(p.id);
@@ -1868,6 +1962,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       return;
     }
     if ('cancelProd' in ds){ pendingProd = null; renderProducts(); return; }
+    if ((ds.archive || ds.unarchive || ds.unflakes || ds.unstep || ds.unpack || ds.restore || ds.delres) && !nuvHvem()){ medHvem(() => t.click()); return; }
     if (ds.archive){ const p = prod(ds.archive); if (p){ if (activeProducts().length <= 1){ toast('Der skal være mindst ét aktivt produkt'); pendingProd = null; renderProducts(); return; } p.archived = true; pendingProd = null; save(); renderAll(); toast(`${p.name} er arkiveret`);} return; }
     if (ds.unarchive){ const p = prod(ds.unarchive); if (p){ p.archived = false; save(); renderAll(); toast(`${p.name} er gendannet`);} return; }
     if (ds.step){ const [no, key] = ds.step.split('|'); const b = S.batches.find(x => x.no === Number(no)); if (b && TASK_DEFS[key]){ if (dlgD.open) dlgD.close(); openStep(b, key); } return; }
@@ -1888,6 +1983,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
   document.getElementById('prodTbl').addEventListener('change', e => {
     const i = e.target;
+    // Salgstempo og rækkefølge deles ikke og står ikke i historikken. Alt andet kræver en bruger.
+    if ((i.dataset.pstep || (i.dataset.pf && i.dataset.pf !== 'rate')) && !nuvHvem()){ medHvem(() => i.dispatchEvent(new Event('change', {bubbles: true}))); return; }
     if (i.dataset.pstep){
       const p = prod(i.dataset.id), x = p && (p.steps || []).find(y => y.key === i.dataset.pstep); if (!x) return;
       x.day = Math.max(1, parseInt(i.value, 10) || 1); save(); renderAll();
@@ -1904,6 +2001,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
   document.getElementById('batchTbl').addEventListener('change', e => {
     const i = e.target;
+    if ((i.dataset.brej || i.dataset.bcure) && !nuvHvem()){ medHvem(() => i.dispatchEvent(new Event('change', {bubbles: true}))); return; }
     if (i.dataset.brej){ const b = S.batches.find(x => x.no === Number(i.dataset.brej)); if (b) setRejected(b, i.value); return; }
     if (!i.dataset.bcure) return;
     const b = S.batches.find(x => x.no === Number(i.dataset.bcure)); if (!b) return;
@@ -2044,7 +2142,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       let r;
       try {
         r = await fetch('/api/data', {method: 'POST', cache: 'no-store', credentials: 'same-origin', redirect: 'manual',
-          headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-Kalender': KAL_ID}, body: JSON.stringify(ud)});
+          headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-Kalender': KAL_ID}, body: JSON.stringify(nuvHvem() ? {...ud, person: nuvHvem()} : ud)});
       } catch(e) { throw {kode: 'fejl'}; }
       if (r.type === 'opaqueredirect' || r.status === 401) throw {kode: 'login'};
       let b = null; try { b = await r.json(); } catch(e) {}
@@ -2246,9 +2344,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
           <div><strong>${esc(x.handling)}</strong>${x.emne ? ' · ' + esc(x.emne) : ''}</div>
           ${x.tekst ? `<div class="hist-tekst">${esc(x.tekst)}</div>` : ''}
           ${x.detaljer ? `<details${aabne.has(String(x.id)) ? ' open' : ''}><summary>Data</summary><pre>${esc(JSON.stringify(x.detaljer, null, 2))}</pre></details>` : ''}</td>
-        <td class="hist-enhed">${esc(x.enhed || '–')}${denne ? '<span class="hist-denne">(denne browser)</span>' : ''}</td></tr>`;
+        <td class="hist-enhed"><strong class="hist-person">${esc(x.person || 'Ukendt')}</strong><span class="hist-sted">${esc(x.enhed || '–')}${denne ? ' (denne browser)' : ''}</span></td></tr>`;
     }).join('');
-    tbl.innerHTML = rows ? `<thead><tr><th>Tidspunkt</th><th>Hvad</th><th>Hvorfra</th></tr></thead><tbody>${rows}</tbody>`
+    tbl.innerHTML = rows ? `<thead><tr><th>Tidspunkt</th><th>Hvad</th><th>Hvem</th></tr></thead><tbody>${rows}</tbody>`
       : hist.hentet ? `<tbody><tr><td class="muted">${histFilter().kategori || histFilter().soeg ? 'Intet matcher filteret.' : 'Historikken er tom.'}</td></tr></tbody>` : '';
     document.getElementById('histFlere').hidden = !hist.flere;
   }

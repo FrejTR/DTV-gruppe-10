@@ -220,6 +220,12 @@ async function ventPaa(fn, ms = 3000) {
   await p.keyboard.press('Escape');
   check('opdateres, når dialogen lukkes', await ventPaa(async () => await lager(p, 'havtorn-saebe') === '99'));
 
+  // ---------- bruger: små ændringer i tabellerne kræver et navn ----------
+  await p.selectOption('#hvemTop', '__new');
+  await p.fill('#hvemTopNew', 'Testperson');
+  await p.press('#hvemTopNew', 'Enter');
+  check('bruger valgt øverst', await p.$eval('#hvemTop', el => el.value) === 'Testperson' && !(await p.$eval('#hvemTopWrap', el => el.classList.contains('mangler'))));
+
   // ---------- ingen overskrivning, mens man skriver i et felt ----------
   api.status = () => statusOk({ ...LAGER, HAT003: 111 });
   await p.click('#min-havtorn-saebe');

@@ -56,7 +56,8 @@ const aendredeNoegler = (foer, efter, orden = {}) => {
 
 // ---------- batches ----------
 const BATCH_FELT = { label: 'Batchnr.', pid: 'Produkt', qty: 'Antal', rejected: 'Kasserede', made: 'Dato', cure: 'Dage før pakning', by: 'Oprettet af', madeBy: 'Lavet af' };
-const BATCH_STILLE = new Set(['no', 'rejectedOn', 'packedOn', 'rackbeat', 'discardReason', 'steps', 'flakes', 'status', 'packed']);
+// Felter, der beskrives på anden måde (status, trin, sæbespåner) eller kun siger hvem/hvornår (personen står i historikken)
+const BATCH_STILLE = new Set(['no', 'rejectedOn', 'rejectedBy', 'packedOn', 'rackbeat', 'discardReason', 'steps', 'flakes', 'status', 'packed', 'rettet']);
 
 function batchResume(b, navn) {
   const lavet = b.status === 'planlagt' ? `start ${dato(b.made)}` : `lavet ${dato(b.made)}`;
@@ -123,7 +124,7 @@ export function reservationPost(foer, efter, ctx) {
   const resume = x => `${x.qty} stk. ${ctx.navn(x.pid)} til ${dato(x.date)}`;
   if (!foer) return { kategori: 'bestilling', handling: `${resType(r)} oprettet`, emne, tekst: resume(efter), detaljer: { efter } };
   if (!efter) return { kategori: 'bestilling', handling: `${resType(r)} slettet`, emne, tekst: resume(foer), detaljer: { foer } };
-  const noegler = aendredeNoegler(foer, efter, RES_FELT).filter(k => k !== 'id' && k !== 'group');
+  const noegler = aendredeNoegler(foer, efter, RES_FELT).filter(k => k !== 'id' && k !== 'group' && k !== 'by');
   if (!noegler.length) return null;
   const dele = noegler.map(k => {
     const f = k === 'pid' ? ctx.navn(foer[k]) : k === 'date' ? dato(foer[k]) : k === 'kind' ? resType(foer) : vaerdi(foer[k]);
@@ -157,7 +158,7 @@ export function produktPost(foer, efter) {
 
 /** Linjer for ændringerne fra en kalender. nu er data før ændringen (hent_data). Batches, som databasen ikke
  *  sletter (en pakning venter på Rackbeat), og produkter, der ikke slettes (bruges stadig), kommer ikke med. */
-export function historikForAendringer(aendringer, nu, enhedTekst) {
+export function historikForAendringer(aendringer, nu, enhedTekst, person = null) {
   const produkter = new Map(nu.produkter.map(p => [p.id, p]));
   for (const p of aendringer.produkter.gem || []) if (!produkter.has(p.id)) produkter.set(p.id, p);
   const ctx = {
@@ -177,7 +178,7 @@ export function historikForAendringer(aendringer, nu, enhedTekst) {
   for (const navn of (aendringer.personer.gem || []).filter(n => !nu.personer.includes(n))) {
     poster.push({ kategori: 'person', handling: 'Person tilføjet', emne: navn, tekst: `${navn} kan nu vælges som den, der laver eller planlægger batches.` });
   }
-  return poster.filter(Boolean).map(p => ({ ...p, handling: kort(p.handling, 200), emne: kort(p.emne, 300), tekst: kort(p.tekst || '', 4000), enhed: enhedTekst }));
+  return poster.filter(Boolean).map(p => ({ ...p, handling: kort(p.handling, 200), emne: kort(p.emne, 300), tekst: kort(p.tekst || '', 4000), enhed: enhedTekst, person }));
 }
 
 // ---------- pakning ----------
@@ -185,7 +186,7 @@ const pakEmne = (k, navn) => navn ? `${navn}${k.sku ? ` (${k.sku})` : ''}` : (k.
 const linjeTekst = linjer => linjer.map(l => `${'#' + (l.label || l.batch)}: ${l.antal} stk.${l.kasseret ? ` (${l.kasseret} kasseret)` : ''}`).join(', ');
 
 /** Pakket færdig: stk. taget ud af produktionslageret og (de godkendte) lagt på Hovedlager i Rackbeat */
-export function pakPost(pakning, regulering, { igen = false, enhed: enhedTekst, navn } = {}) {
+export function pakPost(pakning, regulering, { igen = false, enhed: enhedTekst, navn, person = null } = {}) {
   const godkendt = pakning.antal - pakning.kasseret;
   let tekst = `${pakning.antal} stk. taget ud af produktionslageret${pakning.kasseret ? `, heraf ${pakning.kasseret} kasseret` : ''}. Fra batch ${linjeTekst(pakning.linjer).replace(/\.$/, '')}.`;
   if (godkendt > 0 && regulering) {
@@ -199,13 +200,13 @@ export function pakPost(pakning, regulering, { igen = false, enhed: enhedTekst, 
     kategori: 'pakning', handling: regulering && regulering.advarsel ? 'Pakket, med advarsel fra Rackbeat' : 'Pakket og lagt i Rackbeat',
     emne: pakEmne(pakning, navn), tekst,
     detaljer: { ref: pakning.ref, pid: pakning.pid, sku: pakning.sku, antal: pakning.antal, kasseret: pakning.kasseret, linjer: pakning.linjer, rackbeat: regulering || null },
-    enhed: enhedTekst,
+    enhed: enhedTekst, person,
   };
 }
 
 /** Noget gik galt ved en pakning. udfald: 'venter' (stk. er taget ud og venter på et nyt forsøg), 'annulleret'
  *  (stk. er tilbage på produktionslageret), 'afvist' (intet skete) */
-export function pakFejlPost(k, fejltekst, udfald, { enhed: enhedTekst, navn, detaljer = {} } = {}) {
+export function pakFejlPost(k, fejltekst, udfald, { enhed: enhedTekst, navn, person = null, detaljer = {} } = {}) {
   const hvad = udfald === 'venter' ? 'Stk. er taget ud af produktionslageret og venter på et nyt forsøg.'
     : udfald === 'annulleret' ? 'Intet er lagt på lager i Rackbeat, og stk. er tilbage på produktionslageret.'
     : 'Intet er taget ud af produktionslageret.';
@@ -213,6 +214,6 @@ export function pakFejlPost(k, fejltekst, udfald, { enhed: enhedTekst, navn, det
     kategori: 'fejl', handling: 'Pakning fejlede', emne: pakEmne(k, navn),
     tekst: `${k.antal} stk.${k.kasseret ? ` (${k.kasseret} kasseret)` : ''}: ${fejltekst}. ${hvad}`,
     detaljer: { ref: k.ref, pid: k.pid, sku: k.sku, antal: k.antal, kasseret: k.kasseret, udfald, ...detaljer },
-    enhed: enhedTekst,
+    enhed: enhedTekst, person,
   };
 }
