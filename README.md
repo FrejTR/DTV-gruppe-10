@@ -39,7 +39,7 @@ Opsætning på Vercel og med rigtig nøgle: [docs/rackbeat-opsaetning.md](docs/r
 - V3 henter lager og salgstempo live fra Rackbeat (kun læsning) og kører på Vercel bag login.
 - Produkterne har Rackbeats varenumre og navne og tørretiderne fra produktionsoversigten. Minimum og typisk batch er foreløbige tal, som i næste fase bliver tomme, til ejeren udfylder dem.
 - Batches, reservationer, personer og produktindstillinger er fælles for alle, der bruger kalenderen (Supabase via serveren, se vejledningens afsnit 8).
-- **Minimum måles mod produktionslageret** (hærder + klar til pakning). Er det under minimum, er produktet "Under minimum", og der skal laves en ny batch. "Start senest" og forventet lager pr. uge regnes stadig ud fra lager i Rackbeat og salgstempo.
+- **Minimum måles mod produktionslageret** (hærder + klar til pakning). Er det under minimum, er produktet "Under minimum", og der skal laves en ny batch. Undtagelse: Er der mindst 2 × minimum på lager i Rackbeat, er produktet ikke under minimum (der står "Dækket af Rackbeat"), og prognosen afgør status. Er lageret ikke hentet fra Rackbeat, gælder minimum som normalt. "Start senest" og forventet lager pr. uge regnes stadig ud fra lager i Rackbeat og salgstempo.
 - **Produktionslager:** det, der er lavet, men ikke pakket. Medarbejderen pakker et selvvalgt antal (ældste batch, der er klar, først), skriver hvor mange der er kasseret, og de godkendte lægges på Hovedlager i Rackbeat.
 
 ### Rackbeat live

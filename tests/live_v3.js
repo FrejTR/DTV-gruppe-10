@@ -280,6 +280,27 @@ async function ventPaa(fn, ms = 3000) {
     [await plFor('tang-shampoo'), await plFor('havtorn-shampoo'), await plFor('hyben-saebe')].join(','));
   check('uden noget på produktionslageret er produktet under minimum', await statusFor('hyben-saebe') === 'Under minimum', await statusFor('hyben-saebe'));
   check('advarslen nævner produktionslageret', await p.$eval('#alerts', el => el.textContent.includes('på produktionslageret')));
+
+  // Undtagelse: mindst 2 × minimum i Rackbeat dækker et produktionslager under minimum. Hyben sæbe: minimum 50.
+  const advarer = id => p.$eval('#alerts', (el, navn) => el.textContent.includes(navn), id);
+  const dkFor = id => p.$eval('#pl-' + id, el => { const d = el.parentElement.querySelector('.daekket'); return d ? d.textContent.trim() : null; });
+  check('uden lager fra Rackbeat: ingen grå note', await dkFor('hyben-saebe') === null);
+  api.status = () => statusOk({ TAN001: 30, HAT001: 50, HYB003: 99 });
+  await spol(p, 20000); await ventPaa(async () => await lager(p, 'hyben-saebe') === '99');
+  check('Rackbeat under 2 × minimum (99): stadig under minimum', await statusFor('hyben-saebe') === 'Under minimum', await statusFor('hyben-saebe'));
+  check('Rackbeat under 2 × minimum: advarsel "Producér nu"', await advarer('Hyben sæbe bar er under minimum'));
+  const antalUnder = () => p.$eval('#stats .stat-red b', el => +el.textContent);
+  const under99 = await antalUnder();
+  api.status = () => statusOk({ TAN001: 30, HAT001: 50, HYB003: 100 });
+  await spol(p, 20000); await ventPaa(async () => await lager(p, 'hyben-saebe') === '100');
+  check('Rackbeat lig med 2 × minimum (100): ikke under minimum', await statusFor('hyben-saebe') === 'OK', await statusFor('hyben-saebe'));
+  check('Rackbeat lig med 2 × minimum: ingen advarsel', !(await advarer('Hyben sæbe bar')));
+  check('Rackbeat lig med 2 × minimum: grå note ved produktionslageret', await dkFor('hyben-saebe') === 'Under minimum (50), men 100 stk. i Rackbeat', await dkFor('hyben-saebe'));
+  check('tælleren "Under minimum" tæller det ikke med', await antalUnder() === under99 - 1, `${under99} -> ${await antalUnder()}`);
+  // Dækket, men prognosen siger, at lageret når under minimum snart: Start snart (ikke OK)
+  api.salgstempo = () => ok({ TAN001: tempo(9), HAT001: tempo(16), HYB003: tempo(100) });
+  const ts = hits.salgstempo; await spol(p, 600000); await naarHits('salgstempo', ts + 1);
+  check('dækket af Rackbeat, men hurtigt salg: Start snart', await ventPaa(async () => await statusFor('hyben-saebe') === 'Start snart'), await statusFor('hyben-saebe'));
   check('kolonnen "Når ny batch er klar" er fjernet', !(await p.$$eval('#prodTbl thead th', ths => ths.map(th => th.textContent))).some(x => x.includes('Når ny batch er klar')));
   check('ingen JavaScript-fejl (dobbelttælling)', errs.length === 0, errs.join('; '));
   await ctx.close();
