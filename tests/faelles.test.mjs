@@ -495,6 +495,29 @@ test('historik: nyeste først, ældre sider, kategori og søgning', async () => 
   assert.equal((await historik(deps, '?kategori=noget')).poster.length, 8, 'ukendt kategori ignoreres');
 });
 
+test('ansvarlig: personen står i historikken, og den, der pakkede, gemmes på pakningen', async () => {
+  const { deps } = await opsaet();
+  await gem(deps, { produkter: { gem: [PRODUKT] }, ...TRE_BATCHES, person: 'Mette' });
+  await pak({ request: anmodning('/api/pak', { ...PAK(10), af: 'Søren' }), env: ENV }, deps);
+  await gem(deps, { batches: { gem: [B(3, '3', '2026-11-10', 61, { rettet: { on: '2026-11-16', by: 'Anna' } })] }, person: 'Anna' });
+  await pak({ request: anmodning('/api/pak', { ...PAK(500, 0, 'pak-bbbbbbbb'), af: 'Søren' }), env: ENV }, deps);
+  const h = (await historik(deps)).poster;
+  assert.deepEqual(h.map(x => [x.handling, x.person]).reverse(), [
+    ['Batch registreret som lavet', 'Mette'], ['Batch registreret som lavet', 'Mette'], ['Batch registreret som lavet', 'Mette'], ['Produkt oprettet', 'Mette'],
+    ['Pakket og lagt i Rackbeat', 'Søren'], ['Batch ændret', 'Anna'], ['Pakning fejlede', 'Søren'],
+  ]);
+  assert.equal(h[1].tekst, 'Antal: 60 → 61', 'kun antallet nævnes, ikke hvem der rettede (det står i person)');
+  assert.equal((await historik(deps, '?soeg=søren')).poster.length, 2, 'der kan søges på personen');
+  const d = await lager(deps);
+  assert.equal(d.pakninger[0].af, 'Søren');
+  // Uden person (fx en ældre kalender) gemmes alt som før, bare uden navn
+  await gem(deps, { reservationer: { gem: [{ id: 'r1-0', kind: 'ordre', who: 'Dansani', pid: 'havtorn-saebe', qty: 5, date: '2026-12-01' }] } });
+  assert.equal((await historik(deps, '?antal=1')).poster[0].person, null);
+  // Ugyldig person afvises
+  const svar = await gemData({ request: anmodning('/api/data', { person: '' }), env: ENV }, deps);
+  assert.equal(svar.status, 400);
+});
+
 test('ruter: /api/historik har kun GET', () => {
   assert.deepEqual(Object.keys(historikRute), ['GET']);
 });

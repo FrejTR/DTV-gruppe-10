@@ -45,7 +45,9 @@ function liste(del, god, godNoegle) {
 
 /** Læser ændringer til gem_data. Returnerer null ved alt, der ikke er præcis det forventede. */
 function laesAendringer(k) {
-  if (!erObjekt(k) || Object.keys(k).some(n => !['batches', 'reservationer', 'produkter', 'personer'].includes(n))) return null;
+  if (!erObjekt(k) || Object.keys(k).some(n => !['batches', 'reservationer', 'produkter', 'personer', 'person'].includes(n))) return null;
+  // person: hvem der har lavet ændringerne (vælges i kalenderen). Bruges kun i historikken.
+  if (k.person !== undefined && !erTekst(k.person)) return null;
   const batches = liste(k.batches, godBatch, n => erHel(n, 1, Number.MAX_SAFE_INTEGER));
   const reservationer = liste(k.reservationer, godReservation, id => erTekst(id));
   const produkter = liste(k.produkter, godtProdukt, id => erTekst(id));
@@ -57,7 +59,7 @@ function laesAendringer(k) {
     personer = { gem: gem.map(n => n.trim()) };
   }
   if (produkter.gem) produkter.gem = produkter.gem.map(p => Object.fromEntries(PRODUKT_FELTER.filter(f => p[f] !== undefined).map(f => [f, p[f]])));
-  return { batches, reservationer, produkter, personer };
+  return { batches, reservationer, produkter, personer, person: k.person ? k.person.trim() : null };
 }
 
 async function laesKrop(request) {
@@ -108,7 +110,8 @@ export async function gemData({ request, env }, deps = {}) {
     const nu = await klient.rpc('hent_data', {});
     if (aendringer.produkter.slet && aendringer.produkter.slet.length) aendringer.produkter.slet = brugteFjernet(aendringer, nu);
     // Historikken skrives i samme transaktion som ændringen
-    await klient.rpc('gem_data', { ...aendringer, historik: historikForAendringer(aendringer, nu, enhed(request)) });
+    const { person, ...data } = aendringer;
+    await klient.rpc('gem_data', { ...data, historik: historikForAendringer(aendringer, nu, enhed(request), person) });
     return dataSvar(await klient.rpc('hent_data', {}));
   } catch (e) {
     const kode = fejlkode(e);
@@ -119,11 +122,12 @@ export async function gemData({ request, env }, deps = {}) {
 
 function laesPakning(k) {
   if (!erObjekt(k)) return null;
-  const { ref, pid, sku, antal, kasseret = 0, navn } = k;
+  const { ref, pid, sku, antal, kasseret = 0, navn, af } = k;
   if (typeof ref !== 'string' || !REF.test(ref) || !erTekst(pid) || typeof sku !== 'string' || !SKU.test(sku)) return null;
   if (!erHel(antal, 1, 10000) || !erHel(kasseret, 0, antal)) return null;
-  // navn bruges kun i historikken
-  return { ref, pid, sku, antal, kasseret, ...(erTekst(navn, 200) ? { navn } : {}) };
+  if (af !== undefined && af !== null && !erTekst(af)) return null;
+  // navn (produktets navn) bruges kun i historikken. af er den, der pakkede.
+  return { ref, pid, sku, antal, kasseret, ...(erTekst(navn, 200) ? { navn } : {}), ...(af ? { af: af.trim() } : {}) };
 }
 
 const labels = pakning => pakning.linjer.map(l => '#' + (l.label || l.batch)).join(', ');
@@ -164,14 +168,14 @@ export async function pak({ request, env }, deps = {}) {
   const k = laesPakning(await laesKrop(request));
   if (!k) return json({ fejl: 'Ugyldige data', kode: 'ugyldige_data' }, 400);
   const dato = iDagIDanmark(deps.nu ? new Date(deps.nu()) : new Date());
-  const hvem = enhed(request), navn = k.navn;
+  const hvem = enhed(request), navn = k.navn, person = k.af || null;
 
   let data, pakning;
   try {
     data = db(env, deps);
     // Uden Rackbeat-nøgle reserveres intet
     if (!env.RACKBEAT_API_KEY) {
-      await logHistorik(data, pakFejlPost(k, fejlTekst('ikke_sat_op'), 'afvist', { enhed: hvem, navn }));
+      await logHistorik(data, pakFejlPost(k, fejlTekst('ikke_sat_op'), 'afvist', { enhed: hvem, navn, person }));
       return fejlSvar('ikke_sat_op');
     }
     const { navn: _, ...felter } = k;
@@ -180,11 +184,11 @@ export async function pak({ request, env }, deps = {}) {
     const kode = fejlkode(e);
     if (kode === 'ikke_nok_klar') {
       const klar = Number(e.detalje) || 0;
-      await logHistorik(data, pakFejlPost(k, `Der var kun ${klar} stk. klar til pakning`, 'afvist', { enhed: hvem, navn }));
+      await logHistorik(data, pakFejlPost(k, `Der var kun ${klar} stk. klar til pakning`, 'afvist', { enhed: hvem, navn, person }));
       return json({ fejl: `Der er kun ${klar} stk. klar til pakning`, kode, klar }, 409);
     }
     log('pak', kode, e && e.status);
-    if (data) await logHistorik(data, pakFejlPost(k, fejlTekst(kode, 'supabase'), 'afvist', { enhed: hvem, navn, detaljer: { kode } }));
+    if (data) await logHistorik(data, pakFejlPost(k, fejlTekst(kode, 'supabase'), 'afvist', { enhed: hvem, navn, person, detaljer: { kode } }));
     return fejlSvar(kode, 'supabase');
   }
   const igen = pakning.ny === false;
@@ -217,7 +221,7 @@ export async function pak({ request, env }, deps = {}) {
     log('pak', 'rackbeat_' + kode, e && e.status);
     const udfald = await efterFejl(data, skrevet ? rb : null, pakning);
     if (!erObjekt(udfald)) {
-      await logHistorik(data, pakFejlPost(pakning, fejlTekst(kode), udfald, { enhed: hvem, navn, detaljer: { kode, linjer: pakning.linjer } }));
+      await logHistorik(data, pakFejlPost(pakning, fejlTekst(kode), udfald, { enhed: hvem, navn, person, detaljer: { kode, linjer: pakning.linjer } }));
       return json({ ...(await fejlSvar(kode).json()), pakning: udfald }, 502);
     }
     // Reguleringen blev bogført alligevel (fx svaret gik tabt)
@@ -233,12 +237,12 @@ export async function pak({ request, env }, deps = {}) {
       const kode = fejlkode(e);
       log('pak', 'bekraeft_' + kode, e && e.status);
       await logHistorik(data, pakFejlPost(pakning, `Lagt i Rackbeat${regulering ? ` (regulering ${regulering.id})` : ''}, men databasen svarede ikke bagefter: ${fejlTekst(kode, 'supabase')}`,
-        'venter', { enhed: hvem, navn, detaljer: { kode, rackbeat: regulering } }));
+        'venter', { enhed: hvem, navn, person, detaljer: { kode, rackbeat: regulering } }));
       return json({ ...(await fejlSvar(kode, 'supabase').json()), pakning: 'venter' }, 502);
     }
   }
   log('pak', godkendt > 0 ? 'bogfoert' : 'kun_kasseret');
-  await logHistorik(data, pakPost(pakning, regulering && { ...regulering, foer }, { igen, enhed: hvem, navn }));
+  await logHistorik(data, pakPost(pakning, regulering && { ...regulering, foer }, { igen, enhed: hvem, navn, person }));
   return json({ data: { pakning, rackbeat: regulering, allerede: false }, kilde: 'supabase' }, 201);
 }
 

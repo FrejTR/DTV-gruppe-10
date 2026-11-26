@@ -42,6 +42,12 @@ async function aaben(b) {
   await p.goto(BASE + SIDE);
   return p;
 }
+// Vælger brugeren øverst (navnet står i historikken ved små ændringer i tabellerne)
+async function bruger(p, navn) {
+  await p.selectOption('#hvemTop', '__new');
+  await p.fill('#hvemTopNew', navn);
+  await p.press('#hvemTopNew', 'Enter');
+}
 const pille = (p, id) => p.$eval(id, el => el.textContent);
 const gemt = p => ventPaa(async () => (await pille(p, '#rbPill')).startsWith('Rackbeat: opdateret') && (await pille(p, '#dbPill')) === 'Fælles data: gemt');
 const raekke = (p, navn) => p.evaluate(n => { const r = [...document.querySelectorAll('#plTbl tbody tr')].find(x => x.textContent.includes(n));
@@ -79,12 +85,15 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     check('produktionslager: Tang shampoo hærder 40, klar 53, i alt 93', await ventPaa(async () => JSON.stringify(await raekke(a, 'Tang shampoo')) === '[40,53,93]'),
       JSON.stringify(await raekke(a, 'Tang shampoo')));
 
+    await bruger(a, 'Anna');
+
     // Pak 22, heraf 2 kasseret: 20 lægges på Hovedlager i Rackbeat
     const foer = await lagerI('TAN001');
     await klik(a, '[data-pakprod="tang-shampoo"]');
     await a.waitForSelector('#pkAntal');
     check('pakkedialog: foreslår alt, der er klar', (await a.$eval('#pkAntal', el => el.value)) === '53');
     await skriv(a, '#pkAntal', 22); await skriv(a, '#pkKas', 2);
+    check('pakkedialog: "Pakket af" er udfyldt med brugeren', (await a.$eval('#pkWho', el => el.value)) === 'Anna');
     check('pakkedialog: viser batch og godkendt antal', (await dlg(a)).includes('#32: 22 stk. (2 kasseret)') && (await dlg(a)).includes('Lægges på Hovedlager i Rackbeat: 20 stk.'), await dlg(a));
     check('pakkedialog: knappen siger, hvad der lægges på lager', (await a.$eval('#pkYes', el => el.textContent)) === 'Pak og læg 20 stk. på lager');
     await skriv(a, '#pkAntal', 54);
@@ -101,6 +110,7 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     check('lageret i Rackbeat er steget med 20', (await lagerI('TAN001')) === foer + 20, `${foer} → ${await lagerI('TAN001')}`);
     const [r] = await reguleringer();
     const [pk] = (await database()).pakninger;
+    check('den, der pakkede, er gemt på pakningen', pk && pk.af === 'Anna', JSON.stringify(pk));
     check('reguleringen er bogført, lægger til og ligger på Hovedlager i Produktion', r && r.is_booked === true && r.regulate_difference === false
       && r.lines[0].location_id === 1001 && r.lines[0].quantity === 20 && r.regulation_type.number === 1004 && r.reason === 'Pakket fra batch #32'
       && pk && r.description.includes(pk.ref), JSON.stringify(r));
@@ -122,6 +132,13 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
       body: JSON.stringify({ ref: 'pak-test-for-meget', pid: 'tang-shampoo', sku: 'TAN001', antal: 32, kasseret: 0 }) }); return [r.status, await r.json()]; });
     check('for mange stk. afvises med antallet, der er klar', for_meget[0] === 409 && for_meget[1].klar === 31, JSON.stringify(for_meget));
 
+    // Uden en bruger spørger B først, hvem man er. Navnet står derefter i historikken.
+    await bb.evaluate(() => { const i = document.getElementById('brej-41'); i.value = '4'; i.dispatchEvent(new Event('change', { bubbles: true })); });
+    check('bruger: uden navn spørges der først', await ventPaa(async () => bb.isVisible('#dlgHvem')));
+    check('bruger: intet gemt endnu', (await bb.evaluate(k => JSON.parse(localStorage.getItem(k)).batches.find(x => x.no === 41).rejected || 0, KEY)) === 0);
+    await bb.click('#hvNo');
+    check('bruger: annulleret nulstiller feltet', await bb.$eval('#brej-41', el => el.value) === '0' && !(await bb.isVisible('#dlgHvem')));
+    await bruger(bb, 'Mette');
     // En ændring i B (kasserede på #41) når frem til A
     await bb.evaluate(() => { const i = document.getElementById('brej-41'); i.value = '4'; i.dispatchEvent(new Event('change', { bubbles: true })); });
     check('B: ændringen er gemt i databasen', await ventPaa(async () => (await database()).batches.find(x => x.no === 41).rejected === 4));
@@ -212,7 +229,9 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     check('historik: produktet oprettet og slettet', hl.some(x => x.includes('Produkt slettet · Testvare')) && hl.some(x => x.includes('Produkt oprettet · Testvare')));
     check('historik: nyeste først', hl[0].includes('Produkt slettet'), hl[0]);
     check('historik: tidspunkt med dato og sekunder', /\d{1,2}\. \w+\.? \d{4}.*\d{2}[.:]\d{2}[.:]\d{2}/.test(hl[0]), hl[0]);
-    check('historik: hvorfra, og denne browser er mærket', /Chromium på|Chrome på/.test(hl[0]) && hl[0].includes('(denne browser)'), hl[0]);
+    check('historik: hvem og hvorfra, og denne browser er mærket', hl[0].includes('Anna') && /Chromium på|Chrome på/.test(hl[0]) && hl[0].includes('(denne browser)'), hl[0]);
+    check('historik: pakningen står med den, der pakkede', hl.some(x => /Pakket og lagt i Rackbeat · Tang shampoo/.test(x) && x.includes('Anna')));
+    check('historik: kasserede i B står med Mette', hl.some(x => /Batch ændret · #41/.test(x) && x.includes('Mette')), hl.filter(x => x.includes('#41')).join(' | '));
     check('historik: B ser de samme linjer, men ikke som sine egne', await ventPaa(async () => {
       await bb.evaluate(() => { document.getElementById('sec-historik').open = true; });
       const x = await histLinjer(bb); return x.length && x[0].includes('Produkt slettet') && !x[0].includes('(denne browser)');

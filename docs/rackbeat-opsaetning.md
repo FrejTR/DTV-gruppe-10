@@ -171,6 +171,13 @@ Fanen *Historik* nederst på siden viser alt, der er oprettet, ændret, pakket e
 - Linjer ændres eller slettes aldrig. Tabellen er `historik` i Supabase (migration `20261126110000_historik.sql`), og den hentes med `GET /api/historik` (100 linjer ad gangen, `foer`, `kategori`, `soeg`).
 - Historikken kræver den fælles database. Åbnet som fil viser fanen kun en forklaring.
 
+**Hvem gjorde det:** hver handling med en batch eller vare har et navn.
+- Dialogerne spørger, udfyldt med det sidst valgte navn: *Lavet af* / *Planlagt af* (registrér batch), *Udført af* (tag ud af forme, skær kanter, sæbespåner), *Pakket af* (pak og læg på lager), *Kasseret af* (marker som fejlet), *Rettet af* (ret batch), *Slettet af* (slet batch) og *Oprettet af* (bestilling/event og nyt produkt).
+- Navnet gemmes på data, hvor det hører til: pakningen (`pakninger.af`), kassationen, sidste rettelse af batchen, kasserede stk. og bestillingen. Det vises i batchens detaljer og i bestillingslisten.
+- Små ændringer direkte i tabellerne (kasserede, minimum, dage før pakning, gendan, fortryd, arkivér/slet produkt, slet bestilling) bruger *Bruger* øverst på siden. Er der ikke valgt nogen, spørger siden først. Brugeren huskes i browseren og skifter, når man vælger et andet navn i en dialog.
+- Historikken har kolonnen *Hvem* med navnet og computeren. Der kan søges på navnet. Linjer fra før 26. november 2026 står som *Ukendt*.
+- Migration `20261126120000_ansvarlig.sql` tilføjer `pakninger.af` og `historik.person`.
+
 ## Kilder
 
 | Emne | Side |
