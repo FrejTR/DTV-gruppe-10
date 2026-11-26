@@ -154,7 +154,7 @@ Batches, bestillinger, personer og produktindstillinger (minimum, typisk batch, 
 2. opretter og bogfører en lagerregulering i Rackbeat med det godkendte antal (taget ud minus kasseret), som i afsnit 7, med årsagen "Pakket fra batch #32",
 3. markerer pakningen som bogført.
 
-Kun batches, der har hærdet færdigt, kan pakkes. Er der ikke nok klar, afvises pakningen med antallet, der er klar. Kasserede stk. tæller med på listen over sæbespåner. Afviser Rackbeat, gives stk. tilbage til produktionslageret. Svarer Rackbeat ikke, eller er reguleringen oprettet, men ikke bogført, bliver stk. stående som "venter på Rackbeat" med knappen *Prøv igen*. Et nyt forsøg bruger samme reference, så Rackbeat aldrig får reguleringen to gange.
+Kun batches, der har hærdet færdigt, kan pakkes. Er der ikke nok klar, afvises pakningen med antallet, der er klar. Kasserede stk. tæller med på listen over sæbespåner, hvis produktet er en sæbe med *Skær kanter og sæbespåner* slået til (under *Produkter og minimum*). Er det slået fra, har produktet hverken trinet "Skær kanter" eller sæbespåner. Afviser Rackbeat, gives stk. tilbage til produktionslageret. Svarer Rackbeat ikke, eller er reguleringen oprettet, men ikke bogført, bliver stk. stående som "venter på Rackbeat" med knappen *Prøv igen*. Et nyt forsøg bruger samme reference, så Rackbeat aldrig får reguleringen to gange.
 
 Sikring: tabellerne har række-sikkerhed (RLS) uden regler, og funktionerne kan kun kaldes med den hemmelige nøgle. Serveren godtager kun kald fra kalenderen selv og tjekker alle felter (fx at datoer er datoer og antal er hele tal), så produktionslageret altid kan regnes.
 

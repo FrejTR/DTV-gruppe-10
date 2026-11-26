@@ -10,7 +10,7 @@ const MAX_POST = 4096;          // Tegn pr. batch, reservation eller produkt som
 const MAX_ANTAL = 100000;
 const BATCH_STATUS = new Set(['aktiv', 'planlagt', 'kasseret']);
 // Produktindstillinger, der deles. Lager, salgstempo og optælling hentes fra Rackbeat i hver kalender.
-const PRODUKT_FELTER = ['id', 'name', 'sku', 'type', 'min', 'batch', 'cure', 'steps', 'archived'];
+const PRODUKT_FELTER = ['id', 'name', 'sku', 'type', 'min', 'batch', 'cure', 'steps', 'kanter', 'archived'];
 const SKU = /^[A-Za-z0-9ÆØÅæøå._:-]{1,40}$/;
 const REF = /^[a-z0-9-]{8,64}$/;
 

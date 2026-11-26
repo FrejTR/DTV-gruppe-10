@@ -135,7 +135,8 @@ export function reservationPost(foer, efter, ctx) {
 }
 
 // ---------- produkter ----------
-const PROD_FELT = { name: 'Navn', sku: 'Varenr.', type: 'Type', min: 'Minimum', batch: 'Batchstørrelse', cure: 'Dage før pakning', steps: 'Trin' };
+const PROD_FELT = { name: 'Navn', sku: 'Varenr.', type: 'Type', min: 'Minimum', batch: 'Batchstørrelse', cure: 'Dage før pakning', steps: 'Trin', kanter: 'Skær kanter og sæbespåner' };
+const jaNej = v => v === false ? 'nej' : 'ja';   // Uden valg er det slået til
 const trinTekst = s => Array.isArray(s) && s.length ? s.map(x => x && typeof x === 'object' ? `${TRIN[x.key] || x.key} dag ${x.day}` : String(x)).join(', ') : 'ingen';
 
 export function produktPost(foer, efter) {
@@ -150,7 +151,9 @@ export function produktPost(foer, efter) {
   if (!!foer.archived !== !!efter.archived) handlinger.push(efter.archived ? 'Produkt arkiveret' : 'Produkt gendannet');
   for (const k of noegler) {
     if (k === 'archived') continue;
-    dele.push(k === 'steps' ? `Trin: ${trinTekst(foer.steps)} → ${trinTekst(efter.steps)}` : `${PROD_FELT[k] || k}: ${vaerdi(foer[k])} → ${vaerdi(efter[k])}`);
+    dele.push(k === 'steps' ? `Trin: ${trinTekst(foer.steps)} → ${trinTekst(efter.steps)}`
+      : k === 'kanter' ? `${PROD_FELT.kanter}: ${jaNej(foer.kanter)} → ${jaNej(efter.kanter)}`
+      : `${PROD_FELT[k] || k}: ${vaerdi(foer[k])} → ${vaerdi(efter[k])}`);
   }
   return { kategori: 'produkt', handling: handlinger.length ? handlinger.join(', ') : 'Produkt ændret', emne,
     tekst: dele.join('. '), detaljer: felter(foer, efter, noegler) };

@@ -110,14 +110,14 @@ test('data: gemmer, opdaterer og sletter, og sender alle data tilbage', async ()
   await medData(deps, {
     ...TRE_BATCHES,
     reservationer: { gem: [{ id: 'r1-0', group: 'r1', kind: 'Bestilling', who: 'Butik', pid: 'havtorn-saebe', qty: 10, date: '2026-11-20' }] },
-    produkter: { gem: [{ id: 'havtorn-saebe', name: 'Havtorn sæbe bar', sku: 'HAT003', type: 'Sæbebarer', min: 50, batch: 65, cure: 22, steps: [], count: 62, rate: 9, lagerHentet: 'x', salgstempo: {} }] },
+    produkter: { gem: [{ id: 'havtorn-saebe', name: 'Havtorn sæbe bar', sku: 'HAT003', type: 'Sæbebarer', min: 50, batch: 65, cure: 22, steps: [], kanter: false, count: 62, rate: 9, lagerHentet: 'x', salgstempo: {} }] },
     personer: { gem: ['Anna', ' Mette '] },
   });
   const d = await medData(deps, { batches: { gem: [B(1, '1a', '2026-10-01', 41)], slet: [3] }, reservationer: { slet: ['r1-0'] } });
   assert.deepEqual(d.batches.map(b => [b.no, b.label, b.qty]), [[1, '1a', 41], [2, '2', 30]]);
   assert.deepEqual(d.reservationer, []);
   assert.deepEqual(d.personer, ['Anna', 'Mette']);
-  assert.deepEqual(Object.keys(d.produkter[0]).sort(), ['batch', 'cure', 'id', 'min', 'name', 'sku', 'steps', 'type'],
+  assert.deepEqual(Object.keys(d.produkter[0]).sort(), ['batch', 'cure', 'id', 'kanter', 'min', 'name', 'sku', 'steps', 'type'],
     'lager og salgstempo fra Rackbeat deles ikke');
 });
 
@@ -426,6 +426,16 @@ test('historik: hver ændring fra kalenderen skrives med hvad, detaljer, tidspun
   assert.equal(p['Batch slettet'].enhed, 'Chrome på Windows · abcd1234');
   assert.ok(h.poster.every(x => !isNaN(Date.parse(x.tid)) && Number.isInteger(x.id)));
   assert.equal(h.flere, false);
+});
+
+test('historik: skær kanter og sæbespåner til eller fra på et produkt', async () => {
+  const { deps } = await opsaet();
+  await gem(deps, { produkter: { gem: [PRODUKT] } });
+  await gem(deps, { produkter: { gem: [{ ...PRODUKT, kanter: false }] } });
+  await gem(deps, { produkter: { gem: [{ ...PRODUKT, kanter: true }] } });
+  const ae = (await historik(deps)).poster.filter(x => x.handling === 'Produkt ændret').map(x => x.tekst).reverse();
+  assert.deepEqual(ae, ['Skær kanter og sæbespåner: ja → nej', 'Skær kanter og sæbespåner: nej → ja']);
+  assert.equal((await lager(deps)).produkter[0].kanter, true);
 });
 
 test('historik: det samme sendt igen giver ingen nye linjer', async () => {
