@@ -2,6 +2,7 @@
 // → tests/supabase_pglite.mjs (rigtig Postgres med migrationerne) og tests/mock_rackbeat.js.
 // Kun mock, lokal database og falske nøgler, aldrig den rigtige Rackbeat eller Supabase. Kørsel: node tests/pak_rackbeat_v3.js
 const { chromium } = require('playwright');
+const { sidelaensScroll } = require('./bredde');
 const { spawn } = require('child_process');
 const path = require('path');
 
@@ -250,6 +251,11 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     await a.dispatchEvent('#min-tang-shampoo', 'change');
     await a.evaluate(() => document.activeElement && document.activeElement.blur());
     check('historik: ny ændring kommer øverst af sig selv', await ventPaa(async () => { const x = await histLinjer(a); return x.length > foerAntal && /Produkt ændret · Tang shampoo/.test(x[0]) && /Minimum: \d+ → 31/.test(x[0]); }, 25000), (await histLinjer(a))[0]);
+
+    // Med rigtige data (historik med en åben "Data", pakninger, bestillinger) scroller intet sidelæns ved 1280 px
+    await a.evaluate(() => { const d = document.querySelector('#histTbl tbody details'); if (d) d.open = true; });
+    const forBred = await sidelaensScroll(a);
+    check('ingen sektion scroller sidelæns ved 1280 px (med server og historik)', forBred.length === 0, forBred.join(' | '));
 
     // Uden server (åbnet som fil) pakkes kun i kalenderen
     const f = await (await b.newContext()).newPage();

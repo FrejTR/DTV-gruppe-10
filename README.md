@@ -86,6 +86,12 @@ Serveren (`functions/_lib/salgstempo.js`) beregner et gennemsnitligt ugentligt s
 11. **Sikkerhed** er høj, middel eller lav. Grænser: høj = mindst 40 uger med salg og variationskoefficient under 0,6; lav = under 12 uger med salg eller variationskoefficient over 1,2; ellers middel. Grænserne er skønnede og bør valideres. Sikkerhed og flag beregnes og gemmes på produktet, men vises ikke i V2.
 12. **Flag om udsolgt og lavt salg.** `muligt_udsolgt` sættes kun, hvis medianen af produktets uger med salg er mindst 3, og der er mindst 2 nuluger i træk efter en periode med salg. Produkter med en median under 3 får i stedet `lavt_salg`, uanset om de har nuluger, fordi nuluger er normale ved så lavt salg. Engangsordrer indgår ikke i medianen. Tærsklerne (median 3 og 2 nuluger) er skøn, der skal valideres med ejeren.
 
+## Layout: ingen sidelæns scroll
+- Alle sektioner (faner) i kalenderen skal kunne ses uden at scrolle sidelæns ved 1280 px skærmbredde. Det gælder også nye sektioner og tabeller.
+- Som standard ombrydes tabeloverskrifter, mærker i overskrifter (`.src`) og små noter i cellerne (`.small`, `.trim-note`). Knapper i en række strækkes ikke til rækkens højde. Fylder en ny tabel for meget, så lad tekst ombryde frem for at gøre kolonner bredere.
+- `tests/bredde.js` åbner alle sektioner og finder selv alt, der kan scrolle sidelæns. Testen kører i `batch_v3.js` og `pak_rackbeat_v3.js` (med server og historik) og fejler, hvis noget er for bredt.
+- På smallere skærme (fx mobil) må tabellerne stadig scrolle sidelæns.
+
 ## Git-arbejdsgang
 - `main` er altid fungerende. Nye ændringer sker i grene: `feature/<navn>`, merges via pull request.
 - Commit-beskeder på dansk, korte og i nutid ("Tilføj sæbespåner-opgave").

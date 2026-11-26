@@ -195,7 +195,7 @@ button{cursor:pointer}
 #resTbl{min-width:760px}
 #prodTbl{min-width:860px}
 #batchTbl{min-width:900px}
-#prodTbl td,#prodTbl th,#batchTbl td,#batchTbl th,#resTbl td,#resTbl th{white-space:nowrap}
+#prodTbl td,#batchTbl td,#resTbl td{white-space:nowrap}
 #prodTbl td:first-child,#batchTbl td:nth-child(2){white-space:normal;min-width:9.5rem}
 #prodTbl th:first-child,#prodTbl td:first-child{position:sticky;left:0;z-index:1;background:var(--surface)}
 #prodTbl th:first-child{background:var(--sand-light)}
@@ -205,12 +205,15 @@ button{cursor:pointer}
 #prodTbl th:nth-child(2),#prodTbl td:nth-child(2){border-left:0}
 #prodTbl th:first-child,#prodTbl td:first-child{box-shadow:inset -1px 0 0 var(--sand-dark)}
 .row-actions{flex-wrap:nowrap}
-/* Produkter og minimum: overskrifter, noter og trin ombrydes, så alle kolonner kan ses uden at scrolle sidelæns */
-#prodTbl th{white-space:normal;vertical-align:bottom;line-height:1.35;letter-spacing:.05em}
-#prodTbl th .src{display:block;width:fit-content;max-width:100%;margin:5px 0 0;white-space:normal;letter-spacing:.03em;line-height:1.4;border-radius:10px;text-align:center}
+/* Alle sektioner og tabeller skal kunne ses uden at scrolle sidelæns ved 1280 px skærmbredde (testet i tests/bredde.js).
+   Derfor ombrydes overskrifter (th, se nedenfor), mærker i overskrifter og små noter i cellerne som standard,
+   og knapper i en række strækkes ikke til rækkens højde. Nye tabeller får det af sig selv. */
+th .src{display:block;width:fit-content;max-width:100%;margin:5px 0 0;white-space:normal;letter-spacing:.03em;line-height:1.4;border-radius:10px;text-align:center}
+th.n .src{margin-left:auto}
+td .small,td .trim-note{white-space:normal}
+td .row-actions{align-items:center}
+/* Produkter og minimum: trin står kompakt (navn, derunder "efter [ ] dage"), Arkivér/Slet over hinanden */
 #prodTbl td:first-child{min-width:8.5rem}
-#prodTbl th.n .src{margin-left:auto}
-#prodTbl td .small{white-space:normal}
 #prodTbl td input{width:4.6rem}
 #prodTbl .pstep{display:flex;flex-direction:column;align-items:flex-start;gap:2px;white-space:normal;font-size:.8rem;line-height:1.25}
 #prodTbl .pstep-dage{display:flex;align-items:center;gap:5px;white-space:nowrap}
@@ -221,14 +224,11 @@ button{cursor:pointer}
 #prodTbl .row-actions{flex-direction:column;align-items:stretch}
 #prodTbl .rate-src{min-width:0}
 #prodTbl th,#prodTbl td{padding-inline:7px}
-/* Batches: samme princip. Overskrifter, navne og noter under status ombrydes */
-#batchTbl th{white-space:normal;vertical-align:bottom;line-height:1.35;letter-spacing:.05em}
+/* Batches: "Oprettet af" og noterne under status ombrydes */
 #batchTbl td:nth-child(3),#batchTbl td:nth-child(9){white-space:normal}
 #batchTbl td:nth-child(9){min-width:10.5rem}
-#batchTbl td .small{white-space:normal}
 #batchTbl td input{width:4.6rem}
 #batchTbl th,#batchTbl td{padding-inline:7px}
-#batchTbl .row-actions{align-items:center}   /* knapperne strækkes ikke til højden af Rediger/Slet */
 @media (max-width:1180px){
   .masthead{padding-block:12px 4px}
   .wordmark{font-size:1.35rem}
@@ -266,7 +266,7 @@ button{cursor:pointer}
 /* tables */
 .tbl-wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:.92rem}
-th{font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-align:left;font-weight:700;padding:9px 8px;background:var(--sand-light);white-space:nowrap}
+th{font-size:.74rem;letter-spacing:.05em;line-height:1.35;text-transform:uppercase;color:var(--ink);text-align:left;font-weight:700;padding:9px 8px;background:var(--sand-light);vertical-align:bottom}
 td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 tr.dead td{color:var(--grey)}
