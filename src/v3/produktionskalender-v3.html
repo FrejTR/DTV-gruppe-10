@@ -249,6 +249,30 @@ td input{width:5.2rem;padding:5px 10px;border:1px solid var(--line);border-radiu
 .row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .edit-btns{display:flex;flex-direction:column;gap:6px}
 .hint{font-size:.88rem;color:var(--muted);margin:0;max-width:72ch}
+/* historik */
+.hist-filter{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.hist-filter .field{min-width:0}
+.hist-soeg{flex:1 1 220px;max-width:360px}
+#histTbl td{vertical-align:top}
+#histTbl .hist-tid{white-space:nowrap;font-variant-numeric:tabular-nums}
+#histTbl .hist-hvad{min-width:16rem}
+#histTbl .hist-tekst{color:var(--muted);font-size:.88rem;margin-top:2px;max-width:70ch;overflow-wrap:anywhere}
+#histTbl .hist-enhed{white-space:nowrap;color:var(--muted);font-size:.85rem}
+#histTbl .hist-denne{display:block}
+#histTbl details summary{cursor:pointer;font-size:.8rem;color:var(--muted);margin-top:4px}
+#histTbl pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem;background:var(--sunk);padding:8px;border-radius:8px;margin:4px 0 0;max-width:70ch}
+.hist-kat{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.hist-kat.fejl{color:var(--orange)}
+/* På telefon: hver linje stablet (tidspunkt, hvad, hvorfra) i stedet for tre smalle kolonner */
+@media (max-width:700px){
+  #histTbl thead{display:none}
+  #histTbl tr{display:block;border-bottom:1px solid var(--line);padding:8px 0}
+  #histTbl td{display:block;border:0;padding:2px 0}
+  #histTbl .hist-hvad{min-width:0}
+  #histTbl .hist-enhed{white-space:normal}
+  #histTbl .hist-denne{display:inline;margin-left:.4em}
+  .hist-soeg{max-width:none}
+}
 
 /* dialogs */
 dialog{border:0;border-radius:12px;padding:0;background:var(--surface);color:var(--ink);width:min(460px, calc(100vw - 32px));max-height:calc(100dvh - 32px);box-shadow:0 10px 40px rgba(0,0,0,.18)}
@@ -417,7 +441,11 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
   <details class="sec" id="sec-batches">
     <summary>Batches</summary>
-    <div class="sec-body" id="p-batches"><div class="tbl-wrap"><table id="batchTbl"></table></div></div>
+    <div class="sec-body" id="p-batches">
+      <p class="hint">Batches, der har været pakket og lagt i Rackbeat i 7 dage, skjules her, men bliver i kalenderen.</p>
+      <div class="tbl-wrap"><table id="batchTbl"></table></div>
+      <div><button class="btn small ghost" id="batchAfsl" type="button" hidden></button></div>
+    </div>
   </details>
 
   <details class="sec" id="sec-bestillinger">
@@ -446,6 +474,26 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       </div>
       <div class="grid-wrap"><div class="cal" id="cal"></div></div>
       <div class="agenda" id="agenda"></div>
+    </div>
+  </details>
+
+  <details class="sec" id="sec-historik">
+    <summary>Historik</summary>
+    <div class="sec-body" id="p-historik">
+      <p class="hint">Alt, der er oprettet, ændret, pakket eller slettet, fra alle kalendere, nyeste først. Til fejlfinding.</p>
+      <div class="hist-filter">
+        <div class="field"><label for="histKat">Vis</label>
+          <select id="histKat">
+            <option value="">Alt</option><option value="batch">Batches</option><option value="pakning">Pakning</option>
+            <option value="bestilling">Bestillinger og events</option><option value="produkt">Produkter</option>
+            <option value="person">Personer</option><option value="fejl">Fejl</option>
+          </select></div>
+        <div class="field hist-soeg"><label for="histSoeg">Søg</label><input id="histSoeg" type="search" maxlength="80" placeholder="Fx K241106, Rosmarin, Mette" autocomplete="off"></div>
+        <button class="btn small" id="histOpdater" type="button">Opdater</button>
+      </div>
+      <p class="muted small" id="histStatus" aria-live="polite"></p>
+      <div class="tbl-wrap"><table id="histTbl"></table></div>
+      <div><button class="btn small ghost" id="histFlere" type="button" hidden>Hent ældre</button></div>
     </div>
   </details>
 
@@ -1019,8 +1067,18 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }).join('');
   }
 
+  // Afsluttet: "Pakket og lagt i Rackbeat" i mindst 7 dage og ingen sæbespåner tilbage. Den skjules på Batches-listen,
+  // men bliver i kalenderen, ugeoversigten og beregningerne. "Vis afsluttede" viser dem igen.
+  const AFSLUTTET_DAGE = 7;
+  let visAfsluttede = false;
+  const afsluttet = b => batchState(b).label === 'Pakket og lagt i Rackbeat' && !flakesOpen(b) && diff(slutDag(b), TODAY) >= AFSLUTTET_DAGE;
   function renderBatches(){
-    const list = [...S.batches].sort((a,b) => b.no - a.no);
+    const skjulte = S.batches.filter(afsluttet).length;
+    const list = [...S.batches].filter(b => visAfsluttede || !afsluttet(b)).sort((a,b) => b.no - a.no);
+    const knap = document.getElementById('batchAfsl');
+    knap.hidden = !skjulte;
+    knap.textContent = visAfsluttede ? `Skjul afsluttede (${skjulte})` : `Vis afsluttede (${skjulte})`;
+    knap.setAttribute('aria-expanded', String(visAfsluttede));
     const rows = list.map(b => {
       const p = prod(b.pid); const st = batchState(b);
       let actions = '';
@@ -1361,6 +1419,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('npSteps').textContent = `${t.cure} ${t.cure === 1 ? 'dag' : 'dage'} før pakning. ` + (st.length ? `Trin undervejs: ${st.join(' og ')}.` : 'Ingen trin undervejs.');
   }
   npType.addEventListener('change', npTypeChanged);
+  document.getElementById('batchAfsl').addEventListener('click', () => { visAfsluttede = !visAfsluttede; renderBatches(); });
   document.getElementById('btnNewProd').addEventListener('click', () => {
     document.getElementById('formProd').reset(); npTypeChanged(); document.getElementById('npErr').hidden = true;
     dlgP.showModal(); document.getElementById('npName').focus();
@@ -1668,11 +1727,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const nyRef = () => 'pak-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), x => x.toString(16).padStart(2, '0')).join('');
   const batchLabel = no => { const b = S.batches.find(x => x.no === no); return b ? bl(b) : '#' + no; };
 
+  // Tilfældigt id pr. browser. Serveren skriver det i historikken, så man kan se, hvilken computer en ændring kom fra.
+  const KAL_ID = (() => {
+    const nyt = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), x => x.toString(16).padStart(2, '0')).join('');
+    try {
+      let id = localStorage.getItem('kystnaer-kalender-id');
+      if (!/^[a-z0-9]{4,16}$/.test(id || '')){ id = nyt(); localStorage.setItem('kystnaer-kalender-id', id); }
+      return id;
+    } catch(e) { return nyt(); }
+  })();
+
   async function sendPak(k){
     let r;
     try {
       r = await fetch('/api/pak', {method: 'POST', cache: 'no-store', credentials: 'same-origin', redirect: 'manual',
-        headers: {'Content-Type': 'application/json', Accept: 'application/json'}, body: JSON.stringify(k)});
+        headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-Kalender': KAL_ID}, body: JSON.stringify(k)});
     } catch(e) { throw {tekst: 'Ingen forbindelse til serveren. Prøv igen.'}; }
     if (r.type === 'opaqueredirect' || r.status === 401) throw {tekst: 'Login er udløbet. Genindlæs siden, og prøv igen.'};
     let svar = null; try { svar = await r.json(); } catch(e) {}
@@ -1735,7 +1804,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       }
       ja.disabled = nej.disabled = antalEl.disabled = kasEl.disabled = true; ja.textContent = 'Sender til Rackbeat…'; fejl.hidden = true;
       try {
-        const d = await sendPak({ref, pid, sku: p.sku, antal: x.antal, kasseret: x.kasseret});
+        const d = await sendPak({ref, pid, sku: p.sku, navn: p.name, antal: x.antal, kasseret: x.kasseret});
         // Vises straks. De fælles data og lageret i Rackbeat hentes bagefter.
         S.pakninger = S.pakninger.filter(k => k.ref !== d.pakning.ref).concat(d.pakning);
         save(); dlgD.close(); renderAll();
@@ -1957,6 +2026,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       const b = await hentApi('/api/data');
       if (gen !== db.gen) return;   // Startet, før en ændring blev gemt, så den kan mangle i svaret
       db.ok = true; db.fejl = null; db.vent = b.data;
+      if (histSek.open) opdaterHist();
     } catch(e) {
       db.fejl = e.kode || 'fejl';
       if (e.kode === 'db_ikke_sat_op' || e.kode === 'ingen_server') db.ok = false;
@@ -1974,12 +2044,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       let r;
       try {
         r = await fetch('/api/data', {method: 'POST', cache: 'no-store', credentials: 'same-origin', redirect: 'manual',
-          headers: {'Content-Type': 'application/json', Accept: 'application/json'}, body: JSON.stringify(ud)});
+          headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-Kalender': KAL_ID}, body: JSON.stringify(ud)});
       } catch(e) { throw {kode: 'fejl'}; }
       if (r.type === 'opaqueredirect' || r.status === 401) throw {kode: 'login'};
       let b = null; try { b = await r.json(); } catch(e) {}
       if (!r.ok || !b || !b.data) throw {kode: (b && b.kode) || 'fejl'};
       db.fejl = null; db.vent = b.data; db.gen++;
+      if (histSek.open) opdaterHist();
     } catch(e) { db.fejl = e.kode || 'fejl'; }
     db.sender = false;
     flushLive(); showDbState();
@@ -2002,7 +2073,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const busy = () => {
     if (document.querySelector('dialog[open]')) return true;
     const el = document.activeElement;
-    return !!(el && el.matches('input:not([type="file"]):not([type="radio"]):not([type="checkbox"]), textarea') && el.value !== el.defaultValue);
+    return !!(el && el.matches('input:not([type="file"]):not([type="radio"]):not([type="checkbox"]):not(#histSoeg), textarea') && el.value !== el.defaultValue);
   };
 
   // Et svar med ældre lager end det, appen viser, kommer fra en anden serverinstans med ældre cache. Det vises ikke,
@@ -2108,6 +2179,87 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     if (document.visibilityState !== 'visible'){ varSkjult = true; clearTimeout(live.timer); return; }
     if (varSkjult){ varSkjult = false; tick(); }
   });
+
+  // ---------- historik: /api/historik ----------
+  // Serveren skriver historikken, når en kalender gemmer eller pakker (også fejl). Her vises den, nyeste først.
+  // Den hentes, når fanen åbnes, og nye linjer kommer til, mens den er åben.
+  const hist = {poster: [], flere: false, henter: false, fejl: null, hentet: false, n: 0};
+  const histSek = document.getElementById('sec-historik');
+  const fTid = new Intl.DateTimeFormat('da-DK', {weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+  const KAT_NAVN = {batch: 'Batch', pakning: 'Pakning', bestilling: 'Bestilling', produkt: 'Produkt', person: 'Person', fejl: 'Fejl'};
+  const histFilter = () => ({kategori: document.getElementById('histKat').value, soeg: document.getElementById('histSoeg').value.trim()});
+  function histSti(foer){
+    const q = new URLSearchParams({antal: '100'}), f = histFilter();
+    if (f.kategori) q.set('kategori', f.kategori);
+    if (f.soeg) q.set('soeg', f.soeg);
+    if (foer) q.set('foer', String(foer));
+    return '/api/historik?' + q;
+  }
+  // aeldre: hent siden efter de viste linjer. Ellers hentes de nyeste forfra.
+  async function hentHist(aeldre){
+    if (!live.aktiv){ hist.fejl = 'lokal'; renderHist(); return; }
+    const n = ++hist.n;   // Kun det nyeste kald vises, så et ændret filter ikke blandes med det gamle
+    hist.henter = true; renderHistStatus();
+    try {
+      const b = await hentApi(histSti(aeldre && hist.poster.length ? hist.poster[hist.poster.length - 1].id : null));
+      if (n !== hist.n) return;
+      const nye = Array.isArray(b.data.poster) ? b.data.poster : [];
+      hist.poster = aeldre ? hist.poster.concat(nye) : nye;
+      hist.flere = !!b.data.flere; hist.fejl = null; hist.hentet = true;
+    } catch(e) { if (n !== hist.n) return; hist.fejl = e.kode || 'fejl'; }
+    hist.henter = false; renderHist();
+  }
+  // Nye linjer øverst uden at miste de ældre, der allerede er hentet
+  async function opdaterHist(){
+    if (!hist.hentet) return hentHist(false);
+    if (hist.henter) return;
+    const n = hist.n;
+    try {
+      const b = await hentApi(histSti(null));
+      if (n !== hist.n || hist.henter) return;
+      const nye = Array.isArray(b.data.poster) ? b.data.poster : [];
+      const top = hist.poster.length ? hist.poster[0].id : 0, ekstra = nye.filter(x => x.id > top);
+      if (!ekstra.length) return;
+      if (ekstra.length === nye.length){ hist.poster = nye; hist.flere = !!b.data.flere; }
+      else hist.poster = ekstra.concat(hist.poster);
+      hist.fejl = null; renderHist();
+    } catch(e) { /* prøver igen ved næste hentning */ }
+  }
+  function renderHistStatus(){
+    const f = histFilter();
+    document.getElementById('histStatus').textContent =
+      hist.fejl === 'lokal' ? 'Historikken kræver forbindelse til den fælles database. Den virker ikke, når kalenderen er åbnet som fil.'
+      : hist.fejl === 'login' ? 'Login er udløbet. Genindlæs siden.'
+      : hist.fejl ? 'Historikken kunne ikke hentes. Prøv igen om lidt.'
+      : hist.henter && !hist.hentet ? 'Henter historik…'
+      : hist.hentet ? `Viser ${hist.poster.length} ${hist.poster.length === 1 ? 'linje' : 'linjer'}${f.kategori || f.soeg ? ' for filteret' : ''}${hist.flere ? '. Der er flere ældre' : ''}.` : '';
+  }
+  function renderHist(){
+    renderHistStatus();
+    const tbl = document.getElementById('histTbl');
+    const aabne = new Set([...tbl.querySelectorAll('details[open]')].map(d => d.closest('tr').dataset.hist));
+    const rows = hist.poster.map(x => {
+      const t = new Date(x.tid), denne = typeof x.enhed === 'string' && x.enhed.endsWith(' · ' + KAL_ID);
+      return `<tr data-hist="${Number(x.id)}">
+        <td class="hist-tid">${isNaN(t) ? '–' : esc(fTid.format(t))}</td>
+        <td class="hist-hvad"><span class="hist-kat ${x.kategori === 'fejl' ? 'fejl' : ''}">${esc(KAT_NAVN[x.kategori] || x.kategori)}</span>
+          <div><strong>${esc(x.handling)}</strong>${x.emne ? ' · ' + esc(x.emne) : ''}</div>
+          ${x.tekst ? `<div class="hist-tekst">${esc(x.tekst)}</div>` : ''}
+          ${x.detaljer ? `<details${aabne.has(String(x.id)) ? ' open' : ''}><summary>Data</summary><pre>${esc(JSON.stringify(x.detaljer, null, 2))}</pre></details>` : ''}</td>
+        <td class="hist-enhed">${esc(x.enhed || '–')}${denne ? '<span class="hist-denne">(denne browser)</span>' : ''}</td></tr>`;
+    }).join('');
+    tbl.innerHTML = rows ? `<thead><tr><th>Tidspunkt</th><th>Hvad</th><th>Hvorfra</th></tr></thead><tbody>${rows}</tbody>`
+      : hist.hentet ? `<tbody><tr><td class="muted">${histFilter().kategori || histFilter().soeg ? 'Intet matcher filteret.' : 'Historikken er tom.'}</td></tr></tbody>` : '';
+    document.getElementById('histFlere').hidden = !hist.flere;
+  }
+  const histForfra = () => { hist.poster = []; hist.hentet = false; hist.flere = false; renderHist(); hentHist(false); };
+  histSek.addEventListener('toggle', () => { if (histSek.open) (hist.hentet ? opdaterHist() : hentHist(false)); });
+  document.getElementById('histKat').addEventListener('change', histForfra);
+  let histSoegTimer = null;
+  document.getElementById('histSoeg').addEventListener('input', () => { clearTimeout(histSoegTimer); histSoegTimer = setTimeout(histForfra, 350); });
+  document.getElementById('histOpdater').addEventListener('click', () => hentHist(false));
+  document.getElementById('histFlere').addEventListener('click', () => hentHist(true));
+  if (!live.aktiv){ hist.fejl = 'lokal'; renderHist(); }
 
   renderAll(); showSyncState();
   if (live.aktiv) tick();

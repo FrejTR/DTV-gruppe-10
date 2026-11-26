@@ -1,7 +1,7 @@
 // Adgang til de fælles data i Supabase. Kun serveren taler med databasen, med den hemmelige nøgle
 // (SUPABASE_SECRET_KEY). Kun de faste funktioner i supabase/migrations kaldes (POST /rest/v1/rpc/<navn>).
 
-const FUNKTIONER = new Set(['hent_data', 'gem_data', 'reserver_pakning', 'bekraeft_pakning', 'annuller_pakning']);
+const FUNKTIONER = new Set(['hent_data', 'gem_data', 'reserver_pakning', 'bekraeft_pakning', 'annuller_pakning', 'log_historik', 'hent_historik']);
 // Fejl, funktionerne selv rejser (raise exception). Alle andre fejl fra databasen er db_fejl.
 const KENDTE = new Set(['ikke_nok_klar', 'ugyldig_pakning', 'ukendt_pakning']);
 

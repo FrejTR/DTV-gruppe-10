@@ -23,7 +23,7 @@ try {
 
 const TYPER = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json', '.svg': 'image/svg+xml' };
 const RUTER = { '/api/status': '../api/status.mjs', '/api/salgstempo': '../api/salgstempo.mjs', '/api/lagerregulering': '../api/lagerregulering.mjs',
-  '/api/data': '../api/data.mjs', '/api/pak': '../api/pak.mjs' };
+  '/api/data': '../api/data.mjs', '/api/pak': '../api/pak.mjs', '/api/historik': '../api/historik.mjs' };
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);

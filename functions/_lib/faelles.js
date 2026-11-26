@@ -1,7 +1,8 @@
 // Logikken bag /api/data (fælles data i Supabase) og /api/pak (pak fra produktionslageret til Rackbeat).
 import { HOVEDLAGER, lavSkriveKlient, RackbeatFejl } from './rackbeat.js';
 import { DataFejl, lavDataKlient } from './supabase.js';
-import { fejlSvar, fraKalenderen, iDagIDanmark, json, log } from './svar.js';
+import { enhed, historikForAendringer, pakFejlPost, pakPost } from './historik.js';
+import { fejlSvar, fejlTekst, fraKalenderen, iDagIDanmark, json, log } from './svar.js';
 
 const MAX_KROP = 1024 * 1024;   // 1 MB. Al kalenderens data fylder langt mindre
 const MAX_STK = 1000;           // Poster pr. liste i ét kald
@@ -103,10 +104,11 @@ export async function gemData({ request, env }, deps = {}) {
   if (!aendringer) return json({ fejl: 'Ugyldige data', kode: 'ugyldige_data' }, 400);
   try {
     const klient = db(env, deps);
-    if (aendringer.produkter.slet && aendringer.produkter.slet.length) {
-      aendringer.produkter.slet = brugteFjernet(aendringer, await klient.rpc('hent_data', {}));
-    }
-    await klient.rpc('gem_data', aendringer);
+    // Data før ændringen: til at se, hvad der er ændret (historik), og om et produkt stadig bruges
+    const nu = await klient.rpc('hent_data', {});
+    if (aendringer.produkter.slet && aendringer.produkter.slet.length) aendringer.produkter.slet = brugteFjernet(aendringer, nu);
+    // Historikken skrives i samme transaktion som ændringen
+    await klient.rpc('gem_data', { ...aendringer, historik: historikForAendringer(aendringer, nu, enhed(request)) });
     return dataSvar(await klient.rpc('hent_data', {}));
   } catch (e) {
     const kode = fejlkode(e);
@@ -117,13 +119,40 @@ export async function gemData({ request, env }, deps = {}) {
 
 function laesPakning(k) {
   if (!erObjekt(k)) return null;
-  const { ref, pid, sku, antal, kasseret = 0 } = k;
+  const { ref, pid, sku, antal, kasseret = 0, navn } = k;
   if (typeof ref !== 'string' || !REF.test(ref) || !erTekst(pid) || typeof sku !== 'string' || !SKU.test(sku)) return null;
   if (!erHel(antal, 1, 10000) || !erHel(kasseret, 0, antal)) return null;
-  return { ref, pid, sku, antal, kasseret };
+  // navn bruges kun i historikken
+  return { ref, pid, sku, antal, kasseret, ...(erTekst(navn, 200) ? { navn } : {}) };
 }
 
 const labels = pakning => pakning.linjer.map(l => '#' + (l.label || l.batch)).join(', ');
+
+/** Skriver i historikken. En fejl her må aldrig stoppe en pakning, så den logges kun. */
+async function logHistorik(data, ...poster) {
+  try { await data.rpc('log_historik', { poster }); }
+  catch (e) { log('historik', fejlkode(e), e && e.status); }
+}
+
+const KATEGORIER = new Set(['batch', 'bestilling', 'produkt', 'person', 'pakning', 'fejl']);
+
+/** GET /api/historik?foer=<id>&antal=<1-500>&kategori=<kategori>&soeg=<tekst>: nyeste først */
+export async function hentHistorik({ request, env }, deps = {}) {
+  const q = new URL(request.url).searchParams;
+  const p = { antal: Math.min(500, Math.max(1, parseInt(q.get('antal'), 10) || 100)) };
+  const foer = parseInt(q.get('foer'), 10);
+  if (Number.isSafeInteger(foer) && foer > 0) p.foer = foer;
+  if (KATEGORIER.has(q.get('kategori'))) p.kategori = q.get('kategori');
+  const soeg = (q.get('soeg') || '').trim();
+  if (soeg) p.soeg = soeg.slice(0, 80);
+  try {
+    return dataSvar(await db(env, deps).rpc('hent_historik', p));
+  } catch (e) {
+    const kode = fejlkode(e);
+    log('historik', kode, e && e.status);
+    return fejlSvar(kode, 'supabase');
+  }
+}
 
 /** POST /api/pak: tager antal stk. ud af produktionslageret (ældste batch, der er klar, først) og lægger de
  *  godkendte (antal - kasseret) på Hovedlager i Rackbeat.
@@ -135,28 +164,36 @@ export async function pak({ request, env }, deps = {}) {
   const k = laesPakning(await laesKrop(request));
   if (!k) return json({ fejl: 'Ugyldige data', kode: 'ugyldige_data' }, 400);
   const dato = iDagIDanmark(deps.nu ? new Date(deps.nu()) : new Date());
+  const hvem = enhed(request), navn = k.navn;
 
   let data, pakning;
   try {
     data = db(env, deps);
     // Uden Rackbeat-nøgle reserveres intet
-    if (!env.RACKBEAT_API_KEY) return fejlSvar('ikke_sat_op');
-    pakning = await data.rpc('reserver_pakning', { ...k, idag: dato });
+    if (!env.RACKBEAT_API_KEY) {
+      await logHistorik(data, pakFejlPost(k, fejlTekst('ikke_sat_op'), 'afvist', { enhed: hvem, navn }));
+      return fejlSvar('ikke_sat_op');
+    }
+    const { navn: _, ...felter } = k;
+    pakning = await data.rpc('reserver_pakning', { ...felter, idag: dato });
   } catch (e) {
     const kode = fejlkode(e);
     if (kode === 'ikke_nok_klar') {
       const klar = Number(e.detalje) || 0;
+      await logHistorik(data, pakFejlPost(k, `Der var kun ${klar} stk. klar til pakning`, 'afvist', { enhed: hvem, navn }));
       return json({ fejl: `Der er kun ${klar} stk. klar til pakning`, kode, klar }, 409);
     }
     log('pak', kode, e && e.status);
+    if (data) await logHistorik(data, pakFejlPost(k, fejlTekst(kode, 'supabase'), 'afvist', { enhed: hvem, navn, detaljer: { kode } }));
     return fejlSvar(kode, 'supabase');
   }
+  const igen = pakning.ny === false;
   if (pakning.status === 'bogfoert') {
     return json({ data: { pakning, rackbeat: null, allerede: true }, kilde: 'supabase' }, 200);
   }
 
   const godkendt = pakning.antal - pakning.kasseret;
-  let rb = null, regulering = null, skrevet = false;
+  let rb = null, regulering = null, skrevet = false, foer = null;
   try {
     if (godkendt > 0) {
       rb = lavSkriveKlient({ noegle: env.RACKBEAT_API_KEY, ...deps.rackbeat });
@@ -170,6 +207,7 @@ export async function pak({ request, env }, deps = {}) {
         const r = await rb.laegTil({ sku: pakning.sku, antal: godkendt, dato,
           aarsag: `Pakket fra batch ${labels(pakning)}`, beskrivelse: `Produktionskalender, ref. ${pakning.ref}` });
         regulering = { id: r.id, antal: godkendt, lokation: HOVEDLAGER, dato };
+        foer = r.foer ?? null;
         // Den bogførte ændring blev ikke præcis +godkendt (fx et salg i samme sekund): beholdningen skal tjekkes
         if (r.afviger){ regulering.advarsel = true; regulering.aendring = r.aendring; log('pak', 'afvigelse_i_rackbeat'); }
       }
@@ -178,7 +216,10 @@ export async function pak({ request, env }, deps = {}) {
     const kode = fejlkode(e);
     log('pak', 'rackbeat_' + kode, e && e.status);
     const udfald = await efterFejl(data, skrevet ? rb : null, pakning);
-    if (!erObjekt(udfald)) return json({ ...(await fejlSvar(kode).json()), pakning: udfald }, 502);
+    if (!erObjekt(udfald)) {
+      await logHistorik(data, pakFejlPost(pakning, fejlTekst(kode), udfald, { enhed: hvem, navn, detaljer: { kode, linjer: pakning.linjer } }));
+      return json({ ...(await fejlSvar(kode).json()), pakning: udfald }, 502);
+    }
     // Reguleringen blev bogført alligevel (fx svaret gik tabt)
     pakning = udfald.pakning;
     regulering = { id: udfald.id, antal: godkendt, lokation: HOVEDLAGER, dato };
@@ -191,10 +232,13 @@ export async function pak({ request, env }, deps = {}) {
       // Rackbeat er opdateret. Pakningen står som reserveret, til samme ref sendes igen, så stk. er stadig taget ud.
       const kode = fejlkode(e);
       log('pak', 'bekraeft_' + kode, e && e.status);
+      await logHistorik(data, pakFejlPost(pakning, `Lagt i Rackbeat${regulering ? ` (regulering ${regulering.id})` : ''}, men databasen svarede ikke bagefter: ${fejlTekst(kode, 'supabase')}`,
+        'venter', { enhed: hvem, navn, detaljer: { kode, rackbeat: regulering } }));
       return json({ ...(await fejlSvar(kode, 'supabase').json()), pakning: 'venter' }, 502);
     }
   }
   log('pak', godkendt > 0 ? 'bogfoert' : 'kun_kasseret');
+  await logHistorik(data, pakPost(pakning, regulering && { ...regulering, foer }, { igen, enhed: hvem, navn }));
   return json({ data: { pakning, rackbeat: regulering, allerede: false }, kilde: 'supabase' }, 201);
 }
 

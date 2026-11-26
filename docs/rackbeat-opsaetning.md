@@ -158,6 +158,19 @@ Kun batches, der har hærdet færdigt, kan pakkes. Er der ikke nok klar, afvises
 
 Sikring: tabellerne har række-sikkerhed (RLS) uden regler, og funktionerne kan kun kaldes med den hemmelige nøgle. Serveren godtager kun kald fra kalenderen selv og tjekker alle felter (fx at datoer er datoer og antal er hele tal), så produktionslageret altid kan regnes.
 
+**Afsluttede batches:** en batch, der har været "Pakket og lagt i Rackbeat" i 7 dage, skjules på listen *Batches* (knappen *Vis afsluttede* viser dem igen). Den slettes ikke og bliver i kalenderen og beregningerne.
+
+## 9. Historik (fejlfinding)
+
+Fanen *Historik* nederst på siden viser alt, der er oprettet, ændret, pakket eller slettet, fra alle kalendere, nyeste først. Hver linje har tidspunkt (med sekunder), kategori, hvad der skete, de ændrede værdier (før → efter, og rå data under *Data*) og hvorfra (browser, styresystem og et tilfældigt id pr. browser, så man kan se, om to linjer kom fra samme computer). Man kan filtrere på kategori (batches, pakning, bestillinger, produkter, personer, fejl) og søge, fx på et batchnummer eller et navn.
+
+- Serveren skriver historikken, ikke browseren: ved hver `POST /api/data` sammenligner den data før og efter, og linjerne gemmes i samme transaktion som ændringen (`gem_data`). En ændring, der ikke blev gemt, står derfor heller ikke i historikken.
+- Pakninger logges med antal, kasserede, hvilke batches stk. blev taget fra, Rackbeat-reguleringens nummer og beholdningen på Hovedlager før og efter. Står der *Advarsel*, ændrede Rackbeat beholdningen med et andet tal end det godkendte (fx et salg i samme sekund).
+- Fejl ved pakning logges under *Fejl*: Rackbeat afviste (stk. tilbage på produktionslageret), Rackbeat svarede ikke (stk. venter på *Prøv igen*), eller der var ikke nok klar.
+- Lager og salgstempo, som hentes fra Rackbeat hvert 20. sekund, logges ikke.
+- Linjer ændres eller slettes aldrig. Tabellen er `historik` i Supabase (migration `20261126110000_historik.sql`), og den hentes med `GET /api/historik` (100 linjer ad gangen, `foer`, `kategori`, `soeg`).
+- Historikken kræver den fælles database. Åbnet som fil viser fanen kun en forklaring.
+
 ## Kilder
 
 | Emne | Side |

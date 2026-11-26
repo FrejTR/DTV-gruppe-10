@@ -180,6 +180,33 @@ const server = http.createServer((req, res) => {
   check('ugevisningen starter en uge før nu', uger.length >= 2 && !uger[0].nu && uger[1].nu, JSON.stringify(uger));
   check('den nuværende uge er mærket "Nu"', uger[1].tekst.includes('Nu') && !uger[0].tekst.includes('Nu'));
 
+  // Afsluttede batches: pakket og lagt i Rackbeat i mindst 7 dage skjules på Batches-listen, men slettes ikke
+  await p.evaluate(([k, d40, d8, d6, d10]) => {
+    const S = JSON.parse(localStorage.getItem(k));
+    const sæbe = S.products.find(x => x.type === 'Sæbebarer');
+    const ny = (no, label, extra) => ({ no, label, by: 'Test', pid: sæbe.id, qty: 20, made: d40, cure: 22, status: 'aktiv', ...extra });
+    S.batches.push(ny(10, 'AF8', {}), ny(11, 'AF6', {}), ny(12, 'AFG', { packed: true, rackbeat: true, packedOn: d10 }), ny(13, 'AFL', { packed: true, packedOn: d10 }));
+    const pak = (ref, no, dato) => ({ ref, pid: sæbe.id, antal: 20, kasseret: 0, dato, status: 'bogfoert', linjer: [{ batch: no, antal: 20, kasseret: 0 }] });
+    S.pakninger = [pak('pak-a', 10, d8), pak('pak-b', 11, d6)];
+    localStorage.setItem(k, JSON.stringify(S));
+  }, [KEY, dag(-40), dag(-8), dag(-6), dag(-10)]);
+  await p.reload();
+  await p.evaluate(() => { document.getElementById('sec-batches').open = true; });
+  const batchTekst = () => p.textContent('#batchTbl');
+  let bt = await batchTekst();
+  check('afsluttet for 8 dage siden skjules på Batches', !bt.includes('AF8'), bt.slice(0, 200));
+  check('afsluttet for 6 dage siden vises stadig', bt.includes('AF6'));
+  check('hele batchen lagt i Rackbeat for 10 dage siden skjules', !bt.includes('AFG'));
+  check('pakket uden Rackbeat skjules ikke', bt.includes('AFL'));
+  const st2 = await state();
+  check('skjulte batches er stadig i data', [10, 12].every(n => st2.batches.some(x => x.no === n)) && st2.pakninger.length === 2);
+  check('knappen viser antal skjulte', (await p.textContent('#batchAfsl')).trim() === 'Vis afsluttede (2)' && await p.isVisible('#batchAfsl'));
+  await p.click('#batchAfsl');
+  bt = await batchTekst();
+  check('Vis afsluttede viser dem igen', bt.includes('AF8') && bt.includes('AFG') && (await p.textContent('#batchAfsl')).trim() === 'Skjul afsluttede (2)');
+  await p.click('#batchAfsl');
+  check('Skjul afsluttede skjuler dem igen', !(await batchTekst()).includes('AF8'));
+
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
   process.exit(failed ? 1 : 0);

@@ -203,6 +203,35 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     check('et produkt med batches kan ikke slettes', !(await a.$('[data-delprod="tang-shampoo"]')) && (await produkterI(a)).includes('tang-shampoo')
       && (await a.evaluate(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' '))).includes('kan ikke slettes'));
 
+    // Historik: fanen nederst viser alt fra begge kalendere, nyeste først, med tidspunkt og hvorfra
+    const histLinjer = p => p.$$eval('#histTbl tbody tr[data-hist]', r => r.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+    await a.evaluate(() => { const d = document.getElementById('sec-historik'); d.open = true; d.scrollIntoView(); });
+    check('historik: hentes, når fanen åbnes', await ventPaa(async () => (await histLinjer(a)).length > 5));
+    let hl = await histLinjer(a);
+    check('historik: pakning med Rackbeat-regulering og beholdning', hl.some(x => /Pakket og lagt i Rackbeat · Hyben shampoo bar \(HYB001\)/.test(x) && /Lagt på Hovedlager i Rackbeat: \d+ stk\. \(regulering \d+, beholdning \d+ → \d+\)/.test(x)), hl.slice(0, 5).join(' | '));
+    check('historik: produktet oprettet og slettet', hl.some(x => x.includes('Produkt slettet · Testvare')) && hl.some(x => x.includes('Produkt oprettet · Testvare')));
+    check('historik: nyeste først', hl[0].includes('Produkt slettet'), hl[0]);
+    check('historik: tidspunkt med dato og sekunder', /\d{1,2}\. \w+\.? \d{4}.*\d{2}[.:]\d{2}[.:]\d{2}/.test(hl[0]), hl[0]);
+    check('historik: hvorfra, og denne browser er mærket', /Chromium på|Chrome på/.test(hl[0]) && hl[0].includes('(denne browser)'), hl[0]);
+    check('historik: B ser de samme linjer, men ikke som sine egne', await ventPaa(async () => {
+      await bb.evaluate(() => { document.getElementById('sec-historik').open = true; });
+      const x = await histLinjer(bb); return x.length && x[0].includes('Produkt slettet') && !x[0].includes('(denne browser)');
+    }, 15000));
+    await a.selectOption('#histKat', 'pakning');
+    check('historik: filter på pakning', await ventPaa(async () => { const x = await histLinjer(a); return x.length > 0 && x.every(y => /Pakket og lagt i Rackbeat|Pakning fejlede/.test(y)); }));
+    await a.selectOption('#histKat', '');
+    await a.fill('#histSoeg', 'testvare');
+    check('historik: søgning', await ventPaa(async () => { const x = await histLinjer(a); return x.length === 2 && x.every(y => /Testvare/.test(y)); }), (await histLinjer(a)).join(' | '));
+    await a.fill('#histSoeg', '');
+    await ventPaa(async () => (await histLinjer(a)).length > 5);
+    // En ny ændring kommer øverst af sig selv, mens fanen er åben
+    const foerAntal = (await histLinjer(a)).length;
+    await a.evaluate(() => { document.getElementById('sec-produkter').open = true; });
+    await a.fill('#min-tang-shampoo', '31');
+    await a.dispatchEvent('#min-tang-shampoo', 'change');
+    await a.evaluate(() => document.activeElement && document.activeElement.blur());
+    check('historik: ny ændring kommer øverst af sig selv', await ventPaa(async () => { const x = await histLinjer(a); return x.length > foerAntal && /Produkt ændret · Tang shampoo/.test(x[0]) && /Minimum: \d+ → 31/.test(x[0]); }, 25000), (await histLinjer(a))[0]);
+
     // Uden server (åbnet som fil) pakkes kun i kalenderen
     const f = await (await b.newContext()).newPage();
     f.errs = [];
@@ -220,6 +249,8 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
     await f.click('#pkYes');
     const lokal = await f.evaluate(k => JSON.parse(localStorage.getItem(k)).pakninger, KEY);
     check('uden server: pakket lokalt uden Rackbeat', lokal.length === 1 && lokal[0].status === 'lokal' && lokal[0].antal === 10, JSON.stringify(lokal));
+    await f.evaluate(() => { document.getElementById('sec-historik').open = true; });
+    check('uden server: historikken forklarer, at den kræver databasen', await ventPaa(async () => (await f.textContent('#histStatus')).includes('kræver forbindelse til den fælles database')));
     check('uden server: produktionslageret er talt ned', JSON.stringify(await raekke(f, 'Tang shampoo')) === '[0,43,43]', JSON.stringify(await raekke(f, 'Tang shampoo')));
 
     const errs = [...a.errs, ...bb.errs, ...f.errs];

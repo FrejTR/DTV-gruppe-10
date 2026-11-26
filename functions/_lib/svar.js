@@ -22,10 +22,12 @@ const TEKSTER = {
   db_fejl: 'Databasen svarer ikke',
 };
 
+/** Den korte tekst til en fejlkode, som den vises i appen */
+export const fejlTekst = (kode, kilde = 'rackbeat') => TEKSTER[kode] || (kilde === 'rackbeat' ? 'Rackbeat svarer ikke' : 'Databasen svarer ikke');
+
 export function fejlSvar(kode, kilde = 'rackbeat') {
   const status = kode === 'ikke_sat_op' || kode === 'db_ikke_sat_op' ? 503 : 502;
-  const standard = kilde === 'rackbeat' ? 'Rackbeat svarer ikke' : 'Databasen svarer ikke';
-  return json({ data: null, hentet: null, forældet: true, kilde, fejl: TEKSTER[kode] || standard, kode }, status);
+  return json({ data: null, hentet: null, forældet: true, kilde, fejl: fejlTekst(kode, kilde), kode }, status);
 }
 
 /** Kun kald fra kalenderen selv. Vercel Authentication sender login-cookien med, så et kald fra
