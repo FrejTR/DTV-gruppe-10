@@ -1,6 +1,7 @@
 // Tester batchnummer der kan stå tomt, ret batch og trinnene "Tag ud af forme" og "Skær kanter" i V3. Kørsel: node tests/batch_v3.js
 // Ingen /api: kalenderen kører så uden Rackbeat (som ved åbning af filen).
 const { chromium } = require('playwright');
+const { sidelaensScroll } = require('./bredde');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -255,6 +256,9 @@ const server = http.createServer((req, res) => {
   check('produkttabellen passer i bredden ved 1280 px', bredde.tabel <= bredde.plads, JSON.stringify(bredde));
   const bBredde = await p.evaluate(() => { document.getElementById('sec-batches').open = true; const t = document.getElementById('batchTbl'); return { tabel: t.scrollWidth, plads: t.parentElement.clientWidth, raekker: t.tBodies[0].rows.length }; });
   check('batchtabellen passer i bredden ved 1280 px', bBredde.tabel <= bBredde.plads && bBredde.raekker > 3, JSON.stringify(bBredde));
+  // Alle sektioner, også fremtidige: intet scroller sidelæns ved 1280 px
+  const forBred = await sidelaensScroll(p);
+  check('ingen sektion scroller sidelæns ved 1280 px', forBred.length === 0, forBred.join(' | '));
 
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
