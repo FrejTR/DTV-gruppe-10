@@ -4,7 +4,8 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as dataRute from '../api/data.mjs';
 import * as pakRute from '../api/pak.mjs';
-import { gemData, hentData, pak } from '../functions/_lib/faelles.js';
+import * as historikRute from '../api/historik.mjs';
+import { gemData, hentData, hentHistorik, pak } from '../functions/_lib/faelles.js';
 import { lavDatabase, supabaseFetch } from './supabase_pglite.mjs';
 
 const DB_NOEGLE = 'sb_secret_test-noegle-456';
@@ -27,8 +28,8 @@ async function ingenHemmeligheder(svar) {
   }
 }
 
-function anmodning(sti, k, { origin = ORIGIN, type = 'application/json', metode = 'POST' } = {}) {
-  const hoveder = {};
+function anmodning(sti, k, { origin = ORIGIN, type = 'application/json', metode = 'POST', ekstra = {} } = {}) {
+  const hoveder = { ...ekstra };
   if (origin) hoveder.Origin = origin;
   if (type) hoveder['Content-Type'] = type;
   return new Request(ORIGIN + sti, { method: metode, headers: hoveder, ...(metode === 'POST' ? { body: typeof k === 'string' ? k : JSON.stringify(k) } : {}) });
@@ -364,4 +365,136 @@ test('data: en batch med en pakning, der venter på Rackbeat, slettes ikke', asy
 test('ruter: /api/data har GET og POST, /api/pak kun POST', () => {
   assert.deepEqual(Object.keys(dataRute).sort(), ['GET', 'POST']);
   assert.deepEqual(Object.keys(pakRute), ['POST']);
+});
+
+// ---------- historik ----------
+
+const CHROME = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36', 'X-Kalender': 'abcd1234' };
+const IPHONE = { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' };
+const PRODUKT = { id: 'havtorn-saebe', name: 'Havtorn sæbe', sku: 'HAT003', type: 'Sæbebarer', min: 50, batch: 60, cure: 22, steps: [] };
+async function gem(deps, aendringer, ekstra = CHROME) {
+  const svar = await gemData({ request: anmodning('/api/data', aendringer, { ekstra }), env: ENV }, deps);
+  assert.equal(svar.status, 200, await svar.clone().text());
+}
+async function historik(deps, q = '') {
+  const svar = await hentHistorik({ request: anmodning('/api/historik' + q, null, { metode: 'GET' }), env: ENV }, deps);
+  assert.equal(svar.status, 200, await svar.clone().text());
+  return (await krop(svar)).data;
+}
+const linjer = h => h.poster.map(p => `${p.kategori} | ${p.handling} | ${p.emne}`).reverse();
+
+test('historik: hver ændring fra kalenderen skrives med hvad, detaljer, tidspunkt og enhed', async () => {
+  const { deps } = await opsaet();
+  await gem(deps, { produkter: { gem: [PRODUKT] }, personer: { gem: ['Anna'] } });
+  const plan = B(7, '', '2026-11-20', 60, { status: 'planlagt' });
+  await gem(deps, { batches: { gem: [plan] } });
+  await gem(deps, { batches: { gem: [{ ...plan, label: 'K201106', status: 'aktiv', made: '2026-11-16', madeBy: 'Mette' }] } });
+  const lavet = { ...plan, label: 'K201106', status: 'aktiv', made: '2026-11-16', madeBy: 'Mette' };
+  await gem(deps, { batches: { gem: [{ ...lavet, steps: { demold: { on: '2026-11-17', by: 'Mette' } } }] } });
+  await gem(deps, { batches: { gem: [{ ...lavet, qty: 58, cure: 24, steps: { demold: { on: '2026-11-17', by: 'Mette' } } }] } });
+  await gem(deps, { batches: { gem: [{ ...lavet, qty: 58, cure: 24, status: 'kasseret', discardReason: { kategori: 'Andet', tekst: 'Formen revnede' } }] } });
+  await gem(deps, { batches: { gem: [lavet] } });
+  await gem(deps, { reservationer: { gem: [{ id: 'r1-0', group: 'r1', kind: 'event', who: 'Julemarked', pid: 'havtorn-saebe', qty: 30, date: '2026-12-05' }] } });
+  await gem(deps, { reservationer: { slet: ['r1-0'] }, produkter: { gem: [{ ...PRODUKT, min: 60 }] } }, IPHONE);
+  await gem(deps, { batches: { slet: [7] } });
+
+  const h = await historik(deps);
+  assert.deepEqual(linjer(h), [
+    'produkt | Produkt oprettet | Havtorn sæbe (HAT003)',
+    'person | Person tilføjet | Anna',
+    'batch | Batch planlagt | uden nr. · Havtorn sæbe',
+    'batch | Batch registreret som lavet | #K201106 · Havtorn sæbe',
+    'batch | Taget ud af forme | #K201106 · Havtorn sæbe',
+    'batch | Batch ændret | #K201106 · Havtorn sæbe',
+    'batch | Batch markeret som fejlet, Udtagning af forme fortrudt | #K201106 · Havtorn sæbe',
+    'batch | Batch gendannet | #K201106 · Havtorn sæbe',
+    'bestilling | Event oprettet | Julemarked',
+    'bestilling | Event slettet | Julemarked',
+    'produkt | Produkt ændret | Havtorn sæbe (HAT003)',
+    'batch | Batch slettet | #K201106 · Havtorn sæbe',
+  ]);
+  const p = Object.fromEntries(h.poster.map(x => [x.handling, x]));
+  assert.equal(p['Batch planlagt'].tekst, '60 stk. Havtorn sæbe, start 20. nov. 2026, 22 dage før pakning (pakkes 12. dec. 2026), oprettet af Anna');
+  assert.match(p['Batch registreret som lavet'].tekst, /Batchnr\.: – → K201106\. Dato: 20\. nov\. 2026 → 16\. nov\. 2026\. Lavet af: – → Mette/);
+  assert.equal(p['Taget ud af forme'].tekst, 'Taget ud af forme 17. nov. 2026 af Mette');
+  assert.equal(p['Batch ændret'].tekst, 'Antal: 60 → 58. Dage før pakning: 22 → 24');
+  assert.deepEqual(p['Batch ændret'].detaljer, { foer: { qty: 60, cure: 22 }, efter: { qty: 58, cure: 24 } });
+  assert.equal(p['Batch markeret som fejlet, Udtagning af forme fortrudt'].tekst, 'Årsag: Andet: Formen revnede');
+  assert.equal(p['Event oprettet'].tekst, '30 stk. Havtorn sæbe til 5. dec. 2026');
+  assert.equal(p['Produkt ændret'].tekst, 'Minimum: 50 → 60');
+  assert.equal(p['Produkt ændret'].enhed, 'Safari på iPhone');
+  assert.equal(p['Batch slettet'].enhed, 'Chrome på Windows · abcd1234');
+  assert.ok(h.poster.every(x => !isNaN(Date.parse(x.tid)) && Number.isInteger(x.id)));
+  assert.equal(h.flere, false);
+});
+
+test('historik: det samme sendt igen giver ingen nye linjer', async () => {
+  const { deps } = await opsaet();
+  await gem(deps, { produkter: { gem: [PRODUKT] }, ...TRE_BATCHES });
+  const foer = (await historik(deps)).poster.length;
+  await gem(deps, { produkter: { gem: [PRODUKT] }, ...TRE_BATCHES });
+  await gem(deps, { personer: { gem: [] } });
+  assert.equal((await historik(deps)).poster.length, foer);
+});
+
+test('historik: pakning med Rackbeat-regulering og beholdning før og efter', async () => {
+  const { deps } = await opsaet();
+  await gem(deps, { produkter: { gem: [PRODUKT] }, ...TRE_BATCHES });
+  await pak({ request: anmodning('/api/pak', { ...PAK(50, 2), navn: 'Havtorn sæbe' }, { ekstra: CHROME }), env: ENV }, deps);
+  const [x] = (await historik(deps, '?kategori=pakning')).poster;
+  assert.equal(x.handling, 'Pakket og lagt i Rackbeat');
+  assert.equal(x.emne, 'Havtorn sæbe (HAT003)');
+  assert.equal(x.tekst, '50 stk. taget ud af produktionslageret, heraf 2 kasseret. Fra batch #1: 40 stk. (2 kasseret), #2: 10 stk. Lagt på Hovedlager i Rackbeat: 48 stk. (regulering 5001, beholdning 24 → 72).');
+  assert.equal(x.enhed, 'Chrome på Windows · abcd1234');
+  assert.equal(x.detaljer.ref, 'pak-aaaaaaaa');
+  // Sletter man batchen bagefter, står det i historikken, at der var pakket fra den
+  await gem(deps, { batches: { slet: [1] } });
+  const [slet] = (await historik(deps, '?kategori=batch&antal=1')).poster;
+  assert.equal(slet.handling, 'Batch slettet');
+  assert.match(slet.tekst, /Der var pakket 40 stk\. fra den \(1 pakning\)\. Pakningerne er fjernet i kalenderen, men det, der er lagt på lager i Rackbeat, er ikke ændret\./);
+});
+
+test('historik: fejl ved pakning skrives, også når der ikke er nok klar', async () => {
+  const { deps } = await opsaet({ fejl: { opret: 422 } });
+  await gem(deps, { produkter: { gem: [PRODUKT] }, ...TRE_BATCHES });
+  await pak({ request: anmodning('/api/pak', PAK(22)), env: ENV }, deps);
+  await pak({ request: anmodning('/api/pak', PAK(500, 0, 'pak-bbbbbbbb')), env: ENV }, deps);
+  const h = (await historik(deps, '?kategori=fejl')).poster;
+  assert.deepEqual(h.map(x => x.tekst).reverse(), [
+    '22 stk.: Rackbeat afviste reguleringen. Intet er lagt på lager i Rackbeat, og stk. er tilbage på produktionslageret.',
+    '500 stk.: Der var kun 65 stk. klar til pakning. Intet er taget ud af produktionslageret.',
+  ]);
+  assert.ok(h.every(x => x.handling === 'Pakning fejlede'));
+  assert.equal(h[1].detaljer.udfald, 'annulleret');
+});
+
+test('historik: en batch, der ikke slettes (pakning venter), og et produkt i brug står ikke som slettet', async () => {
+  const { deps } = await opsaet({ fejlFra: 5 });
+  await gem(deps, { produkter: { gem: [PRODUKT] }, ...TRE_BATCHES });
+  await pak({ request: anmodning('/api/pak', PAK(10)), env: ENV }, deps);
+  await gem(deps, { batches: { slet: [1] }, produkter: { slet: ['havtorn-saebe'] } });
+  const h = (await historik(deps)).poster;
+  assert.ok(!h.some(x => /slettet/.test(x.handling)), h.map(x => x.handling).join(', '));
+  assert.equal(h[0].kategori, 'fejl');
+  assert.equal(h[0].detaljer.udfald, 'venter');
+});
+
+test('historik: nyeste først, ældre sider, kategori og søgning', async () => {
+  const { deps } = await opsaet();
+  await gem(deps, { produkter: { gem: [PRODUKT] } });
+  for (let i = 1; i <= 7; i++) await gem(deps, { batches: { gem: [B(i, 'K' + i, '2026-11-01', 10 + i)] } });
+  let h = await historik(deps, '?antal=3');
+  assert.deepEqual(h.poster.map(x => x.emne), ['#K7 · Havtorn sæbe', '#K6 · Havtorn sæbe', '#K5 · Havtorn sæbe']);
+  assert.equal(h.flere, true);
+  h = await historik(deps, `?antal=10&foer=${h.poster[2].id}`);
+  assert.equal(h.poster.length, 5);
+  assert.equal(h.flere, false);
+  assert.equal((await historik(deps, '?kategori=produkt')).poster.length, 1);
+  assert.deepEqual((await historik(deps, '?soeg=k3')).poster.map(x => x.emne), ['#K3 · Havtorn sæbe']);
+  assert.equal((await historik(deps, '?soeg=13 stk')).poster.length, 1, 'søger også i detaljerne');
+  assert.equal((await historik(deps, '?kategori=noget')).poster.length, 8, 'ukendt kategori ignoreres');
+});
+
+test('ruter: /api/historik har kun GET', () => {
+  assert.deepEqual(Object.keys(historikRute), ['GET']);
 });

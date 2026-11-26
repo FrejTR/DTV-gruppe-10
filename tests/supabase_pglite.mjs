@@ -9,7 +9,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const ROD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONER = path.join(ROD, 'supabase', 'migrations');
-const FUNKTIONER = new Set(['hent_data', 'gem_data', 'reserver_pakning', 'bekraeft_pakning', 'annuller_pakning']);
+const FUNKTIONER = new Set(['hent_data', 'gem_data', 'reserver_pakning', 'bekraeft_pakning', 'annuller_pakning', 'log_historik', 'hent_historik']);
 
 /** Ny, tom database med Supabases roller og alle migrationer. */
 export async function lavDatabase() {
