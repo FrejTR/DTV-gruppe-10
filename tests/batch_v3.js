@@ -207,6 +207,49 @@ const server = http.createServer((req, res) => {
   await p.click('#batchAfsl');
   check('Skjul afsluttede skjuler dem igen', !(await batchTekst()).includes('AF8'));
 
+  // Sæber: skær kanter og sæbespåner vælges til eller fra samlet pr. produkt under Produkter og minimum
+  await p.evaluate(([k, d10]) => {
+    const S = JSON.parse(localStorage.getItem(k));
+    const sæbe = S.products.find(x => x.type === 'Sæbebarer');
+    S.batches.push({ no: 20, label: 'KT1', by: 'Test', pid: sæbe.id, qty: 30, rejected: 4, rejectedOn: d10, made: d10, cure: 22, status: 'aktiv', steps: { demold: { on: d10, by: 'Test' } } });
+    localStorage.setItem(k, JSON.stringify(S));
+    localStorage.setItem('kystnaer-hvem', 'Test');
+  }, [KEY, dag(-10)]);
+  await p.reload();
+  await p.evaluate(() => { document.getElementById('sec-produkter').open = true; document.getElementById('sec-batches').open = true; });
+  const sæbeId = (await state()).products.find(x => x.type === 'Sæbebarer').id;
+  const shampooId = (await state()).products.find(x => x.type === 'Shampoobarer').id;
+  const findes = sel => p.evaluate(s => !!document.querySelector(s), sel);
+  check('sæbe: valget findes og er slået til fra start', await p.isChecked('#pk-' + sæbeId));
+  check('shampoo: intet valg om kanter', !(await findes('#pk-' + shampooId)));
+  check('slået til: skær kanter og sæbespåner er opgaver', await findes('[data-step="20|trim"]') && await findes('[data-step="20|flakes"]'));
+  await p.uncheck('#pk-' + sæbeId);
+  check('fravalg gemmes på produktet', (await state()).products.find(x => x.id === sæbeId).kanter === false);
+  check('fravalgt: ingen opgave med at skære kanter', !(await findes('[data-step="20|trim"]')));
+  check('fravalgt: ingen opgave med sæbespåner', !(await findes('[data-step="20|flakes"]')));
+  check('fravalgt: trinet står ikke under Trin undervejs', !(await findes(`#ps-trim-${sæbeId}`)) && await findes(`#ps-demold-${sæbeId}`));
+  await visBatch(20);
+  const dt = await p.textContent('#detailBody');
+  check('fravalgt: detaljen nævner hverken kanter eller sæbespåner', !dt.includes('Sæbespåner') && !dt.includes('Skær kanter'), dt);
+  await p.click('#dClose');
+  await p.check('#pk-' + sæbeId);
+  check('tilvalgt igen: opgaverne er tilbage', (await state()).products.find(x => x.id === sæbeId).kanter === true && await findes('[data-step="20|trim"]') && await findes('[data-step="20|flakes"]'));
+  check('tilvalgt igen: dagen for kantskæring er bevaret', await p.inputValue(`#ps-trim-${sæbeId}`) === '8');
+
+  // Nyt produkt: valget vises kun for sæber
+  await p.click('#btnNewProd');
+  await p.selectOption('#npType', 'Sæbebarer');
+  check('nyt produkt: valget vises for sæber og er slået til', await p.isVisible('#npKanter') && await p.isChecked('#npKanter'));
+  await p.uncheck('#npKanter');
+  check('nyt produkt: uden kanter nævner forhåndsvisningen ikke kantskæring', !(await p.textContent('#npSteps')).includes('skær kanter'), await p.textContent('#npSteps'));
+  await p.selectOption('#npType', 'Shampoobarer');
+  check('nyt produkt: valget skjules for andre typer', !(await p.isVisible('#npKanter')));
+  await p.selectOption('#npType', 'Sæbebarer');
+  await p.fill('#npName', 'Test sæbe uden kanter');
+  await p.click('#formProd button[type=submit]');
+  const nyP = (await state()).products.find(x => x.name === 'Test sæbe uden kanter');
+  check('nyt produkt: oprettes uden kanter', nyP && nyP.kanter === false && !(await findes(`#ps-trim-${nyP.id}`)), JSON.stringify(nyP));
+
   check('ingen fejl i siden', errs.length === 0, errs.join(' | '));
   await b.close(); server.close();
   process.exit(failed ? 1 : 0);

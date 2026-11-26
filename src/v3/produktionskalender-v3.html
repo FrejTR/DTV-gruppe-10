@@ -348,6 +348,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 @media (pointer:coarse){.trim{width:28px;height:28px}}
 /* ---------- trin pr. produkt og filter ---------- */
 .pstep-list{display:flex;flex-direction:column;gap:4px}
+.valg{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:600;color:var(--ink);cursor:pointer}
+.valg input{width:18px;height:18px;margin:0;accent-color:var(--btn);flex:none}
+.valg[hidden]{display:none}
+.pstep.valg{margin-bottom:2px}
 .pstep{display:flex;align-items:center;gap:6px;font-size:.82rem;white-space:nowrap}
 .pstep input{width:4rem;padding:4px 8px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:right;font-variant-numeric:tabular-nums}
 .wk-select{padding:6px 12px;border:1px solid var(--ink);border-radius:var(--pill);background:var(--surface);min-height:38px}
@@ -576,6 +580,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <div class="field"><label for="npMin">Minimum (stk.)</label><input id="npMin" type="number" min="0" step="1" inputmode="numeric" value="30"></div>
     <div class="field"><label for="npBatch">Typisk batch (stk.)</label><input id="npBatch" type="number" min="1" step="1" inputmode="numeric" value="60"></div>
   </div>
+  <label class="valg" id="npKanterWrap"><input type="checkbox" id="npKanter" checked> Skær kanter og lav sæbespåner af kasserede</label>
   <p class="preview" id="npSteps"></p>
   <div class="field"><label for="npWho">Oprettet af</label><select id="npWho" data-hvem></select><input id="npWhoNew" type="text" placeholder="Skriv navn" aria-label="Nyt navn" maxlength="80" hidden></div>
   <p class="form-err" id="npErr" role="alert" hidden></p>
@@ -698,6 +703,10 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     'Andet':       {cure:7,  dry:'Hærder', steps:[]},
   };
   const typeOf = p => TYPES[p && p.type] || TYPES['Andet'];
+  // Sæber: skær kanter og sæbespåner ved kassering hører sammen og vælges til eller fra pr. produkt (p.kanter).
+  // Uden valg (ældre produkter) er det slået til, som det altid har været.
+  const kanterValgbar = p => !!typeOf(p).flakes;
+  const harKanter = p => kanterValgbar(p) && !(p && p.kanter === false);
 
   // ---------- startdata: produkter med Rackbeats varenumre og navne, tider fra produktionsoversigten ----------
   // Ingen batches, reservationer eller personer. Lager og salgstempo hentes fra Rackbeat.
@@ -745,7 +754,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const activeProducts = () => S.products.filter(p => !p.archived);
 
   // ---------- trin undervejs (fx tag ud af forme, skær kanter) ----------
-  const stepsOf = p => (p && p.steps || []).filter(x => STEP_DEFS[x.key]).map(x => ({...STEP_DEFS[x.key], day: x.day}));
+  const stepsOf = p => (p && p.steps || []).filter(x => STEP_DEFS[x.key] && !(x.key === 'trim' && p.kanter === false)).map(x => ({...STEP_DEFS[x.key], day: x.day}));
   const stepDate = (b, st) => add(b.made, st.day);
   const stepDone = (b, key) => b.steps && b.steps[key];
   // Et trin kan først udføres, når trinene før det er gjort (kanter skæres først, når sæben er taget ud af formene)
@@ -761,13 +770,13 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   const batchSteps = b => stepsOf(prod(b.pid)).map(st => ({st, state: stepState(b, st), date: stepDate(b, st)}));
   // Planlagte batches bliver til opgaven "Lav batch" på startdagen (og bliver stående, til de er registreret)
   const MAKE_DEF = {key:'make', name:'Lav batch', doneText:'Batch lavet', icon:'▸'};
-  // Kasserede sæbebarer laves så vidt muligt til sæbespåner
+  // Kasserede sæbebarer laves så vidt muligt til sæbespåner (kun sæber, hvor det er valgt til)
   const FLAKE_DEF = {key:'flakes', name:'Lav sæbespåner', doneText:'Sæbespåner lavet', icon:'♻\uFE0E'};
   const TASK_DEFS = {...STEP_DEFS, make: MAKE_DEF, flakes: FLAKE_DEF};
   // Hele batchen, når den er kasseret. Ellers de kasserede på batchen og dem, der blev kasseret ved pakning.
   const rejectedCount = b => b.status === 'kasseret' ? b.qty : (b.status === 'aktiv' ? (b.rejected || 0) + kasseretVedPak(b) : 0);
   const flakesHandled = b => (b.flakes && b.flakes.qty) || 0;
-  const flakesOpen = b => typeOf(prod(b.pid)).flakes ? Math.max(0, rejectedCount(b) - flakesHandled(b)) : 0;
+  const flakesOpen = b => harKanter(prod(b.pid)) ? Math.max(0, rejectedCount(b) - flakesHandled(b)) : 0;
   const flakeTasks = () => S.batches.filter(b => flakesOpen(b) > 0).map(b => ({b, st: FLAKE_DEF, state:'due', date: b.rejectedOn || TODAY, qty: flakesOpen(b)}));
   function setFlakes(b, who, used){
     const prev = b.flakes || {qty:0, made:0};
@@ -1066,7 +1075,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
         <td>${risk}</td>
         <td class="num">${esc(latest)}</td>
-        <td>${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep">${esc(st.name)} efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
+        <td>${kanterValgbar(p) ? `<label class="pstep valg"><input type="checkbox" data-pkanter="1" data-id="${p.id}" id="pk-${p.id}"${harKanter(p) ? ' checked' : ''}> Skær kanter og sæbespåner</label>` : ''}${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep">${esc(st.name)} efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
         <td>${prodHandlinger(p)}</td>
       </tr>`;
     }).join('');
@@ -1503,10 +1512,18 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   function npTypeChanged(){
     const t = TYPES[npType.value] || TYPES['Andet'];
     document.getElementById('npCure').value = t.cure;
-    const st = t.steps.map(x => `${STEP_DEFS[x.key].name.toLowerCase()} ${x.day} ${x.day === 1 ? 'dag' : 'dage'} efter produktion`);
+    npVisTrin();
+  }
+  // Viser trinene for typen. Sæber uden kanter har ikke trinet "Skær kanter".
+  function npVisTrin(){
+    const t = TYPES[npType.value] || TYPES['Andet'];
+    const kanter = document.getElementById('npKanter').checked;
+    document.getElementById('npKanterWrap').hidden = !t.flakes;
+    const st = t.steps.filter(x => x.key !== 'trim' || !t.flakes || kanter).map(x => `${STEP_DEFS[x.key].name.toLowerCase()} ${x.day} ${x.day === 1 ? 'dag' : 'dage'} efter produktion`);
     document.getElementById('npSteps').textContent = `${t.cure} ${t.cure === 1 ? 'dag' : 'dage'} før pakning. ` + (st.length ? `Trin undervejs: ${st.join(' og ')}.` : 'Ingen trin undervejs.');
   }
   npType.addEventListener('change', npTypeChanged);
+  document.getElementById('npKanter').addEventListener('change', npVisTrin);
   document.getElementById('batchAfsl').addEventListener('click', () => { visAfsluttede = !visAfsluttede; renderBatches(); });
   document.getElementById('btnNewProd').addEventListener('click', () => {
     document.getElementById('formProd').reset(); npTypeChanged(); document.getElementById('npErr').hidden = true; fyldHvem('npWho');
@@ -1524,7 +1541,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     let id = slug(name), k = 2; while (prod(id)) id = slug(name) + '-' + (k++);
     S.products.push({ id, name, sku: document.getElementById('npSku').value.trim(), type: npType.value,
       min: num('npMin'), rate: 0, cure: Math.max(1, num('npCure')), batch: Math.max(1, num('npBatch')),
-      count: 0, countDate: TODAY, steps: (TYPES[npType.value] || TYPES['Andet']).steps.map(x => ({...x})) });
+      count: 0, countDate: TODAY, steps: (TYPES[npType.value] || TYPES['Andet']).steps.map(x => ({...x})),
+      ...((TYPES[npType.value] || {}).flakes ? {kanter: document.getElementById('npKanter').checked} : {}) });
     save(); dlgP.close(); renderAll(); toast(`${name} er oprettet`);
   });
 
@@ -1634,7 +1652,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   });
 
   function flakesDetail(b){
-    if (!typeOf(prod(b.pid)).flakes || !rejectedCount(b)) return '';
+    if (!harKanter(prod(b.pid)) || !rejectedCount(b)) return '';
     const open = flakesOpen(b);
     const dd = open > 0 ? `<button class="btn small primary" type="button" data-step="${b.no}|flakes">Sæbespåner lavet</button> <span class="muted small">${open} kasserede stk.</span>`
       : `${b.flakes.made ? `Lavet af ${b.flakes.made} stk.` : 'Ikke brugt'} ${esc(fmtW(b.flakes.on))}${b.flakes.by ? ' af ' + esc(b.flakes.by) : ''} <button class="btn small ghost" type="button" data-unflakes="${b.no}">Fortryd</button>`;
@@ -1799,7 +1817,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       // Trin og sæbespåner hørte til det gamle produkt
       const keys = new Set(stepsOf(p).map(x => x.key));
       if (b.steps) for (const k of Object.keys(b.steps)) if (!keys.has(k)) delete b.steps[k];
-      if (!typeOf(p).flakes) delete b.flakes;
+      if (!harKanter(p)) delete b.flakes;
     }
     editTarget = null; save(); dlgE.close(); renderAll(); toast(`Batch ${bl(b)} er rettet`);
   });
@@ -1856,7 +1874,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const lokalt = !live.aktiv;
     const klar = prodLager(pid).klar;
     const ref = vent ? vent.ref : nyRef();
-    const spaaner = typeOf(p).flakes ? ' De kasserede kommer på listen over sæbespåner.' : '';
+    const spaaner = harKanter(p) ? ' De kasserede kommer på listen over sæbespåner.' : '';
     let stop = '';
     if (!lokalt && !db.ok) stop = 'Den fælles database svarer ikke, så der kan ikke pakkes lige nu. Prøv igen om lidt.';
     else if (!lokalt && !p.sku) stop = `${p.name} har intet varenummer, så det kan ikke lægges på lager i Rackbeat.`;
@@ -1992,7 +2010,18 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   document.getElementById('prodTbl').addEventListener('change', e => {
     const i = e.target;
     // Salgstempo og rækkefølge deles ikke og står ikke i historikken. Alt andet kræver en bruger.
-    if ((i.dataset.pstep || (i.dataset.pf && i.dataset.pf !== 'rate')) && !nuvHvem()){ medHvem(() => i.dispatchEvent(new Event('change', {bubbles: true}))); return; }
+    if ((i.dataset.pstep || i.dataset.pkanter || (i.dataset.pf && i.dataset.pf !== 'rate')) && !nuvHvem()){ medHvem(() => i.dispatchEvent(new Event('change', {bubbles: true}))); return; }
+    if (i.dataset.pkanter){
+      const p = prod(i.dataset.id); if (!p || !kanterValgbar(p)) return;
+      p.kanter = i.checked;
+      // Trinet kan mangle på et produkt, der er oprettet uden det. Så får det typens dag.
+      if (p.kanter && !(p.steps || []).some(y => y.key === 'trim')){
+        const t = typeOf(p).steps.find(y => y.key === 'trim');
+        if (t){ p.steps = [...(p.steps || []), {...t}].sort((a, b) => a.day - b.day); }
+      }
+      save(); renderAll();
+      toast(p.kanter ? `${p.name}: kanter skæres, og kasserede laves til sæbespåner` : `${p.name}: ingen kantskæring og ingen sæbespåner`); return;
+    }
     if (i.dataset.pstep){
       const p = prod(i.dataset.id), x = p && (p.steps || []).find(y => y.key === i.dataset.pstep); if (!x) return;
       x.day = Math.max(1, parseInt(i.value, 10) || 1); save(); renderAll();
@@ -2080,7 +2109,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   // S.synk er de data, serveren sidst sendte. Det, der er ændret her siden da, sendes til serveren (kun ændringerne).
   // Når serveren sender nye data, vinder ændringer her, som ikke er sendt endnu. Alt andet tages fra serveren.
   // Første gang: har serveren data, vinder de. Er den tom, sendes dataene fra denne computer.
-  const DELT = ['id', 'name', 'sku', 'type', 'min', 'batch', 'cure', 'steps', 'archived'];
+  const DELT = ['id', 'name', 'sku', 'type', 'min', 'batch', 'cure', 'steps', 'kanter', 'archived'];
   const delt = p => Object.fromEntries(DELT.filter(f => p[f] !== undefined).map(f => [f, p[f]]));
   // Samme rækkefølge af felter som databasen, så kun rigtige ændringer tæller
   const kanon = x => JSON.stringify(x, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(n => [n, v[n]])) : v);
