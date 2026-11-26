@@ -171,15 +171,37 @@ async function skriv(p, sel, v) { await p.fill(sel, String(v)); await p.dispatch
       JSON.stringify([await bjaelke('s-packed'), await bjaelke('s-green')]));
     check('#50: ikke længere på produktionslageret', (await raekke(a, 'Hyben shampoo')) === null);
 
-    // En batch, der er pakket fra, kan ikke slettes, og kun nummeret kan rettes
-    await klik(a, '[data-del="50"]');
-    await a.waitForSelector('#dlgDelete[open]');
-    check('#50: kan ikke slettes', await a.$eval('#delYes', el => el.hidden) && (await a.$eval('#delText', el => el.textContent)).includes('kan ikke slettes'));
-    await a.click('#delNo');
+    // En batch, der er pakket fra: kun nummeret kan rettes, men den kan slettes (fx testdata). Rackbeat røres ikke.
     await klik(a, '[data-edit="50"]');
     await a.waitForSelector('#dlgEdit[open]');
     check('#50: kun nummeret kan rettes', await a.$eval('#eQty', el => el.disabled) && await a.$eval('#eProd', el => el.disabled) && !(await a.$eval('#eNo', el => el.disabled)));
     await a.evaluate(() => document.getElementById('dlgEdit').close());
+    const regFoer = (await reguleringer()).length, hybFoer = await lagerI('HYB001');
+    await klik(a, '[data-del="50"]');
+    await a.waitForSelector('#dlgDelete[open]');
+    check('#50: sletning advarer om pakningerne og Rackbeat', !(await a.$eval('#delYes', el => el.hidden)) && (await a.$eval('#delText', el => el.textContent)).includes('bliver liggende'));
+    await a.click('#delYes');
+    check('#50: batchen og dens pakninger er slettet i databasen', await ventPaa(async () => { const d = await database();
+      return !d.batches.some(x => x.no === 50) && !d.pakninger.some(k => k.linjer.some(l => l.batch === 50)); }));
+    check('#50: Rackbeat er urørt', (await reguleringer()).length === regFoer && (await lagerI('HYB001')) === hybFoer);
+
+    // Et produkt kan slettes helt, også fra de andre kalendere, men kun når intet hører til det
+    const produkterI = pg => pg.evaluate(k => JSON.parse(localStorage.getItem(k)).products.map(x => x.id), KEY);
+    await a.evaluate(() => { document.getElementById('sec-produkter').open = true; });
+    await klik(a, '#btnNewProd');
+    await a.fill('#npName', 'Testvare'); await a.fill('#npSku', 'TST001');
+    await a.click('#formProd button[type=submit]');
+    check('nyt produkt gemmes i databasen', await ventPaa(async () => (await database()).produkter.some(x => x.id === 'testvare')));
+    check('B får det nye produkt', await ventPaa(async () => (await produkterI(bb)).includes('testvare'), 25000));
+    await klik(a, '[data-ask-delprod="testvare"]');
+    check('sletning skal bekræftes', !!(await a.$('[data-delprod="testvare"]')) && (await produkterI(a)).includes('testvare'));
+    await klik(a, '[data-delprod="testvare"]');
+    check('produktet er slettet i A og i databasen', !(await produkterI(a)).includes('testvare')
+      && await ventPaa(async () => !(await database()).produkter.some(x => x.id === 'testvare')));
+    check('produktet forsvinder også i B', await ventPaa(async () => !(await produkterI(bb)).includes('testvare'), 25000));
+    await klik(a, '[data-ask-delprod="tang-shampoo"]');
+    check('et produkt med batches kan ikke slettes', !(await a.$('[data-delprod="tang-shampoo"]')) && (await produkterI(a)).includes('tang-shampoo')
+      && (await a.evaluate(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' '))).includes('kan ikke slettes'));
 
     // Uden server (åbnet som fil) pakkes kun i kalenderen
     const f = await (await b.newContext()).newPage();

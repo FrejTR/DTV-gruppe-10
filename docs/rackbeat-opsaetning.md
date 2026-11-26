@@ -147,7 +147,7 @@ Batches, bestillinger, personer og produktindstillinger (minimum, typisk batch, 
 | "Fælles data: ikke sat op" | `SUPABASE_URL` eller `SUPABASE_SECRET_KEY` mangler, eller udrulningen er ikke bygget igen. Data gemmes kun i browseren imens |
 | "Fælles data: fejl" | Se *Logs* i Vercel, fx `db_noegle_afvist`. Prøver igen hvert 20. sekund |
 
-**Sådan deles data:** Kalenderen henter alle data (`GET /api/data`) hvert 20. sekund og sender kun det, der er ændret (`POST /api/data`). Ændringer, der ikke er sendt endnu, vinder over det, serveren sender. Retter to personer det samme samtidig, gælder den sidste.
+**Sådan deles data:** Kalenderen henter alle data (`GET /api/data`) hvert 20. sekund og sender kun det, der er ændret (`POST /api/data`). Ændringer, der ikke er sendt endnu, vinder over det, serveren sender. Retter to personer det samme samtidig, gælder den sidste. Et produkt kan slettes helt (*Produkter og minimum > Slet*), men kun når der ikke er batches, bestillinger eller pakninger på det. Serveren tjekker det også. Ellers arkiveres det.
 
 **Produktionslager:** alt, der er lavet, men ikke pakket. Afsnittet *Produktionslager* viser pr. produkt, hvad der hærder, hvad der er klar til pakning, og i alt. *Pak* åbner en dialog, hvor medarbejderen skriver, hvor mange stk. der er taget ud, og hvor mange af dem der er kasseret. Ved *Pak og læg på lager* sender kalenderen `POST /api/pak`, og serveren
 1. tager stk. fra de batches, der er klar, ældste først (låst i databasen, så to kalendere ikke kan tage de samme stk.),
