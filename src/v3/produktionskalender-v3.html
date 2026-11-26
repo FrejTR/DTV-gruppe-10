@@ -166,6 +166,7 @@ button{cursor:pointer}
 .wk-risk{font-size:.74rem;font-weight:700}
 .wk-risk.akut{color:var(--orange)}
 .wk-risk.plan{color:var(--amber)}
+.wk-risk.daekket{color:var(--muted);font-weight:600}
 .st-none{color:var(--muted);background:var(--sunk)}
 .st-trim{color:var(--ink);background:transparent;border:1.5px solid var(--ink)}
 .st-trim::before{display:none}
@@ -871,10 +872,16 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
 
   // Minimum måles mod produktionslageret: hærder + klar til pakning (lavet, men ikke pakket).
   // Prognosen ("Start senest") bygger stadig på lager i Rackbeat, batches og salgstempo.
+  // Undtagelse: med mindst 2 × minimum på lager i Rackbeat er produktet ikke under minimum, selv om produktionslageret er.
+  // Så afgør prognosen status. Er lageret ikke hentet fra Rackbeat, gælder minimum som normalt.
+  const daekketAfRackbeat = p => !!p.lagerHentet && typeof p.count === 'number' && p.count >= 2 * p.min;
   function analyze(p){
     const pl = prodLager(p.id), cur = pl.haerder + pl.klar;
-    const out = {p, cur, status:'ok', breach:null, latest:null};
-    if (cur < p.min) { out.status = 'akut'; out.firstReady = add(TODAY, p.cure); return out; }
+    const out = {p, cur, status:'ok', breach:null, latest:null, daekket:false};
+    if (cur < p.min){
+      if (!daekketAfRackbeat(p)) { out.status = 'akut'; out.firstReady = add(TODAY, p.cure); return out; }
+      out.daekket = true;
+    }
     const horizon = p.cure + 28;
     for (let i = 1; i <= horizon; i++){
       const d = add(TODAY, i);
@@ -1052,7 +1059,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td><div class="pname"><span><strong>${esc(p.name)}</strong><span class="sku">${esc([p.sku, p.type].filter(Boolean).join(' · '))}</span></span>
           <span class="mv"><button type="button" class="mv-btn" data-move="${p.id}|-1" aria-label="Flyt ${esc(p.name)} op"${pos === 0 ? ' disabled' : ''}>▲</button><button type="button" class="mv-btn" data-move="${p.id}|1" aria-label="Flyt ${esc(p.name)} ned"${pos === sidst ? ' disabled' : ''}>▼</button></span></div></td>
         <td class="n">${lagerCell(p)}</td>
-        <td class="n"><span id="pl-${p.id}">${x.cur}</span>${prodLager(p.id).klar ? `<div class="muted small">${prodLager(p.id).klar} klar til pakning</div>` : ''}</td>
+        <td class="n"><span id="pl-${p.id}">${x.cur}</span>${prodLager(p.id).klar ? `<div class="muted small">${prodLager(p.id).klar} klar til pakning</div>` : ''}${x.daekket ? `<div class="muted small daekket" id="dk-${p.id}">Under minimum (${p.min}), men ${esc(p.count)} stk. i Rackbeat</div>` : ''}</td>
         <td class="n"><input type="number" min="0" step="1" aria-label="Minimum for ${esc(p.name)}" data-pf="min" data-id="${p.id}" value="${p.min}" id="min-${p.id}"></td>
         <td class="n"><input type="number" min="0" step="any" aria-label="Salg pr. uge for ${esc(p.name)}" data-pf="rate" data-id="${p.id}" value="${+p.rate.toFixed(2)}" id="rate-${p.id}">${rateSource(p)}</td>
         <td class="n"><input type="number" min="1" step="1" aria-label="Dage før pakning for ${esc(p.name)}" data-pf="cure" data-id="${p.id}" value="${p.cure}" id="cure-${p.id}"></td>
@@ -1182,7 +1189,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }
     const x = analyze(p);
     const risk = x.status === 'akut' ? `<span class="wk-risk akut">Under minimum nu</span>`
-      : x.status === 'plan' ? `<span class="wk-risk plan">Start senest ${esc(x.latest < TODAY ? 'i dag' : fmt(x.latest))}</span>` : '';
+      : x.status === 'plan' ? `<span class="wk-risk plan">Start senest ${esc(x.latest < TODAY ? 'i dag' : fmt(x.latest))}</span>`
+      : x.daekket ? `<span class="wk-risk daekket" title="Produktionslageret er under minimum (${p.min}), men der er ${esc(p.count)} stk. i Rackbeat">Dækket af Rackbeat</span>` : '';
     const due = dueTasks().filter(x => x.b.pid === p.id);
     const task = due.map(x => `<span class="wk-task">${x.st.icon} ${esc(x.st.name)}: #${esc(bn(x.b))}</span>`).join('');
     return `<div class="wk-status">${chip}${task}${risk}</div>`;
