@@ -162,6 +162,8 @@ Sikring: tabellerne har række-sikkerhed (RLS) uden regler, og funktionerne kan 
 
 ## 9. Historik (fejlfinding)
 
+**Batchnummer:** Når en batch registreres som lavet, får den sit nummer ud fra datoen: K + dag + måned + år talt fra 2020 (fx lavet 26-11-2026 → K261106; 2027 → 07, 2030 → 10). Alle produkter lavet samme dag får samme nummer. Laves samme produkt flere gange samme dag, får de næste -02, -03 osv. Planlagte batches har intet nummer, før de registreres. Nummeret kan altid rettes i hånden; et selvskrevet nummer ændres ikke, hvis datoen rettes.
+
 Fanen *Historik* nederst på siden viser alt, der er oprettet, ændret, pakket eller slettet, fra alle kalendere, nyeste først. Hver linje har tidspunkt (med sekunder), kategori, hvad der skete, de ændrede værdier (før → efter, og rå data under *Data*) og hvorfra (browser, styresystem og et tilfældigt id pr. browser, så man kan se, om to linjer kom fra samme computer). Man kan filtrere på kategori (batches, pakning, bestillinger, produkter, personer, fejl) og søge, fx på et batchnummer eller et navn.
 
 - Serveren skriver historikken, ikke browseren: ved hver `POST /api/data` sammenligner den data før og efter, og linjerne gemmes i samme transaktion som ændringen (`gem_data`). En ændring, der ikke blev gemt, står derfor heller ikke i historikken.

@@ -96,14 +96,15 @@ async function ventPaa(fn, ms = 3000) {
   await ventPaa(() => p.evaluate(k => localStorage.getItem(k) !== null, KEY));
   st = await state(p);
   check('V2\'s gemte data bruges ikke i V3', st.batches.length === 0 && st.products.length === 17 && !st.people.includes('Lena'));
-  // Første batch uden personer: feltet til nyt navn vises, og batchen får nr. 1
+  // Første batch uden personer: feltet til nyt navn vises, og batchen får nummeret ud fra datoen (K + dag + måned + år fra 2020)
   await p.click('#btnNewBatch');
   check('uden personer: feltet til nyt navn vises', await p.$eval('#bWho', el => el.value) === '__new' && await p.$eval('#bWhoNew', el => !el.hidden));
   await p.fill('#bWhoNew', 'Testperson');
   await p.click('#bSubmit');
   await ventPaa(async () => (await state(p)).batches.length === 1);
   st = await state(p);
-  check('første batch registreres med nr. 1 og navnet gemmes', st.batches.length === 1 && st.batches[0].label === '1' && Number.isSafeInteger(st.batches[0].no) && st.people.join() === 'Testperson', JSON.stringify(st.batches));
+  const nrFor = d => { const [y, m, dd] = d.split('-'); return `K${dd}${m}${String(+y - 2020).padStart(2, '0')}`; };
+  check('første batch får nummeret ud fra datoen, og navnet gemmes', st.batches.length === 1 && st.batches[0].label === nrFor(st.batches[0].made) && Number.isSafeInteger(st.batches[0].no) && st.people.join() === 'Testperson', JSON.stringify(st.batches));
   await ventPaa(async () => (await pill(p)).cls === 'ok');
   let s = await pill(p);
   check('start: status og salgstempo hentes straks', hits.status === 1 && hits.salgstempo === 1, JSON.stringify(hits));

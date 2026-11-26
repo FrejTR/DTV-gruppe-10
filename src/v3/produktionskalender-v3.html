@@ -681,7 +681,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     <div class="field"><label for="eQty">Antal lavet (stk.)</label><input id="eQty" type="number" min="1" step="1" inputmode="numeric"></div>
   </div>
   <div class="field-row">
-    <div class="field"><label for="eNo">Batchnummer</label><input id="eNo" type="text" autocomplete="off" placeholder="Tildeles senere"></div>
+    <div class="field"><label for="eNo">Batchnummer</label><input id="eNo" type="text" autocomplete="off" placeholder="Tildeles ved registrering"></div>
     <div class="field"><label for="eDate" id="eDateLabel">Lavet den</label><input id="eDate" type="date"></div>
   </div>
   <div class="field-row">
@@ -820,6 +820,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     .sort((a, c) => a.date.localeCompare(c.date));
   function markMade(b, who){
     b.status = 'aktiv'; b.made = TODAY; b.madeBy = who || null;
+    if (udenNr(b)) b.label = autoNr(b.pid, TODAY, [], b.no);
     save(); renderAll();
     toast(`Batch ${bl(b)} er lavet${who ? ' af ' + who : ''}. Pakkes ${fmt(ready(b))}`);
   }
@@ -839,6 +840,21 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   // Batchnummeret må stå tomt, mens en batch er planlagt. Ældre data uden label bruger det interne løbenummer.
   const labelOf = b => b.label == null ? String(b.no) : String(b.label).trim();
   const bn = b => labelOf(b) || 'uden nr.';
+  // ---------- batchnummer ud fra produktionsdatoen ----------
+  // K + dag + måned + år, hvor året tælles fra 2020 (2026 → 06, 2030 → 10). Fx lavet 26-11-2026 → K261106.
+  // Alle produkter lavet samme dag får samme nummer. Laves samme produkt flere gange samme dag, får de næste -02, -03 osv.
+  // Planlagte batches har intet nummer. Det kommer på, når batchen registreres som lavet, og kan altid rettes bagefter.
+  const nrGrund = d => { const [y, m, dd] = d.split('-'); return `K${dd}${m}${String(+y - 2020).padStart(2, '0')}`; };
+  function autoNr(pid, d, optaget = [], udenNo = null){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) return '';
+    const grund = nrGrund(d);
+    const brugt = new Set([...S.batches.filter(b => b.pid === pid && b.no !== udenNo).map(labelOf), ...optaget]);
+    if (!brugt.has(grund)) return grund;
+    let n = 2; while (brugt.has(`${grund}-${String(n).padStart(2, '0')}`)) n++;
+    return `${grund}-${String(n).padStart(2, '0')}`;
+  }
+  // En planlagt batch, der registreres uden at have fået et nummer i hånden, får nummeret for dagen
+  const udenNr = b => typeof b.label === 'string' && !b.label.trim();
   const bl = b => labelOf(b) ? '#' + labelOf(b) : 'uden nr.';
   if (!Array.isArray(S.people)) S.people = [];
   const ready = b => add(b.made, b.cure);
@@ -1356,13 +1372,18 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   // Batchdialog: flere produkter på én gang. Hver linje bliver sin egen batch.
   let lineSeq = 0;
   const prodOpts = sel => activeProducts().map(p => `<option value="${p.id}"${p.id===sel?' selected':''}>${esc(p.name)}</option>`).join('');
-  function suggestNo(offset){
-    const nums = S.batches.map(b => parseInt(labelOf(b), 10)).filter(n => !isNaN(n));
-    return String((nums.length ? Math.max(...nums) : 0) + 1 + offset);
-  }
-  function nextFreeNo(){
-    const taken = new Set([...S.batches.map(labelOf), ...[...document.querySelectorAll('#bLines .l-no')].map(i => i.value.trim())]);
-    let k = 0, c; do { c = suggestNo(k++); } while (taken.has(c)); return c;
+  // Felter med data-auto får nummeret ud fra datoen (tomt for planlagte). Skriver man selv et nummer, røres det ikke.
+  function opdaterNumre(){
+    const plan = document.querySelector('input[name="bkind"]:checked').value === 'planlagt';
+    const d = document.getElementById('bDate').value;
+    const linjer = [...document.querySelectorAll('#bLines .line')].map(el => ({pid: el.querySelector('.l-prod').value, no: el.querySelector('.l-no')}));
+    const optaget = {};
+    const tag = (pid, v) => { if (v) (optaget[pid] = optaget[pid] || []).push(v); };
+    linjer.filter(l => !l.no.dataset.auto).forEach(l => tag(l.pid, l.no.value.trim()));
+    for (const l of linjer.filter(l => l.no.dataset.auto)){
+      l.no.value = plan ? '' : autoNr(l.pid, d, optaget[l.pid] || [], convertFrom);
+      tag(l.pid, l.no.value);
+    }
   }
   function batchLine(pid){
     const p = prod(pid) || activeProducts()[0], k = ++lineSeq;
@@ -1370,7 +1391,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     el.className = 'line line-b';
     el.innerHTML = `<select class="l-prod" id="bl-prod-${k}" aria-label="Produkt">${prodOpts(p.id)}</select>
       <input class="l-qty" id="bl-qty-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Antal stk." value="${p.batch}">
-      <input class="l-no" id="bl-no-${k}" type="text" inputmode="text" autocomplete="off" aria-label="Batchnummer" placeholder="Tildeles senere" data-auto="1" value="${esc(nextFreeNo())}">
+      <input class="l-no" id="bl-no-${k}" type="text" inputmode="text" autocomplete="off" aria-label="Batchnummer" placeholder="Tildeles ved registrering" data-auto="1" value="">
       <input class="l-cure" id="bl-cure-${k}" type="number" min="1" step="1" inputmode="numeric" aria-label="Dage før pakning" value="${p.cure}">
       <button type="button" class="line-del" aria-label="Fjern produkt">×</button>
       <span class="l-ready"></span>`;
@@ -1379,7 +1400,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
       el.querySelector('.l-qty').value = np.batch; el.querySelector('.l-cure').value = np.cure; updateBatchPreview();
     });
     el.querySelector('.line-del').addEventListener('click', () => { el.remove(); updateBatchPreview(); });
-    el.querySelector('.l-no').addEventListener('input', ev => { delete ev.target.dataset.auto; });   // Selvskrevet nummer røres ikke af planlagt/lavet
+    // Et nummer, man selv har skrevet eller slettet, røres ikke, når dato, produkt eller planlagt/lavet ændres
+    el.querySelector('.l-no').addEventListener('input', ev => { delete ev.target.dataset.auto; });
     el.addEventListener('input', updateBatchPreview);
     return el;
   }
@@ -1402,7 +1424,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     const plan = forcePlan || (!!planDate && planDate > TODAY);
     document.getElementById(plan ? 'bkindPlan' : 'bkindMade').checked = true;
     document.getElementById('bDate').value = plan ? (planDate && planDate >= TODAY ? planDate : TODAY) : TODAY;
-    syncNoToKind();
     bWhoNew.hidden = true; bWhoNew.value = '';
     fillWho(bWho, document.getElementById('bWhoLabel'), plan ? 'planlagt' : 'aktiv');
     document.getElementById('bErr').hidden = true;
@@ -1415,7 +1436,8 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     convertFrom = b.no;
     const el = document.querySelector('#bLines .line');
     el.querySelector('.l-qty').value = b.qty;
-    el.querySelector('.l-no').value = labelOf(b) || nextFreeNo();
+    const no = el.querySelector('.l-no');
+    if (labelOf(b)){ no.value = labelOf(b); delete no.dataset.auto; }   // Har den planlagte batch fået et nummer, beholdes det
     el.querySelector('.l-cure').value = b.cure;
     document.getElementById('bkindMade').checked = true;
     document.getElementById('bDate').value = TODAY;
@@ -1432,14 +1454,6 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     el.querySelector('.l-prod').focus(); updateBatchPreview();
   });
 
-  // Planlagt: foreslåede numre fjernes, så de kan tildeles senere. Lavet: tomme felter får det næste ledige nummer.
-  function syncNoToKind(){
-    const plan = document.querySelector('input[name="bkind"]:checked').value === 'planlagt';
-    document.querySelectorAll('#bLines .l-no').forEach(i => {
-      if (plan && i.dataset.auto) i.value = '';
-      else if (!plan && !i.value.trim()){ i.value = nextFreeNo(); i.dataset.auto = '1'; }
-    });
-  }
   function readBatchLines(){
     return [...document.querySelectorAll('#bLines .line')].map(el => ({
       el, p: prod(el.querySelector('.l-prod').value),
@@ -1449,6 +1463,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     }));
   }
   function updateBatchPreview(){
+    opdaterNumre();
     const kind = document.querySelector('input[name="bkind"]:checked').value;
     document.getElementById('bDateLabel').textContent = kind === 'planlagt' ? 'Planlagt start' : 'Lavet den';
     document.getElementById('bWhoLabel').textContent = kind === 'planlagt' ? 'Planlagt af' : 'Lavet af';
@@ -1461,7 +1476,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   }
   document.getElementById('bDate').addEventListener('input', updateBatchPreview);
   document.querySelectorAll('input[name="bkind"]').forEach(r => r.addEventListener('change', () => {
-    syncNoToKind(); updateBatchPreview();
+    updateBatchPreview();
   }));
 
   function pickWhoFrom(sel, input){
@@ -1743,6 +1758,9 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
     document.getElementById('eQty').value = b.qty;
     document.getElementById('eNo').value = labelOf(b);
     document.getElementById('eDate').value = b.made;
+    // Er nummeret det, datoen giver, følger det med, hvis dato eller produkt rettes. Et selvskrevet nummer røres ikke.
+    const eNo = document.getElementById('eNo');
+    if (b.status !== 'planlagt' && labelOf(b) === autoNr(b.pid, b.made, [], b.no)) eNo.dataset.auto = '1'; else delete eNo.dataset.auto;
     document.getElementById('eDateLabel').textContent = b.status === 'planlagt' ? 'Planlagt start' : 'Lavet den';
     document.getElementById('eCure').value = b.cure;
     document.querySelectorAll('#formEdit .bad').forEach(x => x.classList.remove('bad'));
@@ -1815,7 +1833,16 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
   document.getElementById('eProd').addEventListener('change', ev => {
     // Nyt produkt: foreslå dets tid før pakning, som ved oprettelse
     const np = prod(ev.target.value); if (np) document.getElementById('eCure').value = np.cure;
+    eNrFoelger();
   });
+  function eNrFoelger(){
+    const eNo = document.getElementById('eNo');
+    if (!eNo.dataset.auto || !editTarget) return;
+    const nr = autoNr(document.getElementById('eProd').value, document.getElementById('eDate').value, [], editTarget.no);
+    if (nr) eNo.value = nr;
+  }
+  document.getElementById('eDate').addEventListener('input', eNrFoelger);
+  document.getElementById('eNo').addEventListener('input', ev => { delete ev.target.dataset.auto; });
   document.getElementById('formEdit').addEventListener('submit', e => {
     e.preventDefault();
     const b = editTarget; if (!b) return;

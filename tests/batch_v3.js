@@ -73,16 +73,47 @@ const server = http.createServer((req, res) => {
   check('detaljen viser "uden nr."', (await p.textContent('#detailBody')).includes('uden nr.'));
   await p.click('#dClose');
 
-  // Ny planlagt batch med tomt nummer, og samme som lavet batch uden nummer
+  // Batchnummeret regnes ud fra datoen: K + dag + måned + år talt fra 2020 (26-11-2026 → K261106, 2030 → 10)
+  const grund = d => { const [y, m, dd] = d.split('-'); return `K${dd}${m}${String(+y - 2020).padStart(2, '0')}`; };
+  const numre = () => p.$$eval('#bLines .l-no', e => e.map(x => x.value));
+  const linje = n => `#bLines .line:nth-child(${n})`;
   await p.evaluate(() => document.querySelector('[data-plan]').click());
   await p.click('#bkindPlan', { force: true });
-  check('planlægning starter med tomt nummer', (await p.inputValue('#bLines .l-no')) === '');
+  check('planlagt: intet batchnummer', (await p.inputValue('#bLines .l-no')) === '');
   await p.click('#bkindMade', { force: true });
-  check('registrering som lavet foreslår et nummer', (await p.inputValue('#bLines .l-no')) !== '');
+  const idag = await p.inputValue('#bDate');
+  check('lavet: nummeret regnes ud fra datoen', (await p.inputValue('#bLines .l-no')) === grund(idag), `${idag} → ${await p.inputValue('#bLines .l-no')}`);
+  await p.fill('#bDate', '2026-11-26');
+  check('lavet 26-11-2026 giver K261106', (await p.inputValue('#bLines .l-no')) === 'K261106', await p.inputValue('#bLines .l-no'));
+  await p.fill('#bDate', '2030-01-05');
+  check('år 2030 skrives som 10', (await p.inputValue('#bLines .l-no')) === 'K050110', await p.inputValue('#bLines .l-no'));
+  await p.fill('#bDate', '2026-11-27');
+  await p.click('#bAdd');
+  check('andet produkt samme dag får samme nummer', (await numre()).join() === 'K271106,K271106', (await numre()).join());
+  const forste = await p.$eval(`${linje(1)} .l-prod`, e => e.value);
+  await p.selectOption(`${linje(2)} .l-prod`, forste);
+  check('samme produkt samme dag: næste får -02', (await numre()).join() === 'K271106,K271106-02', (await numre()).join());
+  await p.click('#bAdd'); await p.selectOption(`${linje(3)} .l-prod`, forste);
+  check('og den næste -03', (await numre())[2] === 'K271106-03', (await numre()).join());
+  await p.fill(`${linje(3)} .l-no`, 'K999');
+  await p.fill('#bDate', '2026-11-28');
+  check('dato ændret: numrene følger med, et selvskrevet nummer røres ikke', (await numre()).join() === 'K281106,K281106-02,K999', (await numre()).join());
+  await p.fill('#bDate', '2026-11-27');
+  await p.click(`${linje(3)} .line-del`);
+  await p.click('#formBatch button[type=submit]');
+  const nyeLavet = (await state()).batches.filter(x => x.made === '2026-11-27').map(x => x.label).sort();
+  check('lavede batches gemmes med numrene', nyeLavet.join() === 'K271106,K271106-02', nyeLavet.join());
+  // En ny batch af samme produkt samme dag tæller videre fra dem, der allerede findes
+  await p.evaluate(() => document.querySelector('[data-plan]').click());
+  await p.click('#bkindMade', { force: true });
+  await p.selectOption('#bLines .l-prod', forste);
+  await p.fill('#bDate', '2026-11-27');
+  check('gemte batches samme dag: næste får -03', (await p.inputValue('#bLines .l-no')) === 'K271106-03', await p.inputValue('#bLines .l-no'));
   await p.fill('#bLines .l-no', '');
   await p.click('#formBatch button[type=submit]');
   check('tomt nummer afvises, når batchen er lavet', (await p.textContent('#bErr')).includes('batchnummer'));
   await p.click('#bkindPlan', { force: true });
+  check('skiftes til planlagt, er der intet nummer', (await p.inputValue('#bLines .l-no')) === '');
   await p.click('#formBatch button[type=submit]');
   const planlagt = (await state()).batches.filter(x => x.status === 'planlagt');
   check('planlagt batch kan gemmes uden nummer', planlagt.length === 2 && planlagt.every(x => x.label === ''), JSON.stringify(planlagt));
@@ -111,6 +142,20 @@ const server = http.createServer((req, res) => {
   await visBatch(2); await p.click('#dEdit');
   await p.fill('#eNo', '9'); await p.click('#formEdit button[type=submit]');
   check('ret batch: planlagt batch kan få nummer senere', (await state()).batches.find(x => x.no === 2).label === '9');
+  // Ret batch: rettes datoen, følger et nummer, der er regnet ud fra datoen, med. Et selvskrevet nummer røres ikke.
+  const k27 = (await state()).batches.find(x => x.label === 'K271106');
+  await visBatch(k27.no); await p.click('#dEdit');
+  await p.fill('#eDate', '2026-11-25');
+  check('ret batch: nummeret følger datoen', (await p.inputValue('#eNo')) === 'K251106', await p.inputValue('#eNo'));
+  await p.fill('#eNo', 'K251106-x'); await p.fill('#eDate', '2026-11-24');
+  check('ret batch: selvskrevet nummer røres ikke', (await p.inputValue('#eNo')) === 'K251106-x');
+  await p.click('#formEdit button[type=submit]');
+  check('ret batch: nummeret kan altid rettes', (await state()).batches.find(x => x.no === k27.no).label === 'K251106-x');
+  // Registreres en planlagt batch uden nummer, får den nummeret for i dag
+  const planUden = (await state()).batches.find(x => x.status === 'planlagt' && x.label === '');
+  await p.evaluate(n => document.querySelector(`[data-made="${n}"]`).click(), planUden.no);
+  check('registrering af planlagt: nummeret for i dag', (await p.inputValue('#bLines .l-no')) === grund(idag), await p.inputValue('#bLines .l-no'));
+  await p.keyboard.press('Escape');
 
   // Rediger og Slet er to knapper over hinanden i batchlisten. Sletning spørger først.
   const antal = async () => (await state()).batches.length;
