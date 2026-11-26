@@ -193,7 +193,7 @@ button{cursor:pointer}
 .wk-count .seg label{padding:6px 10px}
 /* tabeller på smalle skærme og touch */
 #resTbl{min-width:760px}
-#prodTbl{min-width:1100px}
+#prodTbl{min-width:860px}
 #batchTbl{min-width:900px}
 #prodTbl td,#prodTbl th,#batchTbl td,#batchTbl th,#resTbl td,#resTbl th{white-space:nowrap}
 #prodTbl td:first-child,#batchTbl td:nth-child(2){white-space:normal;min-width:9.5rem}
@@ -205,6 +205,22 @@ button{cursor:pointer}
 #prodTbl th:nth-child(2),#prodTbl td:nth-child(2){border-left:0}
 #prodTbl th:first-child,#prodTbl td:first-child{box-shadow:inset -1px 0 0 var(--sand-dark)}
 .row-actions{flex-wrap:nowrap}
+/* Produkter og minimum: overskrifter, noter og trin ombrydes, så alle kolonner kan ses uden at scrolle sidelæns */
+#prodTbl th{white-space:normal;vertical-align:bottom;line-height:1.35;letter-spacing:.05em}
+#prodTbl th .src{display:block;width:fit-content;max-width:100%;margin:5px 0 0;white-space:normal;letter-spacing:.03em;line-height:1.4;border-radius:10px;text-align:center}
+#prodTbl td:first-child{min-width:8.5rem}
+#prodTbl th.n .src{margin-left:auto}
+#prodTbl td .small{white-space:normal}
+#prodTbl td input{width:4.6rem}
+#prodTbl .pstep{display:flex;flex-direction:column;align-items:flex-start;gap:2px;white-space:normal;font-size:.8rem;line-height:1.25}
+#prodTbl .pstep-dage{display:flex;align-items:center;gap:5px;white-space:nowrap}
+#prodTbl .pstep-dage input{width:3.2rem;padding-inline:8px}
+#prodTbl .pstep.valg{display:grid;grid-template-columns:16px minmax(0,1fr);align-items:start;column-gap:7px}
+#prodTbl .valg input{width:16px;height:16px;min-height:0;padding:0}
+#prodTbl .pstep-list{gap:8px}
+#prodTbl .row-actions{flex-direction:column;align-items:stretch}
+#prodTbl .rate-src{min-width:0}
+#prodTbl th,#prodTbl td{padding-inline:7px}
 @media (max-width:1180px){
   .masthead{padding-block:12px 4px}
   .wordmark{font-size:1.35rem}
@@ -1075,7 +1091,7 @@ dialog::backdrop{background:rgba(33,28,22,.45)}
         <td class="n"><input type="number" min="1" step="1" aria-label="Typisk batchstørrelse for ${esc(p.name)}" data-pf="batch" data-id="${p.id}" value="${p.batch}" id="batch-${p.id}"></td>
         <td>${risk}</td>
         <td class="num">${esc(latest)}</td>
-        <td>${kanterValgbar(p) ? `<label class="pstep valg"><input type="checkbox" data-pkanter="1" data-id="${p.id}" id="pk-${p.id}"${harKanter(p) ? ' checked' : ''}> Skær kanter og sæbespåner</label>` : ''}${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep">${esc(st.name)} efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
+        <td>${kanterValgbar(p) ? `<label class="pstep valg"><input type="checkbox" data-pkanter="1" data-id="${p.id}" id="pk-${p.id}"${harKanter(p) ? ' checked' : ''}> Skær kanter og sæbespåner</label>` : ''}${stepsOf(p).length ? `<div class="pstep-list">${stepsOf(p).map(st => `<label class="pstep"><span class="pstep-navn">${esc(st.name)}</span> <span class="pstep-dage">efter <input type="number" min="1" step="1" inputmode="numeric" aria-label="${esc(st.name)}: dage efter produktion for ${esc(p.name)}" data-pstep="${st.key}" data-id="${p.id}" id="ps-${st.key}-${p.id}" value="${st.day}"> dage</span></label>`).join('')}</div>` : '<span class="muted">–</span>'}</td>
         <td>${prodHandlinger(p)}</td>
       </tr>`;
     }).join('');
